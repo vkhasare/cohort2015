@@ -1,23 +1,4 @@
-
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <sys/wait.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <sys/epoll.h>
-
-#define PORT "3490"
-#define BACKLOG 30000
-#define MAXEVENTS 30000
+#include "common.h"
 
 /*
 typedef union epoll_data {
@@ -34,82 +15,6 @@ typedef struct epoll_event
 };
 */
 
-int create_and_bind(char *port)
-{
-    struct addrinfo hints;
-    struct addrinfo *result, *rp;
-    int sfd = -1;
-    int yes=1;
-    
-    memset(&hints, 0, sizeof(hints));
-    
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
-    
-    
-    if (getaddrinfo(NULL, port, &hints, &result) != 0)
-    {
-        printf("\nFailure in getaddrinfo");
-        return -1;
-    }
-    
-    for (rp = result; rp != NULL; rp=rp->ai_next) {
-        if ((sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol)) == -1)
-        {
-            continue;
-        }
-        
-        setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-        
-        if (bind(sfd, rp->ai_addr, rp->ai_addrlen) == -1)
-        {
-            continue;
-        }
-        
-        break;
-    }
-    
-    freeaddrinfo(result);
-   
-    printf("\nSocket is created.");
- 
-    return sfd;
-}
-
-int make_socket_non_blocking (int sfd)
-{
-    int flags;
-    
-    flags = fcntl(sfd, F_GETFL,0);
-
-    if (flags == -1) {
-        perror("Error while fcntl F_GETFL");
-        return -1;
-    }
-
-    fcntl(sfd, F_SETOWN, getpid());
-    if (fcntl(sfd, F_SETFL,flags|O_NONBLOCK) == -1) {
-        perror("Error while fcntl F_SETFL");
-        return -1;
-    }
-   
-//    printf("\nsocket is non blocking now.");
- 
-    return 0;
-}
-
-
-void *get_in_addr(struct sockaddr *sa)
-{
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*) sa)->sin_addr);
-    } else {
-        return &(((struct sockaddr_in6*) sa)->sin6_addr);
-    }
-}
-
-
 int main(int argc, const char * argv[])
 {
     int sfd, s;
@@ -122,8 +27,21 @@ int main(int argc, const char * argv[])
     struct sockaddr_storage their_addr;
     socklen_t sin_size;
     char remoteIP[INET6_ADDRSTRLEN];
+    char *addr,*port;
 
-    sfd = create_and_bind(PORT);
+    if (argc != 3)
+    {
+      printf("Usage: %s <server_IP> <server_port>\n", argv[0]);
+//      exit(1);
+//      Temporary code
+      argv[1] = "127.0.0.1";
+      argv[2] = "3490";
+    }
+
+    addr = argv[1];
+    port = argv[2];
+
+    sfd = create_and_bind(addr, port, SERVER_MODE);
     
     if (sfd == -1)
     {
@@ -131,7 +49,7 @@ int main(int argc, const char * argv[])
         exit(0);
     }
     
-    s= make_socket_non_blocking(sfd);
+    s = make_socket_non_blocking(sfd);
     
     if (s == -1)
     {
