@@ -1,4 +1,20 @@
 #include "common.h"
+#define TIMEOUT_SECS 5
+
+int sfd;
+
+void sendPeriodicMsg(int signal)
+{
+    int numbytes;
+
+    printf("\nSending periodic Request.\n");
+    if ((numbytes = send(sfd,"Echo Request.",15,0)) < 0)
+    {
+        printf("\nError in sending\n");
+    }
+
+    alarm(TIMEOUT_SECS);
+}
 
 int main(int argc, const char * argv[])
 {
@@ -7,7 +23,7 @@ int main(int argc, const char * argv[])
     struct addrinfo hints, *servinfo, *p;
     int count = 0;
     
-    int sfd, s;
+    int /*sfd,*/ s;
     int efd;
     struct epoll_event event;
     struct epoll_event *events;    
@@ -16,6 +32,9 @@ int main(int argc, const char * argv[])
     socklen_t sin_size;
     char remoteIP[INET6_ADDRSTRLEN];
     char *addr,*port;
+
+    struct sigaction myaction;
+
 
     if (argc != 3)
     {
@@ -39,6 +58,18 @@ int main(int argc, const char * argv[])
 
     s= make_socket_non_blocking(sfd);    
  
+    myaction.sa_handler = sendPeriodicMsg;
+    sigfillset(&myaction.sa_mask);
+    myaction.sa_flags = 0;
+    
+    if (sigaction(SIGALRM, &myaction, 0) < 0)
+    {
+        perror("\nError in sigaction.");
+        exit(0);
+    }
+
+    alarm(TIMEOUT_SECS);
+
     efd = epoll_create(MAXEVENTS);
 
     if (efd == -1)
@@ -61,24 +92,17 @@ int main(int argc, const char * argv[])
 
     while (1) {
         int n, i;
-        printf("\nWaiting for something to happen on client..");
+        //printf("\nWaiting for something to happen on client..");
         n = epoll_wait(efd, events, MAXEVENTS, -1);
 
 
         for (i = 0; i < n; i++) {
-            if (sfd == events[i].data.fd)
+            if ((sfd == events[i].data.fd) && (events[i].events & EPOLLIN))
             {
-
-
-                printf("\n[I] New connection came from %s and socket %d.","hh",1);
-
-                printf("\n[I] Accepted.");
+          		  char buf[512];
+          	  	read(events[i].data.fd, buf, sizeof(buf));
+            		printf("%s",buf);
                 continue;
-            }
-            else
-            {
-                    printf("\nSomething on socket to read - from socket");
-
             }
         }
     }

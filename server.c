@@ -160,11 +160,12 @@ int main(int argc, const char * argv[])
                     printf("\n[I] Message from client - %d",count);
                     //s = write(1, buf, count);
                     printf("\n%s",buf);
-                   //while (1) {printf("\nRohit"); sleep(5);} 
-                    if (s == -1)
+
+                    printf("\nSending periodic Response.");
+int numbytes;
+                    if ((numbytes = send(events[i].data.fd,"EchoResponse.",15,0)) < 0)
                     {
-                        perror ("write");
-                        exit(0);
+                        printf("\nError in sending\n");
                     }
                 }
                 
