@@ -95,13 +95,14 @@ int main(int argc, const char * argv[])
         //printf("\nWaiting for something to happen on client..");
         n = epoll_wait(efd, events, MAXEVENTS, -1);
 
-
         for (i = 0; i < n; i++) {
             if ((sfd == events[i].data.fd) && (events[i].events & EPOLLIN))
             {
           		  char buf[512];
           	  	read(events[i].data.fd, buf, sizeof(buf));
-            		printf("%s",buf);
+//            		printf("%s",buf);
+                buf[strlen(buf)] = '\0';
+            		write(1, buf, strlen(buf));
                 continue;
             }
         }
