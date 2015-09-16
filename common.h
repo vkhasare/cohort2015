@@ -20,12 +20,41 @@
 #define MAXEVENTS 30000
 #define MAXDATASIZE 100
 
+typedef struct grname_ip_mapping{
+    char grname[10];
+    uint32_t grp_ip;
+}grname_ip_mapping_t; 
+
 int create_and_bind(char *machine_addr, char *machine_port, int oper_mode);
 int make_socket_non_blocking (int sfd);
 void *get_in_addr(struct sockaddr *sa);
 int IS_SERVER(int oper);
 int IS_CLIENT(int oper);
+uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping);
 
+uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping){
+    FILE *fp = NULL, *cmd_line = NULL;
+    char ip_str[16], cmd[256];
+    uint32_t count, i;
+   
+    strcpy(cmd, "wc -l ");
+    strcat(cmd, filename);
+    cmd_line = popen (cmd, "r");
+    fscanf(cmd_line, "%i", &count);
+    pclose(cmd_line);
+
+    *mapping = (grname_ip_mapping_t *) malloc(sizeof(grname_ip_mapping_t) * count); 
+    
+    fp = fopen(filename, "r");
+    for(i = 0; i < count; i++){
+        fscanf(fp, "%s %s", (*mapping)[i].grname, ip_str);
+        (*mapping)[i].grp_ip = htonl(inet_addr(ip_str));
+        printf("\nGroup name: %s IP addr: %u", (*mapping)[i].grname, (*mapping)[i].grp_ip);
+    }
+    fclose(fp);
+
+    return count;
+}
 
 int IS_SERVER(int oper)
 {

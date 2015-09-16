@@ -28,7 +28,11 @@ int main(int argc, const char * argv[])
     socklen_t sin_size;
     char remoteIP[INET6_ADDRSTRLEN];
     char *addr,*port;
-
+    
+    grname_ip_mapping_t * mapping;
+    
+    initialize_mapping("./ip_mappings.txt", &mapping);
+    
     if (argc != 3)
     {
       printf("Usage: %s <server_IP> <server_port>\n", argv[0]);
