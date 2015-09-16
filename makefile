@@ -14,8 +14,8 @@ CPP=gcc
 CPPFLAGS=
 #CPPFLAGS=-g -W -O2
 
-build_cmake: 
-		for dir in $(CMAKEDIRS); do \
+#build_cmake: 
+#		for dir in $(CMAKEDIRS); do \
 			cd $$dir; \
           ./configure; \
 		make && make install; \
@@ -24,8 +24,8 @@ build_cmake:
         done
 
 
-build_gflags: 
-		for dir in $(GFLAGDIRS); do \
+#build_gflags: 
+#		for dir in $(GFLAGDIRS); do \
 		cd $$dir; \
 		mkdir $(BUILD); \
 		for subdir in $(BUILD); do\
@@ -36,8 +36,8 @@ build_gflags:
 		done; \
         done
 
-build_glog:
-		for dir in $(GLOGDIRS); do \
+#build_glog:
+#		for dir in $(GLOGDIRS); do \
             cd $$dir; \
           ./configure; \
         make && make install; \
