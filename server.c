@@ -28,10 +28,10 @@ int main(int argc, char * argv[])
     socklen_t sin_size;
     char remoteIP[INET6_ADDRSTRLEN];
     char *addr,*port;
+    char *ptr;
+    int group_msg = 0;
     
     grname_ip_mapping_t * mapping;
-    
-    initialize_mapping("./ip_mappings.txt", &mapping);
     
     if (argc != 3)
     {
@@ -98,7 +98,7 @@ int main(int argc, char * argv[])
     events = calloc(MAXEVENTS, sizeof(event));
 
     while (1) {
-        printf("\nWaiting for something to happen.. (ACTIVE_CLIENTS - %d)",active_clients);
+        //printf("\nWaiting for something to happen.. (ACTIVE_CLIENTS - %d)",active_clients);
 
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
@@ -144,12 +144,28 @@ int main(int argc, char * argv[])
                   {
                     printf("\nDate: %s %s\n",__DATE__,__TIME__);
                   }
+                  else if (0 == strcmp(read_buffer,"show msg group G1\0"))
+                  {
+                    group_msg = 1;
+                    printf("\nshow msg group G1");
+                  }
+                  else if (0 == strcmp(read_buffer,"no msg group G1\0"))
+                  {
+                    group_msg = 0;
+                    printf("\nno msg group G1");
+                  }
+                  else if (0 == strcmp(read_buffer,"show groups\0"))
+                  {
+                    printf("\nshow groups");
+                    initialize_mapping("./ip_mappings.txt", &mapping);
+                  }
                 }
             }
             else
             {
                 ssize_t count;
                 char buf[512];
+                char buf_copy[512];
                
                 count = read(events[index].data.fd, buf, sizeof(buf));
                 
@@ -166,12 +182,16 @@ int main(int argc, char * argv[])
                 }
                 else
                 {
-                    printf("\nSomething on socket to read - from socket %d.", events[index].data.fd);
-                    printf("\n[I] Message from client - %d",count);
-                    //s = write(1, buf, count);
-                    printf("\n%s",buf);
+                    if(group_msg) 
+                    {
+                      strcpy(buf_copy,buf);
+                      ptr = strtok(buf_copy,":");
 
-                    printf("\nSending periodic Response.");
+                      if(strcmp(ptr,"G1") == 0) {
+                        printf("\n\n[I] Message from client - %d",count);
+                        printf("\n%s",buf);
+                      }
+                    }
 int numbytes;
                     if ((numbytes = send(events[index].data.fd,"EchoResponse.",15,0)) < 0)
                     {
