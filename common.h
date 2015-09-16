@@ -63,7 +63,8 @@ int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
         return -1;
     }
 
-    for (rp = result; rp != NULL; rp=rp->ai_next) {
+    for (rp = result; rp != NULL; rp=rp->ai_next)
+    {
         if ((sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol)) == -1)
         {
             continue;
