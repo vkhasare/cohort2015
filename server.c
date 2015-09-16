@@ -15,7 +15,7 @@ typedef struct epoll_event
 };
 */
 
-int main(int argc, const char * argv[])
+int main(int argc, char * argv[])
 {
     int sfd, efd, status;
     int event_count, index;

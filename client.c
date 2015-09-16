@@ -16,7 +16,7 @@ void sendPeriodicMsg(int signal)
     alarm(TIMEOUT_SECS);
 }
 
-int main(int argc, const char * argv[])
+int main(int argc, char * argv[])
 {
     int sockfd, numbytes;
     char buf[MAXDATASIZE];
