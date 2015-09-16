@@ -1,5 +1,8 @@
-SOURCE=server.c common.h logg.h
-MYPROGRAM=server
+#SOURCE=server.c common.h logg.h
+SERVER_SOURCE=server.c common.h
+CLIENT_SOURCE=client.c common.h
+SERVER=server
+CLIENT=client
 MYINCLUDES=/usr/local/lib
 CMAKE_PATH=${PWD}/cmake-2.8.11
 GFLAGDIRS=gflags-2.1.2
@@ -7,8 +10,9 @@ CMAKEDIRS=cmake-2.8.11
 GLOGDIRS=glog-master
 BUILD=buildgflags
 MYLIBRARIES=glog
-CPP=g++
-CPPFLAGS=-g -W -O2
+CPP=gcc
+CPPFLAGS=
+#CPPFLAGS=-g -W -O2
 
 build_cmake: 
 		for dir in $(CMAKEDIRS); do \
@@ -39,15 +43,24 @@ build_glog:
         make && make install; \
         done
 
-server: $(MYPROGRAM)
+server: $(SERVER)
+client: $(CLIENT)
 
-all: build_cmake build_gflags build_glog server
+#all: build_cmake build_gflags build_glog server
 
-$(MYPROGRAM): $(SOURCE)
+all: server client
 
-	$(CPP) $(CPPFLAGS) -I$(MYINCLUDES) $(SOURCE) -o$(MYPROGRAM) -l$(MYLIBRARIES) $<
+$(SERVER): $(SERVER_SOURCE)
+
+	$(CPP) $(CPPFLAGS) $(SERVER_SOURCE) -o$(SERVER)
+#	$(CPP) $(CPPFLAGS) -I$(MYINCLUDES) $(SERVER_SOURCE) -o$(SERVER) -l$(MYLIBRARIES) $<
+
+$(CLIENT): $(CLIENT_SOURCE)
+
+	$(CPP) $(CPPFLAGS) $(CLIENT_SOURCE) -o$(CLIENT)
 
 clean:
 
-	rm -f $(MYPROGRAM)
+	rm -f $(SERVER)
+	rm -f $(CLIENT)
 
