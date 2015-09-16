@@ -8,7 +8,7 @@ void sendPeriodicMsg(int signal)
     int numbytes;
 
     printf("\nSending periodic Request.\n");
-    if ((numbytes = send(sfd,"Echo Request.",15,0)) < 0)
+    if ((numbytes = send(sfd,"G1:Hello, How are you?.",100,0)) < 0)
     {
         printf("\nError in sending\n");
     }
