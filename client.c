@@ -2,13 +2,19 @@
 #define TIMEOUT_SECS 5
 
 int sfd;
+char group_name[512];
 
 void sendPeriodicMsg(int signal)
 {
     int numbytes;
+    char msg[] ="I am Alive";
+    char send_msg[512];
+    strcpy(send_msg,group_name);
+    strcat(send_msg,":");
+    strcat(send_msg,msg);
 
     printf("\nSending periodic Request.\n");
-    if ((numbytes = send(sfd,"Echo Request.",15,0)) < 0)
+    if ((numbytes = send(sfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
     {
         printf("\nError in sending\n");
     }
@@ -36,17 +42,19 @@ int main(int argc, char * argv[])
     struct sigaction myaction;
 
 
-    if (argc != 3)
+    if (argc != 4)
     {
-      printf("Usage: %s <client_IP> <client_port>\n", argv[0]);
+      printf("Usage: %s <client_IP> <client_port> <group_name>\n", argv[0]);
 //      exit(1);
 //      Temporary code
       argv[1] = "127.0.0.1";
       argv[2] = "3490";
+      argv[3] = "G1";
     }
 
     addr = argv[1];
     port = argv[2];
+    strcpy(group_name,argv[3]);
 
     sfd = create_and_bind(addr, port, CLIENT_MODE);
 
