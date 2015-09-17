@@ -30,8 +30,11 @@ int main(int argc, char * argv[])
     char *addr,*port;
     char *ptr;
     int group_msg = 0;
+    uint32_t count;
     
     grname_ip_mapping_t * mapping;
+    
+    count = initialize_mapping("./ip_mappings.txt", &mapping);
     
     if (argc != 3)
     {
@@ -157,7 +160,8 @@ int main(int argc, char * argv[])
                   else if (0 == strcmp(read_buffer,"show groups\0"))
                   {
                     printf("\nshow groups");
-                    initialize_mapping("./ip_mappings.txt", &mapping);
+                    if(mapping)
+                      display_mapping(mapping,count);
                   }
                 }
             }

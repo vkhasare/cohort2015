@@ -31,6 +31,7 @@ void *get_in_addr(struct sockaddr *sa);
 int IS_SERVER(int oper);
 int IS_CLIENT(int oper);
 uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping);
+void display_mapping(grname_ip_mapping_t * mapping, uint32_t count);
 
 uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping){
     FILE *fp = NULL, *cmd_line = NULL;
@@ -49,11 +50,21 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
     for(i = 0; i < count; i++){
         fscanf(fp, "%s %s", (*mapping)[i].grname, ip_str);
         (*mapping)[i].grp_ip = htonl(inet_addr(ip_str));
-        printf("\nGroup name: %s IP addr: %u", (*mapping)[i].grname, (*mapping)[i].grp_ip);
+        //printf("\nGroup name: %s IP addr: %u", (*mapping)[i].grname, (*mapping)[i].grp_ip);
     }
     fclose(fp);
 
     return count;
+}
+
+void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
+{
+  uint32_t i;
+  for(i = 0;i < count; i++)
+  {
+    printf("\nGroup name: %s IP addr: %u", mapping[i].grname,mapping[i].grp_ip);
+  }
+
 }
 
 int IS_SERVER(int oper)
