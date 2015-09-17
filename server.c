@@ -29,9 +29,12 @@ int main(int argc, char * argv[])
     char remoteIP[INET6_ADDRSTRLEN];
     char *addr,*port;
     char *ptr;
-    int group_msg = 0;
+    int group_msg[1000] = {0};
+    uint32_t num_groups;
     
     grname_ip_mapping_t * mapping;
+    
+    num_groups = initialize_mapping("./ip_mappings.txt", &mapping);
     
     if (argc != 3)
     {
@@ -133,7 +136,9 @@ int main(int argc, char * argv[])
             }
             else if (STDIN_FILENO == events[index].data.fd) {
                 char read_buffer[100];
-                int cnt=0;
+                char read_buffer_copy[100];
+                char *ptr;
+                int cnt=0, i = 0;
                 cnt=read(events[index].data.fd, read_buffer, 99);
 
                 if (cnt > 0)
@@ -144,20 +149,45 @@ int main(int argc, char * argv[])
                   {
                     printf("\nDate: %s %s\n",__DATE__,__TIME__);
                   }
-                  else if (0 == strcmp(read_buffer,"show msg group G1\0"))
+                  if(strncmp(read_buffer,"show msg group",14) == 0)
                   {
-                    group_msg = 1;
-                    printf("\nshow msg group G1");
+                    printf("\n%s",read_buffer);
+                    strcpy(read_buffer_copy,read_buffer);
+                    ptr = strtok(read_buffer_copy," ");
+                    while(i < 2)
+                    {
+                      ptr = strtok(NULL," ");
+                      i++;
+                    }
+                    printf("\n grp name: %s",ptr);
+                    for(i = 0;i < num_groups; i++)
+                    {
+                      if(strcmp(ptr,mapping.grname) == 0)
+                        group_msg[i] = 1;
+                    }
                   }
-                  else if (0 == strcmp(read_buffer,"no msg group G1\0"))
+                  if(strncmp(read_buffer,"no msg group",12) == 0)
                   {
-                    group_msg = 0;
-                    printf("\nno msg group G1");
+                    printf("\n%s",read_buffer);
+                    strcpy(read_buffer_copy,read_buffer);
+                    ptr = strtok(read_buffer_copy," ");
+                    while(i < 2)
+                    {
+                      ptr = strtok(NULL," ");
+                      i++;
+                    }
+                    printf("\n grp name: %s",ptr);
+                    for(i = 0;i < num_groups; i++)
+                    {
+                      if(strcmp(ptr,mapping.grname) == 0)
+                        group_msg[i] = 0;
+                    }
                   }
                   else if (0 == strcmp(read_buffer,"show groups\0"))
                   {
                     printf("\nshow groups");
-                    initialize_mapping("./ip_mappings.txt", &mapping);
+                    if(mapping)
+                      display_mapping(mapping,num_groups);
                   }
                 }
             }
@@ -182,12 +212,15 @@ int main(int argc, char * argv[])
                 }
                 else
                 {
-                    if(group_msg) 
+                  int j =0;
+                  for(j = 0; j< num_groups; j++)
+                  {
+                    if(group_msg[j]) 
                     {
                       strcpy(buf_copy,buf);
                       ptr = strtok(buf_copy,":");
 
-                      if(strcmp(ptr,"G1") == 0) {
+                      if(strcmp(ptr,mapping.grname[j]) == 0) {
                         printf("\n\n[I] Message from client - %d",count);
                         printf("\n%s",buf);
                       }
@@ -197,6 +230,7 @@ int numbytes;
                     {
                         printf("\nError in sending\n");
                     }
+                  }
                 }
                 
             }
