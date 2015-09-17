@@ -15,6 +15,40 @@ typedef struct epoll_event
 };
 */
 
+void accept_connections(int sfd,int efd,struct epoll_event *event)
+{
+    char remoteIP[INET6_ADDRSTRLEN];
+    struct sockaddr_storage in_addr;
+    socklen_t in_len;
+    int infd, status;
+    char buf[512];
+
+    in_len = sizeof(in_addr);
+
+    if ((infd = accept(sfd, (struct sockaddr *) &in_addr, &in_len)) == -1)
+    {
+       perror("\nError while accept.");
+       exit(0);
+    }
+
+    inet_ntop(in_addr.ss_family, get_in_addr((struct sockaddr*)&in_addr), remoteIP, INET6_ADDRSTRLEN);
+    sprintf(buf,"New connection came from %s and socket %d.\n",remoteIP,infd);
+    PRINT(buf);
+
+    status = make_socket_non_blocking(infd);
+
+    if (status == -1)
+    {
+        perror("\nError while making the socket non-blocking.");
+        exit(0);
+    }
+
+    event->data.fd = infd;
+    event->events = EPOLLIN|EPOLLET;
+    status = epoll_ctl(efd, EPOLL_CTL_ADD, infd, event);
+}
+
+
 int main(int argc, char * argv[])
 {
     int sfd, efd, status;
@@ -26,7 +60,6 @@ int main(int argc, char * argv[])
 
     struct sockaddr_storage their_addr;
     socklen_t sin_size;
-    char remoteIP[INET6_ADDRSTRLEN];
     char *addr,*port;
     char *ptr;
     int group_msg[1000] = {0};
@@ -66,7 +99,9 @@ int main(int argc, char * argv[])
     
     listen(sfd, BACKLOG);
     
-    printf("\nStarted listening for connections..");
+    //DEBUG("Started listening for connections..\n");
+    PRINT("..WELCOME TO SERVER..\n");
+    PRINT_PROMPT("[server] ");
  
     efd = epoll_create(MAXEVENTS);
 
@@ -106,34 +141,13 @@ int main(int argc, char * argv[])
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
         for (index = 0; index < event_count; index++) {
+            /* Code Block for accepting new connections on Server Socket*/
             if (sfd == events[index].data.fd)
             {
-                struct sockaddr_storage in_addr;
-                socklen_t in_len;
-                int infd;
-                
-                in_len = sizeof(in_addr);
-                
-                if ((infd = accept(sfd, (struct sockaddr *) &in_addr, &in_len)) == -1)
-                {
-                    perror("\nError while accept.");
-                    exit(0);
-                }
-              
-                inet_ntop(in_addr.ss_family, get_in_addr((struct sockaddr*)&in_addr), remoteIP, INET6_ADDRSTRLEN);
- 
-                printf("\n[I] New connection came from %s and socket %d.",remoteIP,infd);
-
-                status = make_socket_non_blocking(infd);
-                
-                event.data.fd = infd;
-                event.events = EPOLLIN|EPOLLET;
-                
-                status = epoll_ctl(efd, EPOLL_CTL_ADD, infd, &event);
-                printf("\n[I] Accepted.");
-                active_clients++;
+                accept_connections(sfd,efd,&event);
                 continue;
             }
+            /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd) {
                 char read_buffer[100];
                 char read_buffer_copy[100];
@@ -144,53 +158,62 @@ int main(int argc, char * argv[])
                 if (cnt > 0)
                 {
                   read_buffer[cnt-1] = '\0';
-                  printf("\nYou typed - %s", read_buffer);
-                  if (0 == strcmp(read_buffer,"show date\0"))
+                  if (0 == strncmp(read_buffer,"show help",9))
                   {
-                    printf("\nDate: %s %s\n",__DATE__,__TIME__);
+                    display_clis();
                   }
-                  if(strncmp(read_buffer,"show msg group",14) == 0)
+                  else if(strncmp(read_buffer,"show msg group",14) == 0)
                   {
-                    printf("\n%s",read_buffer);
+//                    PRINT(read_buffer);
                     strcpy(read_buffer_copy,read_buffer);
                     ptr = strtok(read_buffer_copy," ");
-                    while(i < 2)
+                    while(i < 3)
                     {
                       ptr = strtok(NULL," ");
                       i++;
                     }
-                    printf("\n grp name: %s",ptr);
+//                  printf("\n grp name: %s",ptr);
                     for(i = 0;i < num_groups; i++)
                     {
-                      if(strcmp(ptr,mapping.grname) == 0)
+                      if(strcmp(ptr,mapping[i].grname) == 0)
+                      {
                         group_msg[i] = 1;
+                      }
                     }
                   }
-                  if(strncmp(read_buffer,"no msg group",12) == 0)
+                  else if(strncmp(read_buffer,"no msg group",12) == 0)
                   {
-                    printf("\n%s",read_buffer);
+//                    PRINT(read_buffer);
                     strcpy(read_buffer_copy,read_buffer);
                     ptr = strtok(read_buffer_copy," ");
-                    while(i < 2)
+                    while(i < 3)
                     {
                       ptr = strtok(NULL," ");
                       i++;
                     }
-                    printf("\n grp name: %s",ptr);
+//                    printf("\n grp name: %s",ptr);
                     for(i = 0;i < num_groups; i++)
                     {
-                      if(strcmp(ptr,mapping.grname) == 0)
+                      if(strcmp(ptr,mapping[i].grname) == 0)
                         group_msg[i] = 0;
                     }
                   }
                   else if (0 == strcmp(read_buffer,"show groups\0"))
                   {
-                    printf("\nshow groups");
+//                    PRINT("show groups");
                     if(mapping)
                       display_mapping(mapping,num_groups);
                   }
+                  else
+                  {
+                    if (cnt != 1 && read_buffer[0] != '\n')
+                       PRINT("Error: Unsupported Command.\n");
+                  }
                 }
+
+                PRINT_PROMPT("[server] ");
             }
+            /* Code Block for handling events on connection sockets  */
             else
             {
                 ssize_t count;
@@ -205,7 +228,9 @@ int main(int argc, char * argv[])
                 }
                 else if (count == 0)
                 {
-                    printf("\nClient is dead having Socket no. %d.",events[index].data.fd);
+                    sprintf(buf,"Client is dead having Socket no. %d.",events[index].data.fd);
+                    PRINT(buf);
+                    //Implicitly removed fd from epoll as well.
                     close(events[index].data.fd);
                     active_clients--;
                     break;
@@ -220,19 +245,19 @@ int main(int argc, char * argv[])
                       strcpy(buf_copy,buf);
                       ptr = strtok(buf_copy,":");
 
-                      if(strcmp(ptr,mapping.grname[j]) == 0) {
-                        printf("\n\n[I] Message from client - %d",count);
-                        printf("\n%s",buf);
+                      if(strcmp(ptr,mapping[j].grname) == 0) {
+                        PRINT(buf);
                       }
                     }
-int numbytes;
-                    if ((numbytes = send(events[index].data.fd,"EchoResponse.",15,0)) < 0)
-                    {
-                        printf("\nError in sending\n");
-                    }
+                  }
+
+                  int numbytes;
+                  if ((numbytes = send(events[index].data.fd,"EchoResponse.",15,0)) < 0)
+                  {
+                      PRINT("Error in sending.");
                   }
                 }
-                
+ 
             }
         }
     }
