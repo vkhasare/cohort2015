@@ -65,7 +65,7 @@ int main(int argc, char * argv[])
     int group_msg[1000] = {0};
     uint32_t num_groups;
     
-    grname_ip_mapping_t * mapping;
+    grname_ip_mapping_t * mapping = NULL;
     
     num_groups = initialize_mapping("./ip_mappings.txt", &mapping);
     
@@ -219,6 +219,7 @@ int main(int argc, char * argv[])
                 ssize_t count;
                 char buf[512];
                 char buf_copy[512];
+                FILE* fp;
                
                 count = read(events[index].data.fd, buf, sizeof(buf));
                 

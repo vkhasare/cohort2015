@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
@@ -12,6 +13,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
+#include <rpc/rpc.h>
 
 //#define port "3490"
 #define CLIENT_MODE 101
@@ -39,6 +41,19 @@ typedef struct grname_ip_mapping{
     char grname[10];
     struct sockaddr_in grp_ip;
 }grname_ip_mapping_t; 
+/*
+typedef enum struct_id{
+    client_req    = 101;
+    client_init   = 102;
+    server_task   = 103;
+    client_answer = 104;
+    client_leave  = 105;
+}struct_id_t; 
+*/
+typedef struct client_req{
+    int num_groups;
+    char** group_ids; 
+}client_req_t;
 
 int create_and_bind(char *machine_addr, char *machine_port, int oper_mode);
 int make_socket_non_blocking (int sfd);
@@ -85,7 +100,23 @@ void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
     sprintf(buf,"Group name: %s \t\tIP addr: %s", mapping[i].grname,remoteIP);
     PRINT(buf);
   }
+}
 
+typedef struct my_struct{
+    int a;
+    float b;
+    unsigned int c_count;
+    double d;
+    int *c;
+}my_struct_t;
+
+bool process_my_struct(my_struct_t* m, XDR* xdrs){
+    return(xdr_int(xdrs, &(m->a))  && 
+           xdr_float(xdrs, &(m->b)) && 
+           xdr_u_int(xdrs, &(m->c_count)) &&
+           xdr_double(xdrs, &(m->d)) &&
+           xdr_array(xdrs, (char**)&(m->c), &(m->c_count), 100,
+                      sizeof(int),(xdrproc_t )xdr_int )); 
 }
 
 int IS_SERVER(int oper)
