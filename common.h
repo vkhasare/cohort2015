@@ -20,9 +20,24 @@
 #define MAXEVENTS 30000
 #define MAXDATASIZE 100
 
+
+#define PRINT_PROMPT(str)                  \
+ do {                                      \
+   write(STDOUT_FILENO,"\n",1);            \
+   write(STDOUT_FILENO,str,strlen(str));   \
+ } while(0)
+
+#define PRINT(str)                         \
+ do {                                      \
+   write(STDOUT_FILENO,"\n\n",2);          \
+   write(STDOUT_FILENO,"\t",1);            \
+   write(STDOUT_FILENO,str,strlen(str));   \
+ } while(0)
+
+
 typedef struct grname_ip_mapping{
     char grname[10];
-    uint32_t grp_ip;
+    struct sockaddr_in grp_ip;
 }grname_ip_mapping_t; 
 
 int create_and_bind(char *machine_addr, char *machine_port, int oper_mode);
@@ -32,6 +47,7 @@ int IS_SERVER(int oper);
 int IS_CLIENT(int oper);
 uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping);
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count);
+void display_clis();
 
 uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping){
     FILE *fp = NULL, *cmd_line = NULL;
@@ -49,7 +65,7 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
     fp = fopen(filename, "r");
     for(i = 0; i < count; i++){
         fscanf(fp, "%s %s", (*mapping)[i].grname, ip_str);
-        (*mapping)[i].grp_ip = htonl(inet_addr(ip_str));
+        inet_pton(AF_INET, ip_str, &((*mapping)[i].grp_ip));
         //printf("\nGroup name: %s IP addr: %u", (*mapping)[i].grname, (*mapping)[i].grp_ip);
     }
     fclose(fp);
@@ -60,9 +76,14 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
 {
   uint32_t i;
+  char buf[512];
+  char remoteIP[INET_ADDRSTRLEN];
+
   for(i = 0;i < count; i++)
   {
-    printf("\nGroup name: %s IP addr: %u", mapping[i].grname,mapping[i].grp_ip);
+    inet_ntop(AF_INET, &(mapping[i].grp_ip), remoteIP, INET_ADDRSTRLEN);
+    sprintf(buf,"Group name: %s \t\tIP addr: %s", mapping[i].grname,remoteIP);
+    PRINT(buf);
   }
 
 }
@@ -99,7 +120,7 @@ int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
 
     if (getaddrinfo(machine_addr, machine_port, &hints, &result) != 0)
     {
-        printf("\nFailure in getaddrinfo");
+        PRINT("Failure in getaddrinfo");
         return -1;
     }
 
@@ -137,7 +158,7 @@ int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
 
     freeaddrinfo(result);
 
-    printf("\nSocket is created.");
+//    DEBUG("Socket is created.");
 
     return sfd;
 }
@@ -160,7 +181,7 @@ int make_socket_non_blocking (int sfd)
         return -1;
     }
 
-  printf("\nSocket is non-blocking now.");
+//  DEBUG("Socket is non-blocking now.");
 
   return 1;
 }
@@ -173,6 +194,13 @@ void *get_in_addr(struct sockaddr *sa)
     } else {
         return &(((struct sockaddr_in6*) sa)->sin6_addr);
     }
+}
+
+void display_clis()
+{
+  PRINT("show groups                  -- Displays list of groups");
+  PRINT("show msg group <group_name>  --  Enables display of messages for a specific group.");
+  PRINT("no msg group <group_name>    --  Disables display of messages for a specific group."); 
 }
 
 

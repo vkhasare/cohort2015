@@ -1,7 +1,7 @@
 #include "common.h"
 #define TIMEOUT_SECS 5
 
-int sfd;
+int cfd;
 char group_name[512];
 
 void sendPeriodicMsg(int signal)
@@ -13,10 +13,10 @@ void sendPeriodicMsg(int signal)
     strcat(send_msg,":");
     strcat(send_msg,msg);
 
-    printf("\nSending periodic Request.\n");
-    if ((numbytes = send(sfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
+    PRINT("Sending periodic Request.");
+    if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
     {
-        printf("\nError in sending\n");
+        PRINT("Error in sending msg.");
     }
 
     alarm(TIMEOUT_SECS);
@@ -28,8 +28,9 @@ int main(int argc, char * argv[])
     char buf[MAXDATASIZE];
     struct addrinfo hints, *servinfo, *p;
     int count = 0;
-    
-    int /*sfd,*/ s;
+   
+    int event_count, index; 
+    int /*cfd,*/ status;
     int efd;
     struct epoll_event event;
     struct epoll_event *events;    
@@ -56,15 +57,24 @@ int main(int argc, char * argv[])
     port = argv[2];
     strcpy(group_name,argv[3]);
 
-    sfd = create_and_bind(addr, port, CLIENT_MODE);
+    cfd = create_and_bind(addr, port, CLIENT_MODE);
 
-    if (sfd == -1)
+    if (cfd == -1)
     {
-        perror("\nError in sfd");
+        perror("\nError while creating and binding the socket.");
         exit(0);
     }
 
-    s= make_socket_non_blocking(sfd);    
+    status = make_socket_non_blocking(cfd);
+
+    if (status == -1)
+    {
+        perror("\nError while making the socket non-blocking.");
+        exit(0);
+    }
+
+    PRINT("..WELCOME TO CLIENT..\n");
+    PRINT_PROMPT("[client] ");
  
     myaction.sa_handler = sendPeriodicMsg;
     sigfillset(&myaction.sa_mask);
@@ -82,51 +92,59 @@ int main(int argc, char * argv[])
 
     if (efd == -1)
     {
-        perror("\nError in epoll_create1");
+        perror("\nError while creating the epoll.");
         exit(0);
     }
 
-    event.data.fd = sfd;
+    event.data.fd = cfd;
     event.events = EPOLLIN|EPOLLET;
 
-    s = epoll_ctl(efd, EPOLL_CTL_ADD, sfd, &event);
+    status = epoll_ctl(efd, EPOLL_CTL_ADD, cfd, &event);
 
-    if ( s == -1)
+    if ( status == -1)
     {
+        perror("\nError while adding FD to epoll event.");
+        exit(0);
+    }
+
+    event.data.fd = STDIN_FILENO;
+    event.events = EPOLLIN|EPOLLET;
+
+    status = epoll_ctl(efd, EPOLL_CTL_ADD, STDIN_FILENO, &event);
+
+    if ( status == -1)
+    {
+        perror("\nError while adding STDIN FD to epoll event.");
         exit(0);
     }
 
     events = calloc(MAXEVENTS, sizeof(event));
 
     while (1) {
-        int n, i;
-        //printf("\nWaiting for something to happen on client..");
-        n = epoll_wait(efd, events, MAXEVENTS, -1);
+        event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
-        for (i = 0; i < n; i++) {
-            if ((sfd == events[i].data.fd) && (events[i].events & EPOLLIN))
+        for (index = 0; index < event_count; index++) {
+            /* Code Block for accepting new connections on Server Socket */
+            if ((cfd == events[index].data.fd) && (events[index].events & EPOLLIN))
             {
           		  char buf[512];
-          	  	read(events[i].data.fd, buf, sizeof(buf));
-//            		printf("%s",buf);
-                buf[strlen(buf)] = '\0';
-            		write(1, buf, strlen(buf));
-                continue;
+          	  	read(events[index].data.fd, buf, sizeof(buf));
+//                buf[strlen(buf)] = '\0';
+                PRINT(buf);
+            }
+            /* Code Block for handling input from STDIN */
+            else if (STDIN_FILENO == events[index].data.fd)
+            {
+                char read_buffer[100];
+                char read_buffer_copy[100];
+                char *ptr;
+                int cnt=0, i = 0;
+                cnt=read(events[index].data.fd, read_buffer, 99);
+
+                PRINT_PROMPT("[client] ");
             }
         }
     }
-
-   // inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof(s));
-    
-    //printf("client: connecting to %s\n", s);
-    
-   /* 
-    if ((numbytes = send(sockfd,"hello rohit",13,0)) < 0)
-    {
-        printf("\nError in sending\n");
-    }
-    */
-//   while(1); 
     
     close(sockfd);
     
