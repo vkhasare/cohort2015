@@ -164,7 +164,6 @@ int main(int argc, char * argv[])
                   }
                   else if(strncmp(read_buffer,"show msg group",14) == 0)
                   {
-//                    PRINT(read_buffer);
                     strcpy(read_buffer_copy,read_buffer);
                     ptr = strtok(read_buffer_copy," ");
                     while(i < 3)
@@ -172,7 +171,11 @@ int main(int argc, char * argv[])
                       ptr = strtok(NULL," ");
                       i++;
                     }
-//                  printf("\n grp name: %s",ptr);
+                    if (!ptr)
+                    {
+                        PRINT("Error: Unrecognized Command.\n");
+                        continue;
+                    }
                     for(i = 0;i < num_groups; i++)
                     {
                       if(strcmp(ptr,mapping[i].grname) == 0)
@@ -183,7 +186,6 @@ int main(int argc, char * argv[])
                   }
                   else if(strncmp(read_buffer,"no msg group",12) == 0)
                   {
-//                    PRINT(read_buffer);
                     strcpy(read_buffer_copy,read_buffer);
                     ptr = strtok(read_buffer_copy," ");
                     while(i < 3)
@@ -191,7 +193,11 @@ int main(int argc, char * argv[])
                       ptr = strtok(NULL," ");
                       i++;
                     }
-//                    printf("\n grp name: %s",ptr);
+                    if (!ptr)
+                    {
+                        PRINT("Error: Unrecognized Command.\n");
+                        continue;
+                    }
                     for(i = 0;i < num_groups; i++)
                     {
                       if(strcmp(ptr,mapping[i].grname) == 0)
@@ -200,7 +206,6 @@ int main(int argc, char * argv[])
                   }
                   else if (0 == strcmp(read_buffer,"show groups\0"))
                   {
-//                    PRINT("show groups");
                     if(mapping)
                       display_mapping(mapping,num_groups);
                   }
