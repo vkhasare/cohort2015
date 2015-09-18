@@ -232,7 +232,6 @@ int main(int argc, char * argv[])
                 m.c = NULL;
                 xdrs.x_op = XDR_DECODE;
                
-//              count = read(events[index].data.fd, buf, sizeof(buf));
                 xdrrec_create(&xdrs,0,0,fp,rdata,wdata);
                 xdrrec_skiprecord(&xdrs);
 
@@ -241,6 +240,7 @@ int main(int argc, char * argv[])
                 }while(!xdrrec_eof(&xdrs));
                 
 #endif
+                count = read(events[index].data.fd, buf, sizeof(buf));
                 if (count == -1)
                 {
                     break;
