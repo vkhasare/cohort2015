@@ -41,19 +41,24 @@ typedef struct grname_ip_mapping{
     char grname[10];
     struct sockaddr_in grp_ip;
 }grname_ip_mapping_t; 
-/*
+  
 typedef enum struct_id{
-    client_req    = 101;
-    client_init   = 102;
-    server_task   = 103;
-    client_answer = 104;
-    client_leave  = 105;
-}struct_id_t; 
-*/
+    client_req    = 2001,
+    client_init   = 2002,
+    server_task   = 2003,
+    client_answer = 2004,
+    client_leave  = 2005
+}e_struct_id_t; 
+
 typedef struct client_req{
     int num_groups;
-    char** group_ids; 
+    char* group_ids; 
 }client_req_t;
+
+typedef struct client_init{
+    int num_groups;
+    int* group_ips; 
+}client_init_t;
 
 int create_and_bind(char *machine_addr, char *machine_port, int oper_mode);
 int make_socket_non_blocking (int sfd);
@@ -110,13 +115,82 @@ typedef struct my_struct{
     int *c;
 }my_struct_t;
 
+typedef struct common_struct{
+    e_struct_id_t id;
+    union{
+        client_req_t cl_req;
+        client_init_t cl_init;
+    }recv_struct;
+}comm_struct_t;
+
+void print_my_struct(my_struct_t* m);
+void populate_my_struct(my_struct_t* m);
+
+void print_my_struct(my_struct_t* m){
+    char buf[512];
+    sprintf(buf, 
+            "\na=%d\nb=%f\nc=%u\nd=%lf\nc[0]=%d", 
+            m->a,m->b,m->c_count,m->d,m->c[0]);
+    PRINT(buf);
+    return;
+}
+void populate_my_struct(my_struct_t* m){
+    m->a = 10;
+    m->b = 13.9;
+    m->d = 3.14156;
+    m->c_count = 4; 
+    m->c = (int *) malloc (sizeof(int)*m->c_count);
+    m->c[0]=1;
+    m->c[1]=10;
+    m->c[2]=100;
+}
+
 bool process_my_struct(my_struct_t* m, XDR* xdrs){
-    return(xdr_int(xdrs, &(m->a))  && 
+    char buf[512];
+    bool ret_res = (xdr_int(xdrs, &(m->a))  && 
            xdr_float(xdrs, &(m->b)) && 
            xdr_u_int(xdrs, &(m->c_count)) &&
            xdr_double(xdrs, &(m->d)) &&
            xdr_array(xdrs, (char**)&(m->c), &(m->c_count), 100,
-                      sizeof(int),(xdrproc_t )xdr_int )); 
+                      sizeof(int),(xdrproc_t )xdr_int ));
+
+    if(ret_res){
+        if (xdrs->x_op == XDR_ENCODE){
+            sprintf(buf, "[I] Push res: %d, Encode res: %d", 
+                    xdrrec_endofrecord(xdrs, TRUE), ret_res);
+            PRINT(buf);
+        }
+        if (xdrs->x_op == XDR_DECODE){
+            print_my_struct(m);
+            sprintf(buf, "[I] Skip rec res: %d, Decode res: %d", 
+                    xdrrec_skiprecord (xdrs), ret_res);
+            PRINT(buf);
+        }
+    }
+
+    return ret_res;
+}
+
+int rdata (fp, buf, n)
+    FILE    *fp;
+    char    *buf;
+    int     n;
+{
+    if (n = fread (buf, 1, n, fp))
+        return (n);
+    else
+        return (-1);
+}
+
+int wdata (fp, buf, n)
+    FILE    *fp;
+    char    *buf;
+    int     n;
+{
+    if (n = fwrite (buf, 1, n, fp))
+        return (n);
+    else
+        return (-1);
 }
 
 int IS_SERVER(int oper)

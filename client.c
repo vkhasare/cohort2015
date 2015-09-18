@@ -23,8 +23,29 @@ void sendPeriodicMsg(int signal)
     alarm(TIMEOUT_SECS);
 }
 
-/* Function to start periodic timer for sending messages to server*/
+void sendPeriodicMsg_XDR(int signal)
+{
+    my_struct_t m;
+    XDR xdrs;
+    FILE* fp = fdopen(cfd, "wb");
+    
+    populate_my_struct(&m);
+    
+    xdrs.x_op = XDR_ENCODE;
+    xdrrec_create(&xdrs,0,0,fp,rdata,wdata);
 
+    PRINT("Sending XDR local struct.");
+    if (!process_my_struct(&m, &xdrs))
+    {
+        PRINT("Error in sending msg.");
+    }
+    xdr_destroy(&xdrs);
+    fflush(fp);
+
+    alarm(TIMEOUT_SECS);
+}
+
+/* Function to start periodic timer for sending messages to server*/
 void startKeepAlive()
 {
     struct sigaction myaction;
@@ -43,7 +64,6 @@ void startKeepAlive()
 }
 
 /* Function to stop periodic timer */
-
 void stopKeepAlive()
 {
     alarm(0);
@@ -161,7 +181,7 @@ int main(int argc, char * argv[])
 
     PRINT("..WELCOME TO CLIENT..\n");
     PRINT_PROMPT("[client] ");
-
+ 
     efd = epoll_create(MAXEVENTS);
 
     if (efd == -1)
@@ -217,7 +237,3 @@ int main(int argc, char * argv[])
     
     return 0;
 }
-
-
-
-

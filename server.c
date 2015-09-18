@@ -224,10 +224,21 @@ int main(int argc, char * argv[])
                 ssize_t count;
                 char buf[512];
                 char buf_copy[512];
-                FILE* fp;
-               
-                count = read(events[index].data.fd, buf, sizeof(buf));
+                FILE* fp = fdopen(events[index].data.fd, "rb");
+                my_struct_t m ;
+                XDR xdrs ;
                 
+                m.c = NULL;
+                xdrs.x_op = XDR_DECODE;
+               
+//              count = read(events[index].data.fd, buf, sizeof(buf));
+                xdrrec_create(&xdrs,0,0,fp,rdata,wdata);
+                xdrrec_skiprecord(&xdrs);
+
+                do{
+                    process_my_struct(&m , &xdrs);
+                }while(!xdrrec_eof(&xdrs));
+#if 0          
                 if (count == -1)
                 {
                     break;
@@ -263,6 +274,7 @@ int main(int argc, char * argv[])
                       PRINT("Error in sending.");
                   }
                 }
+#endif
  
             }
         }
