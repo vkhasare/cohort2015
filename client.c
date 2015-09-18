@@ -1,4 +1,5 @@
 #include "common.h"
+#include "SLL/client_ll.h"
 #define TIMEOUT_SECS 5
 
 int cfd;
@@ -50,17 +51,29 @@ void stopKeepAlive()
 
 void display_client_clis()
 {
-   PRINT("show client group info          --  displays list of groups joined by client");
-   PRINT("enable keepalive                --  Sends periodic messages to Server");
+   PRINT("show client groups               --  displays list of groups joined by client");
+   PRINT("enable keepalive                 --  Sends periodic messages to Server");
    PRINT("disable keepalive                --  Stops periodic messages to Server");
 }
 
-void display_client_group_info()
+void display_client_groups(client_information_t **client_info)
 {
-  PRINT("TO BE IMPLEMENTED YET.");
+  display_mcast_client_node(client_info);
 }
 
-void client_stdin_data(int fd)
+/* Function for handling received data on Client Socket */
+
+void client_socket_data(client_information_t **client_info, int fd)
+{
+    char buf[512];
+    read(fd, buf, sizeof(buf));
+
+    PRINT(buf);
+}
+
+/* Function for handling input from STDIN */
+
+void client_stdin_data(client_information_t **client_info, int fd)
 {
     char read_buffer[100];
     char read_buffer_copy[100];
@@ -73,9 +86,9 @@ void client_stdin_data(int fd)
     {
        display_client_clis();
     }
-    else if (strncmp(read_buffer,"show client group info",22) == 0)
+    else if (strncmp(read_buffer,"show client groups",22) == 0)
     {
-       display_client_group_info();
+       display_client_groups(client_info);
     }
     else if (strncmp(read_buffer,"enable keepalive",17) == 0)
     {
@@ -98,7 +111,9 @@ int main(int argc, char * argv[])
     char buf[MAXDATASIZE];
     struct addrinfo hints, *servinfo, *p;
     int count = 0;
-   
+
+    client_information_t *client_info = NULL;
+ 
     int event_count, index; 
     int /*cfd,*/ status;
     int efd;
@@ -109,6 +124,8 @@ int main(int argc, char * argv[])
     socklen_t sin_size;
     char remoteIP[INET6_ADDRSTRLEN];
     char *addr,*port;
+
+    allocate_client_info(&client_info);
 
     if (argc != 4)
     {
@@ -125,6 +142,8 @@ int main(int argc, char * argv[])
     strcpy(group_name,argv[3]);
 
     cfd = create_and_bind(addr, port, CLIENT_MODE);
+
+    ADD_CLIENT_IN_LL(&client_info,group_name);
 
     if (cfd == -1)
     {
@@ -182,14 +201,12 @@ int main(int argc, char * argv[])
             /* Code Block for receiving data on Client Socket */
             if ((cfd == events[index].data.fd) && (events[index].events & EPOLLIN))
             {
-          		  char buf[512];
-          	  	read(events[index].data.fd, buf, sizeof(buf));
-                PRINT(buf);
+                client_socket_data(&client_info, events[index].data.fd);
             }
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd)
             {
-                client_stdin_data(events[index].data.fd);
+                client_stdin_data(&client_info, events[index].data.fd);
 
                 PRINT_PROMPT("[client] ");
             }
