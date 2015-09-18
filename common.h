@@ -227,7 +227,7 @@ void *get_in_addr(struct sockaddr *sa)
     }
 }
 
-void display_clis()
+void display_server_clis()
 {
   PRINT("show groups                  -- Displays list of groups");
   PRINT("show msg group <group_name>  --  Enables display of messages for a specific group.");

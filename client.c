@@ -22,6 +22,76 @@ void sendPeriodicMsg(int signal)
     alarm(TIMEOUT_SECS);
 }
 
+/* Function to start periodic timer for sending messages to server*/
+
+void startKeepAlive()
+{
+    struct sigaction myaction;
+
+    myaction.sa_handler = sendPeriodicMsg;
+    sigfillset(&myaction.sa_mask);
+    myaction.sa_flags = 0;
+
+    if (sigaction(SIGALRM, &myaction, 0) < 0)
+    {
+        perror("\nError in sigaction.");
+        exit(0);
+    }
+
+    alarm(TIMEOUT_SECS);
+}
+
+/* Function to stop periodic timer */
+
+void stopKeepAlive()
+{
+    alarm(0);
+}
+
+void display_client_clis()
+{
+   PRINT("show client group info          --  displays list of groups joined by client");
+   PRINT("enable keepalive                --  Sends periodic messages to Server");
+   PRINT("disable keepalive                --  Stops periodic messages to Server");
+}
+
+void display_client_group_info()
+{
+  PRINT("TO BE IMPLEMENTED YET.");
+}
+
+void client_stdin_data(int fd)
+{
+    char read_buffer[100];
+    char read_buffer_copy[100];
+    int cnt=0;
+
+    cnt=read(fd, read_buffer, 99);
+    read_buffer[cnt-1] = '\0';
+
+    if (0 == strncmp(read_buffer,"show help",9))
+    {
+       display_client_clis();
+    }
+    else if (strncmp(read_buffer,"show client group info",22) == 0)
+    {
+       display_client_group_info();
+    }
+    else if (strncmp(read_buffer,"enable keepalive",17) == 0)
+    {
+       startKeepAlive();
+    }
+    else if (strncmp(read_buffer,"disable keepalive",18) == 0)
+    {
+       stopKeepAlive();
+    }
+    else
+    {
+      if (cnt != 1 && read_buffer[0] != '\n')
+        PRINT("Error: Unrecognized Command.\n");
+    }
+}
+
 int main(int argc, char * argv[])
 {
     int sockfd, numbytes;
@@ -39,9 +109,6 @@ int main(int argc, char * argv[])
     socklen_t sin_size;
     char remoteIP[INET6_ADDRSTRLEN];
     char *addr,*port;
-
-    struct sigaction myaction;
-
 
     if (argc != 4)
     {
@@ -75,18 +142,6 @@ int main(int argc, char * argv[])
 
     PRINT("..WELCOME TO CLIENT..\n");
     PRINT_PROMPT("[client] ");
- 
-    myaction.sa_handler = sendPeriodicMsg;
-    sigfillset(&myaction.sa_mask);
-    myaction.sa_flags = 0;
-    
-    if (sigaction(SIGALRM, &myaction, 0) < 0)
-    {
-        perror("\nError in sigaction.");
-        exit(0);
-    }
-
-    alarm(TIMEOUT_SECS);
 
     efd = epoll_create(MAXEVENTS);
 
@@ -124,22 +179,17 @@ int main(int argc, char * argv[])
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
         for (index = 0; index < event_count; index++) {
-            /* Code Block for accepting new connections on Server Socket */
+            /* Code Block for receiving data on Client Socket */
             if ((cfd == events[index].data.fd) && (events[index].events & EPOLLIN))
             {
           		  char buf[512];
           	  	read(events[index].data.fd, buf, sizeof(buf));
-//                buf[strlen(buf)] = '\0';
                 PRINT(buf);
             }
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd)
             {
-                char read_buffer[100];
-                char read_buffer_copy[100];
-                char *ptr;
-                int cnt=0, i = 0;
-                cnt=read(events[index].data.fd, read_buffer, 99);
+                client_stdin_data(events[index].data.fd);
 
                 PRINT_PROMPT("[client] ");
             }

@@ -160,7 +160,7 @@ int main(int argc, char * argv[])
                   read_buffer[cnt-1] = '\0';
                   if (0 == strncmp(read_buffer,"show help",9))
                   {
-                    display_clis();
+                    display_server_clis();
                   }
                   else if(strncmp(read_buffer,"show msg group",14) == 0)
                   {
@@ -207,7 +207,7 @@ int main(int argc, char * argv[])
                   else
                   {
                     if (cnt != 1 && read_buffer[0] != '\n')
-                       PRINT("Error: Unsupported Command.\n");
+                       PRINT("Error: Unrecognized Command.\n");
                   }
                 }
 
