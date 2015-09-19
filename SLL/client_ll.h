@@ -9,6 +9,7 @@ typedef struct {
 typedef struct {
   char group_name[10];
   struct sockaddr *client_addr;
+  unsigned int fd_id;
   sn_list_element_t list_element;
 } mcast_client_node_t;
 
@@ -88,10 +89,11 @@ void display_mcast_client_node(client_information_t **client_info)
 
 }
 
-void ADD_CLIENT_IN_LL(client_information_t **client_info, char *group_name)
+void ADD_CLIENT_IN_LL(client_information_t **client_info, char *group_name, int fd_id)
 {
   mcast_client_node_t *client_node = NULL;
 
   client_node = allocate_mcast_client_node(client_info);
   strcpy(client_node->group_name,group_name);
+  client_node->fd_id=fd_id;
 }

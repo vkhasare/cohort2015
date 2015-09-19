@@ -1,6 +1,6 @@
 #SOURCE=server.c common.h logg.h
-SERVER_SOURCE=server.c common.h
-CLIENT_SOURCE=sn_ll.c client.c common.h
+SERVER_SOURCE=server.c common.c receiver.c
+CLIENT_SOURCE=sn_ll.c client.c common.c receiver.c
 SERVER=server
 CLIENT=client
 MYINCLUDES=/usr/local/lib

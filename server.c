@@ -256,6 +256,7 @@ int main(int argc, char * argv[])
                 }
                 else
                 {
+                  if(strncmp(buf,"JOIN:",5 )){
                   int j =0;
                   for(j = 0; j< num_groups; j++)
                   {
@@ -275,12 +276,17 @@ int main(int argc, char * argv[])
                   {
                       PRINT("Error in sending.");
                   }
-                }
- 
-            }
+                 }else{
+                int infd=events[index].data.fd;
+                strcpy(buf_copy,buf);
+                ptr=buf_copy+5;
+                //PRINT("Received request from client to joing group\n");
+                join_group(infd, ptr, mapping, num_groups);
+               }
+             }
         }
-    }
-    
+      }
+    }    
     return 0;
 }
 

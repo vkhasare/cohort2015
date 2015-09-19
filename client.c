@@ -2,6 +2,7 @@
 #include "SLL/client_ll.h"
 #define TIMEOUT_SECS 5
 
+#define lo "127.0.0.1"
 int cfd;
 char group_name[512];
 
@@ -22,7 +23,21 @@ void sendPeriodicMsg(int signal)
 
     alarm(TIMEOUT_SECS);
 }
-
+bool handle_join_response(char *buf, client_information_t** client_info){
+   char * bufcpy=malloc((strlen(buf)+1)*sizeof(char));
+   //PRINT(buf);
+   strcpy(bufcpy,buf);
+   strtok(bufcpy, ":");
+   char * grp_name = strtok(NULL,",");
+   int len=strlen(grp_name);
+   char * grp_ip_address= grp_name+len+1;
+   int fd_id= multicast_join(lo,grp_ip_address);  
+   PRINT("Listening to group G1.");
+   if(fd_id > 0){ 
+   ADD_CLIENT_IN_LL(client_info,grp_name, fd_id); 
+   }
+   free(bufcpy);
+}
 void sendPeriodicMsg_XDR(int signal)
 {
     my_struct_t m;
@@ -87,8 +102,10 @@ void client_socket_data(client_information_t **client_info, int fd)
 {
     char buf[512];
     read(fd, buf, sizeof(buf));
-
-    PRINT(buf);
+    if(strncmp(buf,"JOIN RESPONSE:",14 )==0){
+      handle_join_response(buf,client_info);
+    }
+    //PRINT(buf);
 }
 
 /* Function for handling input from STDIN */
@@ -163,7 +180,7 @@ int main(int argc, char * argv[])
 
     cfd = create_and_bind(addr, port, CLIENT_MODE);
 
-    ADD_CLIENT_IN_LL(&client_info,group_name);
+    //ADD_CLIENT_IN_LL(&client_info,group_name);
 
     if (cfd == -1)
     {
@@ -181,7 +198,6 @@ int main(int argc, char * argv[])
 
     PRINT("..WELCOME TO CLIENT..\n");
     PRINT_PROMPT("[client] ");
- 
     efd = epoll_create(MAXEVENTS);
 
     if (efd == -1)
@@ -213,7 +229,8 @@ int main(int argc, char * argv[])
     }
 
     events = calloc(MAXEVENTS, sizeof(event));
-
+    
+    join_msg(cfd,group_name); 
     while (1) {
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
