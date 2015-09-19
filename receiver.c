@@ -67,8 +67,8 @@ bool join_msg(int cfd, char * group_name)
     char msg[] ="JOIN";
     char send_msg[512];
     sprintf(send_msg,"JOIN:%s\r\n",group_name);
-    sprintf(display_string,"Sending Join message for group %s\n",group_name );
-    PRINT(display_string);
+    //sprintf(display_string,"Sending Join message for group %s\n",group_name );
+    //PRINT(display_string);
     if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
     {
         PRINT("Error in sending join  msg.");

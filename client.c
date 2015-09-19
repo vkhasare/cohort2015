@@ -237,8 +237,12 @@ int main(int argc, char * argv[])
     }
 
     events = calloc(MAXEVENTS, sizeof(event));
-    
-    join_msg(cfd,group_name); 
+   
+    char * gname=strtok(group_name,",");
+    while(gname!=NULL){ 
+      join_msg(cfd,gname); 
+      gname=strtok(NULL,",");
+    }
     while (1) {
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
