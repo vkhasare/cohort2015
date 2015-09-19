@@ -27,13 +27,16 @@ void sendPeriodicMsg(int signal)
 bool handle_join_response(char *buf, client_information_t** client_info){
    char * bufcpy=malloc((strlen(buf)+1)*sizeof(char));
    //PRINT(buf);
+   char display[30];
    strcpy(bufcpy,buf);
    strtok(bufcpy, ":");
    char * grp_name = strtok(NULL,",");
    int len=strlen(grp_name);
    char * grp_ip_address= grp_name+len+1;
-   int fd_id= multicast_join(lo,grp_ip_address);  
-   PRINT("Listening to group G1.");
+   int fd_id= multicast_join(lo,grp_ip_address); 
+   //sprintf(display,"Listening to group %s ip address %s\n", grp_name, grp_ip_address);
+   sprintf(display,"Listening to group %s\n", grp_name);
+   PRINT(display);
    if(fd_id > 0){ 
    ADD_CLIENT_IN_LL(client_info,grp_name, fd_id); 
    }
@@ -90,6 +93,7 @@ void display_client_clis()
    PRINT("show client groups               --  displays list of groups joined by client");
    PRINT("enable keepalive                 --  Sends periodic messages to Server");
    PRINT("disable keepalive                --  Stops periodic messages to Server");
+   PRINT("join group <name>                --  Joins a new group");
 }
 
 void display_client_groups(client_information_t **client_info)
@@ -114,7 +118,7 @@ void client_socket_data(client_information_t **client_info, int fd)
 void client_stdin_data(client_information_t **client_info, int fd)
 {
     char read_buffer[100];
-    char read_buffer_copy[100];
+    //char read_buffer_copy[100];
     int cnt=0;
 
     cnt=read(fd, read_buffer, 99);
@@ -135,6 +139,10 @@ void client_stdin_data(client_information_t **client_info, int fd)
     else if (strncmp(read_buffer,"disable keepalive",18) == 0)
     {
        stopKeepAlive();
+    }
+    else if (strncmp(read_buffer,"join group ",11) == 0)
+    {
+       join_msg(cfd,read_buffer+11);
     }
     else
     {
