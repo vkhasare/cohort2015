@@ -89,13 +89,11 @@ int is_gname_already_present(char *grp_name){
 void insert_gname(char *gname){
    strcpy(active_group.group_name[active_group.count], gname);
    active_group.count++;
-   PRINT("iNSERTIING gname");
 }
 
 /* Function to start periodic timer for sending messages to server*/
 void startKeepAlive(char * gname)
 {
-    PRINT(gname);
     if(is_gname_already_present(gname)==0){
       insert_gname(gname);
     
@@ -127,10 +125,10 @@ void stopKeepAlive()
 
 void display_client_clis()
 {
-   PRINT("show client groups               --  displays list of groups joined by client");
-   PRINT("enable keepalive group           --  Sends periodic messages to Server");
-   PRINT("disable keepalive                --  Stops periodic messages to Server");
-   PRINT("join group <name>                --  Joins a new group");
+   PRINT("show client groups                           --  displays list of groups joined by client");
+   PRINT("enable keepalive group <group_name>          --  Sends periodic messages to Server");
+   PRINT("disable keepalive                            --  Stops periodic messages to Server");
+   PRINT("join group <name>                            --  Joins a new group");
 }
 
 void display_client_groups(client_information_t **client_info)
