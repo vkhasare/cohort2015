@@ -215,8 +215,11 @@ int main(int argc, char * argv[])
         exit(0);
     }
 
-    PRINT("..WELCOME TO CLIENT..\n");
+    PRINT("..WELCOME TO CLIENT..");
+    PRINT("\r   <Use \"show help\" to see all supported clis.>\n");
+
     PRINT_PROMPT("[client] ");
+
     efd = epoll_create(MAXEVENTS);
 
     if (efd == -1)
