@@ -1,5 +1,6 @@
 #include "common.h"
 #include "SLL/client_ll.h"
+#include "comm_primitives.h"
 #define TIMEOUT_SECS 5
 
 #define lo "127.0.0.1"
@@ -47,7 +48,7 @@ void sendPeriodicMsg_XDR(int signal)
     populate_my_struct(&m);
     
     xdrs.x_op = XDR_ENCODE;
-    xdrrec_create(&xdrs,0,0,fp,rdata,wdata);
+    xdrrec_create(&xdrs, 0, 0, (char*)fp, rdata, wdata);
 
     PRINT("Sending XDR local struct.");
     if (!process_my_struct(&m, &xdrs))

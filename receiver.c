@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "common.h"
-#include "ip_address_picking.c" 
+//#include "ip_address_picking.c" 
 //#include "SLL/client_ll.h"
 struct sockaddr_in localSock;
 struct ip_mreq group;
@@ -53,9 +53,9 @@ bool send_join_response(int infd, grname_ip_mapping_t* map){
     if ((numbytes = send(infd,send_msg,(strlen(send_msg) + 1),0)) < 0)
     {
         PRINT("Error in sending join rsp.");
-        return FALSE;
+        return false;
     }
-    return TRUE; 
+    return true; 
 }
 
 
@@ -72,9 +72,9 @@ bool join_msg(int cfd, char * group_name)
     if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
     {
         PRINT("Error in sending join  msg.");
-        return FALSE;
+        return false;
     }
-    return TRUE;
+    return true;
 }
 
 int multicast_join(char * my_ip_address, char *group_ip_address){
