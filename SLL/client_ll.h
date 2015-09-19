@@ -8,7 +8,7 @@ typedef struct {
 
 typedef struct {
   char group_name[10];
-  struct sockaddr *client_addr;
+  struct sockaddr_in group_addr;
   unsigned int fd_id;
   sn_list_element_t list_element;
 } mcast_client_node_t;
@@ -73,27 +73,30 @@ void display_mcast_client_node(client_information_t **client_info)
 {
   mcast_client_node_t *client_node = NULL;
   char buf[100];
+  char groupIP[INET_ADDRSTRLEN];
 
-   client_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->server_list->client_node),
+
+  client_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->server_list->client_node),
                                         mcast_client_node_t,
                                         list_element);
-   while (client_node)
-   {
-     
-     PRINT(client_node->group_name);
-
+  while (client_node)
+  {
+     inet_ntop(AF_INET, &(client_node->group_addr), groupIP, INET_ADDRSTRLEN);
+     sprintf(buf,"%s  \t %s",client_node->group_name, groupIP);
+     PRINT(buf);
      client_node =     SN_LIST_MEMBER_NEXT(client_node,
                                           mcast_client_node_t,
                                           list_element);
-   }
+  }
 
 }
 
-void ADD_CLIENT_IN_LL(client_information_t **client_info, char *group_name, int fd_id)
+void ADD_CLIENT_IN_LL(client_information_t **client_info, char *group_name, struct sockaddr_in group_addrIP, int fd_id)
 {
   mcast_client_node_t *client_node = NULL;
 
   client_node = allocate_mcast_client_node(client_info);
   strcpy(client_node->group_name,group_name);
+  client_node->group_addr = group_addrIP;
   client_node->fd_id=fd_id;
 }

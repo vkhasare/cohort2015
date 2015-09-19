@@ -28,17 +28,25 @@ bool handle_join_response(char *buf, client_information_t** client_info){
    char * bufcpy=malloc((strlen(buf)+1)*sizeof(char));
    //PRINT(buf);
    char display[30];
+   struct sockaddr_in group_ip;
+
    strcpy(bufcpy,buf);
    strtok(bufcpy, ":");
    char * grp_name = strtok(NULL,",");
-   int len=strlen(grp_name);
-   char * grp_ip_address= grp_name+len+1;
-   int fd_id= multicast_join(lo,grp_ip_address); 
+   int len=strlen(grp_name);  
+   char grp_ip_address[INET_ADDRSTRLEN];
+
+   strncpy(grp_ip_address,grp_name+len+1,sizeof(grp_ip_address));
+   grp_ip_address[strlen(grp_ip_address)-2] = '\0';
+
+   inet_pton(AF_INET, grp_ip_address, &(group_ip));
+
+   int fd_id= multicast_join(lo,group_ip); 
    //sprintf(display,"Listening to group %s ip address %s\n", grp_name, grp_ip_address);
    sprintf(display,"Listening to group %s\n", grp_name);
    PRINT(display);
    if(fd_id > 0){ 
-   ADD_CLIENT_IN_LL(client_info,grp_name, fd_id); 
+   ADD_CLIENT_IN_LL(client_info,grp_name,group_ip,fd_id); 
    }
    free(bufcpy);
 }
@@ -110,7 +118,10 @@ void client_socket_data(client_information_t **client_info, int fd)
     if(strncmp(buf,"JOIN RESPONSE:",14 )==0){
       handle_join_response(buf,client_info);
     }
-    //PRINT(buf);
+    else
+    {
+      PRINT(buf);
+    }
 }
 
 /* Function for handling input from STDIN */
@@ -238,8 +249,12 @@ int main(int argc, char * argv[])
     }
 
     events = calloc(MAXEVENTS, sizeof(event));
-    
-    join_msg(cfd,group_name); 
+   
+    char * gname=strtok(group_name,",");
+    while(gname!=NULL){ 
+      join_msg(cfd,gname); 
+      gname=strtok(NULL,",");
+    }
     while (1) {
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 

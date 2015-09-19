@@ -67,8 +67,8 @@ bool join_msg(int cfd, char * group_name)
     char msg[] ="JOIN";
     char send_msg[512];
     sprintf(send_msg,"JOIN:%s\r\n",group_name);
-    sprintf(display_string,"Sending Join message for group %s\n",group_name );
-    PRINT(display_string);
+    //sprintf(display_string,"Sending Join message for group %s\n",group_name );
+    //PRINT(display_string);
     if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
     {
         PRINT("Error in sending join  msg.");
@@ -77,10 +77,14 @@ bool join_msg(int cfd, char * group_name)
     return true;
 }
 
-int multicast_join(char * my_ip_address, char *group_ip_address){
+int multicast_join(char * my_ip_address, struct sockaddr_in group_ip){
 int status=0;
 int sd;
 char display[100];
+char group_ip_address[INET_ADDRSTRLEN];
+
+inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
+
 /* Create a datagram socket on which to receive. */
 sd = socket(AF_INET, SOCK_DGRAM, 0);
 if(sd < 0)
@@ -124,9 +128,9 @@ exit(1);
 /* interface. Note that this IP_ADD_MEMBERSHIP option must be */
 /* called for each local interface over which the multicast */
 /* datagrams are to be received. */
-
 group.imr_multiaddr.s_addr = inet_addr(group_ip_address);
 group.imr_interface.s_addr = inet_addr(my_ip_address);
+
 if(setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0)
 {
 sprintf(display,"New group ip address=%s & source ip address=%s",group_ip_address,my_ip_address);
