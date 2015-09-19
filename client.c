@@ -5,23 +5,29 @@
 
 #define lo "127.0.0.1"
 int cfd;
-char group_name[512];
+struct keep_alive{
+unsigned count;
+char group_name[10][10];
+};
+
+struct keep_alive active_group;
 
 void sendPeriodicMsg(int signal)
 {
     int numbytes;
     char msg[] ="I am Alive";
     char send_msg[512];
-    strcpy(send_msg,group_name);
-    strcat(send_msg,":");
-    strcat(send_msg,msg);
-
+    int i=active_group.count;
+    while(i>0){
+    i--;
+    sprintf(send_msg, "%s:%s\r\n",active_group.group_name[i],msg);
+     
     PRINT("Sending periodic Request.");
     if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
     {
         PRINT("Error in sending msg.");
     }
-
+    }
     alarm(TIMEOUT_SECS);
 }
 bool handle_join_response(char *buf, client_information_t** client_info){
@@ -72,11 +78,28 @@ void sendPeriodicMsg_XDR(int signal)
     alarm(TIMEOUT_SECS);
 }
 
-/* Function to start periodic timer for sending messages to server*/
-void startKeepAlive()
-{
-    struct sigaction myaction;
+int is_gname_already_present(char *grp_name){
+   if(active_group.count == 0) return 0;  
+   int i=0 , count=active_group.count;
+   while(i<count){
+     if(strcmp(grp_name,active_group.group_name[i])==0) return i+1;
+     i++;
+   }
+   return 0;
+}
+void insert_gname(char *gname){
+   strcpy(active_group.group_name[active_group.count], gname);
+   active_group.count++;
+}
 
+/* Function to start periodic timer for sending messages to server*/
+void startKeepAlive(char * gname)
+{
+    if(is_gname_already_present(gname)==0){
+      insert_gname(gname);
+    
+    if(active_group.count==1){
+    struct sigaction myaction;
     myaction.sa_handler = sendPeriodicMsg;
     sigfillset(&myaction.sa_mask);
     myaction.sa_flags = 0;
@@ -86,22 +109,27 @@ void startKeepAlive()
         perror("\nError in sigaction.");
         exit(0);
     }
-
+    
     alarm(TIMEOUT_SECS);
+    }
+    }
 }
+
+
 
 /* Function to stop periodic timer */
 void stopKeepAlive()
 {
+    active_group.count ==0;
     alarm(0);
 }
 
 void display_client_clis()
 {
-   PRINT("show client groups               --  displays list of groups joined by client");
-   PRINT("enable keepalive                 --  Sends periodic messages to Server");
-   PRINT("disable keepalive                --  Stops periodic messages to Server");
-   PRINT("join group <name>                --  Joins a new group");
+   PRINT("show client groups                           --  displays list of groups joined by client");
+   PRINT("enable keepalive group <group_name>          --  Sends periodic messages to Server");
+   PRINT("disable keepalive                            --  Stops periodic messages to Server");
+   PRINT("join group <name>                            --  Joins a new group");
 }
 
 void display_client_groups(client_information_t **client_info)
@@ -143,9 +171,9 @@ void client_stdin_data(client_information_t **client_info, int fd)
     {
        display_client_groups(client_info);
     }
-    else if (strncmp(read_buffer,"enable keepalive",17) == 0)
+    else if (strncmp(read_buffer,"enable keepalive group ",23) == 0)
     {
-       startKeepAlive();
+       startKeepAlive(read_buffer+23);
     }
     else if (strncmp(read_buffer,"disable keepalive",18) == 0)
     {
@@ -166,9 +194,11 @@ int main(int argc, char * argv[])
 {
     int sockfd, numbytes;
     char buf[MAXDATASIZE];
+    char group_name[50];
     struct addrinfo hints, *servinfo, *p;
     int count = 0;
 
+    active_group.count ==0;
     client_information_t *client_info = NULL;
  
     int event_count, index; 
@@ -216,8 +246,11 @@ int main(int argc, char * argv[])
         exit(0);
     }
 
-    PRINT("..WELCOME TO CLIENT..\n");
+    PRINT("..WELCOME TO CLIENT..");
+    PRINT("\r   <Use \"show help\" to see all supported clis.>\n");
+
     PRINT_PROMPT("[client] ");
+
     efd = epoll_create(MAXEVENTS);
 
     if (efd == -1)

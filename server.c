@@ -100,7 +100,9 @@ int main(int argc, char * argv[])
     listen(sfd, BACKLOG);
     
     //DEBUG("Started listening for connections..\n");
-    PRINT("..WELCOME TO SERVER..\n");
+    PRINT("..WELCOME TO SERVER..");
+    PRINT("\r   <Use \"show help\" to see all supported clis.>\n");
+
     PRINT_PROMPT("[server] ");
  
     efd = epoll_create(MAXEVENTS);
