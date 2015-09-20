@@ -18,6 +18,7 @@ typedef struct {
 
 typedef struct {
   char *group_name;
+  int number_of_clients;
   struct sockaddr_in group_addr;
   mcast_client_t *client_info;
   sn_list_element_t list_element;
@@ -49,6 +50,7 @@ mcast_client_node_t *allocate_mcast_client_node(mcast_group_node_t **mcast_group
 
    new_client_node = malloc(sizeof(mcast_client_node_t));
 //  memset(&node,0,sizeof(node));
+   (*mcast_group_node)->number_of_clients++;
    SN_LIST_MEMBER_INSERT_HEAD(&((*mcast_group_node)->client_info->client_node),
                                new_client_node,
                                list_element);
@@ -115,6 +117,7 @@ mcast_group_node_t *allocate_mcast_group_node(server_information_t **server_info
 
    new_group_node = malloc(sizeof(mcast_group_node_t));
    new_group_node->client_info = NULL;
+   new_group_node->number_of_clients = 0;
    SN_LIST_MEMBER_INSERT_HEAD(&((*server_info)->server_list->group_node),
                              new_group_node,
                              list_element);
@@ -223,8 +226,8 @@ void display_mcast_group_node(server_information_t **server_info)
      inet_ntop(AF_INET, &(group_node->group_addr), groupIP, INET_ADDRSTRLEN);
 
      sprintf(buf,
-     "\n\n\rGroup Name: %s \t Group IP: %s",
-     group_node->group_name, groupIP);
+     "\n\n\rGroup Name: %s    Group IP: %s    Client Count: %d",
+     group_node->group_name, groupIP, group_node->number_of_clients);
 
      SIMPLE_PRINT(buf);
 
@@ -236,6 +239,35 @@ void display_mcast_group_node(server_information_t **server_info)
      group_node =     SN_LIST_MEMBER_NEXT(group_node,
                                         mcast_group_node_t,
                                         list_element);
+   }
+}
+
+
+void display_mcast_group_node_by_name(server_information_t **server_info, char *grp_name)
+{
+  char buf[100];
+  char groupIP[INET_ADDRSTRLEN];
+
+  mcast_group_node_t *group_node = get_group_node_by_name(server_info,grp_name);
+
+   if (group_node)
+   {
+      inet_ntop(AF_INET, &(group_node->group_addr), groupIP, INET_ADDRSTRLEN);
+
+      sprintf(buf,
+      "\n\n\rGroup Name: %s \t Group IP: %s   Client Count: %d",
+      group_node->group_name, groupIP);
+
+      SIMPLE_PRINT(buf);
+
+      if (group_node->client_info)
+      {
+        display_mcast_client_node(&group_node);
+      }
+   }
+   else
+   {
+     PRINT("Error: Couldnot find group.");
    }
 
 }

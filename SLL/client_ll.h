@@ -14,7 +14,7 @@ typedef struct {
 } mcast_client_node_t;
 
 typedef struct {
-  mcast_client_t *server_list;
+  mcast_client_t *client_list;
 } client_information_t;
 
 sn_list_element_t list_element;
@@ -24,7 +24,7 @@ void allocate_mcast_client_list(client_information_t *client_info)
    mcast_client_t  *mcast_client = NULL;
    mcast_client  = malloc(sizeof(mcast_client_t));
    SN_LIST_INIT(&(mcast_client->client_node));
-   client_info->server_list = mcast_client;
+   client_info->client_list = mcast_client;
 }
 
 static int j = 0;
@@ -34,7 +34,7 @@ void allocate_client_list(client_information_t **client_info)
    mcast_client_t  *mcast_client = NULL;
    mcast_client  = malloc(sizeof(mcast_client_t));
    SN_LIST_INIT(&(mcast_client->client_node));
-   (*client_info)->server_list = mcast_client;
+   (*client_info)->client_list = mcast_client;
 }
 
 void allocate_client_info(client_information_t **client_info)
@@ -48,13 +48,13 @@ mcast_client_node_t *allocate_mcast_client_node(client_information_t **client_in
 {
    mcast_client_node_t *new_client_node = NULL;
 
-   if ((*client_info)->server_list == NULL)
+   if ((*client_info)->client_list == NULL)
    {
       allocate_client_list(client_info);
    }
 
    new_client_node = malloc(sizeof(mcast_client_node_t));
-   SN_LIST_MEMBER_INSERT_HEAD(&((*client_info)->server_list->client_node),
+   SN_LIST_MEMBER_INSERT_HEAD(&((*client_info)->client_list->client_node),
                              new_client_node,
                              list_element);
    return new_client_node;
@@ -62,7 +62,7 @@ mcast_client_node_t *allocate_mcast_client_node(client_information_t **client_in
 
 void deallocate_mcast_client_node(client_information_t *client_info, mcast_client_node_t *node)
 {
-   SN_LIST_MEMBER_REMOVE(&(client_info->server_list->client_node),
+   SN_LIST_MEMBER_REMOVE(&(client_info->client_list->client_node),
                         node,
                         list_element);
    free(node);
@@ -76,7 +76,7 @@ void display_mcast_client_node(client_information_t **client_info)
   char groupIP[INET_ADDRSTRLEN];
 
 
-  client_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->server_list->client_node),
+  client_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->client_list->client_node),
                                         mcast_client_node_t,
                                         list_element);
   while (client_node)

@@ -245,10 +245,29 @@ int main(int argc, char * argv[])
                     if(mapping)
                       display_mapping(mapping,num_groups);
                   }
-                  else if (0 == strcmp(read_buffer,"show group info\0"))
+                  else if (0 == strncmp(read_buffer,"show group info",15))
                   {
-                    if(mapping)
-                      display_group_info(&server_info);
+                     strcpy(read_buffer_copy,read_buffer);
+                     ptr = strtok(read_buffer_copy," ");
+                     while(i < 3)
+                     {
+                       ptr = strtok(NULL," ");
+                       i++;
+                     }
+                     if (!ptr)
+                     {
+                        PRINT("Error: Unrecognized Command.\n");
+                        continue;
+                     }
+                     if(strncmp(ptr,"all",3) == 0)
+                     {
+                       if(mapping)
+                         display_group_info(&server_info);
+                     }
+                     else
+                     {
+                        display_mcast_group_node_by_name(&server_info, ptr);
+                     }
                   }
                   else if (0 == strcmp(read_buffer,"cls\0"))
                   {
