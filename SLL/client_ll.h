@@ -91,6 +91,30 @@ void display_mcast_client_node(client_information_t **client_info)
 
 }
 
+bool is_group_present_in_client_info(client_information_t **client_info, char *grp_name)
+{
+
+  mcast_client_node_t *client_node = NULL;
+
+  client_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->client_list->client_node),
+                                        mcast_client_node_t,
+                                        list_element);
+  while (client_node)
+  {
+
+     if (strcmp(client_node->group_name,grp_name) == 0)
+     {
+        return 1;
+     }
+
+     client_node =     SN_LIST_MEMBER_NEXT(client_node,
+                                          mcast_client_node_t,
+                                          list_element);
+  }
+
+  return 0;
+}
+
 void ADD_CLIENT_IN_LL(client_information_t **client_info, char *group_name, struct sockaddr_in group_addrIP, int fd_id)
 {
   mcast_client_node_t *client_node = NULL;
@@ -99,4 +123,10 @@ void ADD_CLIENT_IN_LL(client_information_t **client_info, char *group_name, stru
   strcpy(client_node->group_name,group_name);
   client_node->group_addr = group_addrIP;
   client_node->fd_id=fd_id;
+}
+
+bool IS_GROUP_IN_CLIENT_LL(client_information_t **client_info, char *group_name)
+{
+  is_group_present_in_client_info(client_info,group_name);
+
 }
