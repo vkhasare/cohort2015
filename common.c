@@ -1,29 +1,5 @@
 #include "common.h"
 
-uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping){
-    FILE *fp = NULL, *cmd_line = NULL;
-    char ip_str[16], cmd[256];
-    uint32_t count, i;
-   
-    strcpy(cmd, "wc -l ");
-    strcat(cmd, filename);
-    cmd_line = popen (cmd, "r");
-    fscanf(cmd_line, "%i", &count);
-    pclose(cmd_line);
-
-    *mapping = (grname_ip_mapping_t *) malloc(sizeof(grname_ip_mapping_t) * count); 
-    
-    fp = fopen(filename, "r");
-    for(i = 0; i < count; i++){
-        fscanf(fp, "%s %s", (*mapping)[i].grname, ip_str);
-        inet_pton(AF_INET, ip_str, &((*mapping)[i].grp_ip));
-        //printf("\nGroup name: %s IP addr: %u", (*mapping)[i].grname, (*mapping)[i].grp_ip);
-    }
-    fclose(fp);
-
-    return count;
-}
-
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
 {
   uint32_t i;
@@ -216,9 +192,10 @@ void *get_in_addr(struct sockaddr *sa)
 
 void display_server_clis()
 {
-  PRINT("show groups                  -- Displays list of groups");
-  PRINT("show msg group <group_name>  --  Enables display of messages for a specific group.");
-  PRINT("no msg group <group_name>    --  Disables display of messages for a specific group."); 
+  PRINT("show groups                        --  Displays list of groups");
+  PRINT("show group info <group_name|all>   --  Displays group - client association");
+  PRINT("show msg group <group_name>        --  Enables display of messages for a specific group.");
+  PRINT("no msg group <group_name>          --  Disables display of messages for a specific group."); 
 }
 
 

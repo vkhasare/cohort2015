@@ -36,6 +36,10 @@
    write(STDOUT_FILENO,str,strlen(str));   \
  } while(0)
 
+#define SIMPLE_PRINT(str)                  \
+ do {                                      \
+   write(STDOUT_FILENO,str,strlen(str));   \
+ } while(0)
 
 typedef struct grname_ip_mapping{
     char grname[10];
@@ -65,7 +69,7 @@ int make_socket_non_blocking (int sfd);
 void *get_in_addr(struct sockaddr *sa);
 int IS_SERVER(int oper);
 int IS_CLIENT(int oper);
-uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping);
+//uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping, server_information_t ** server_info);
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count);
 void display_clis();
 typedef struct my_struct{

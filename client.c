@@ -283,7 +283,7 @@ int main(int argc, char * argv[])
     events = calloc(MAXEVENTS, sizeof(event));
    
     char * gname=strtok(group_name,",");
-    while(gname!=NULL){ 
+    while(gname!=NULL){
       join_msg(cfd,gname); 
       gname=strtok(NULL,",");
     }

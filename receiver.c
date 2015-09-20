@@ -34,7 +34,7 @@ bool join_group(int infd, char * group_name, grname_ip_mapping_t * mapping, int 
         //PRINT(group_name);
         //PRINT(mapping[index].grname);
         if(send_join_response(infd,(mapping+index) )){
-          //update_client_group_mapping(client_info, mapping, index); 
+          //update_client_group_mapping(client_info, mapping, index);
         }
         break;
      }
