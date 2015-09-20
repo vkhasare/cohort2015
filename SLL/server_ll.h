@@ -256,7 +256,7 @@ void display_mcast_group_node_by_name(server_information_t **server_info, char *
 
       sprintf(buf,
       "\n\n\rGroup Name: %s \t Group IP: %s   Client Count: %d",
-      group_node->group_name, groupIP);
+      group_node->group_name, groupIP, group_node->number_of_clients);
 
       SIMPLE_PRINT(buf);
 
