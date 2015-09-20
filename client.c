@@ -181,7 +181,17 @@ void client_stdin_data(client_information_t **client_info, int fd)
     }
     else if (strncmp(read_buffer,"join group ",11) == 0)
     {
-       join_msg(cfd,read_buffer+11);
+    
+       if (IS_GROUP_IN_CLIENT_LL(client_info,read_buffer+11))
+       {
+          char buf[100];
+          sprintf(buf,"Error: Client is already member of group %s.",read_buffer+11);
+          PRINT(buf);
+       }
+       else
+       {
+          join_msg(cfd,read_buffer+11);
+       }
     }
     else if (0 == strcmp(read_buffer,"cls\0"))
     {
