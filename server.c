@@ -250,6 +250,10 @@ int main(int argc, char * argv[])
                     if(mapping)
                       display_group_info(&server_info);
                   }
+                  else if (0 == strcmp(read_buffer,"cls\0"))
+                  {
+                    system("clear");
+                  }
                   else
                   {
                     if (cnt != 1 && read_buffer[0] != '\n')
