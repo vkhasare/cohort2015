@@ -130,6 +130,7 @@ void display_client_clis()
    PRINT("enable keepalive group <group_name>          --  Sends periodic messages to Server");
    PRINT("disable keepalive                            --  Stops periodic messages to Server");
    PRINT("join group <name>                            --  Joins a new group");
+   PRINT("cls                                          --  Clears the screen");
 }
 
 void display_client_groups(client_information_t **client_info)
@@ -182,6 +183,10 @@ void client_stdin_data(client_information_t **client_info, int fd)
     else if (strncmp(read_buffer,"join group ",11) == 0)
     {
        join_msg(cfd,read_buffer+11);
+    }
+    else if (0 == strcmp(read_buffer,"cls\0"))
+    {
+       system("clear");
     }
     else
     {
@@ -284,7 +289,7 @@ int main(int argc, char * argv[])
     events = calloc(MAXEVENTS, sizeof(event));
    
     char * gname=strtok(group_name,",");
-    while(gname!=NULL){ 
+    while(gname!=NULL){
       join_msg(cfd,gname); 
       gname=strtok(NULL,",");
     }

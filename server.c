@@ -1,5 +1,5 @@
 #include "common.h"
-
+#include "SLL/server_ll.h"
 /*
 typedef union epoll_data {
     void        *ptr;
@@ -14,6 +14,30 @@ typedef struct epoll_event
     epoll_data_t data;
 };
 */
+
+uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping, server_information_t **server_info)
+{
+    FILE *fp = NULL, *cmd_line = NULL;
+    char ip_str[16], cmd[256];
+    uint32_t count, i;
+
+    strcpy(cmd, "wc -l ");
+    strcat(cmd, filename);
+    cmd_line = popen (cmd, "r");
+    fscanf(cmd_line, "%i", &count);
+    pclose(cmd_line);
+
+    *mapping = (grname_ip_mapping_t *) malloc(sizeof(grname_ip_mapping_t) * count);
+
+    fp = fopen(filename, "r");
+    for(i = 0; i < count; i++){
+        fscanf(fp, "%s %s", (*mapping)[i].grname, ip_str);
+        inet_pton(AF_INET, ip_str, &((*mapping)[i].grp_ip));
+        ADD_GROUP_IN_LL(server_info,(*mapping)[i].grname,(*mapping)[i].grp_ip);
+    }
+    fclose(fp);
+  return count;
+}
 
 void accept_connections(int sfd,int efd,struct epoll_event *event)
 {
@@ -49,6 +73,12 @@ void accept_connections(int sfd,int efd,struct epoll_event *event)
 }
 
 
+void display_group_info(server_information_t **server_info)
+{
+  display_mcast_group_node(server_info);
+}
+
+
 int main(int argc, char * argv[])
 {
     int sfd, efd, status;
@@ -64,10 +94,13 @@ int main(int argc, char * argv[])
     char *ptr;
     int group_msg[1000] = {0};
     uint32_t num_groups;
-    
+   
+    server_information_t *server_info = NULL;
     grname_ip_mapping_t * mapping = NULL;
-    
-    num_groups = initialize_mapping("./ip_mappings.txt", &mapping);
+
+    allocate_server_info(&server_info);
+
+    num_groups = initialize_mapping("./ip_mappings.txt", &mapping, &server_info);
     
     if (argc != 3)
     {
@@ -98,6 +131,7 @@ int main(int argc, char * argv[])
     }
     
     listen(sfd, BACKLOG);
+
     
     //DEBUG("Started listening for connections..\n");
     PRINT("..WELCOME TO SERVER..");
@@ -211,6 +245,34 @@ int main(int argc, char * argv[])
                     if(mapping)
                       display_mapping(mapping,num_groups);
                   }
+                  else if (0 == strncmp(read_buffer,"show group info",15))
+                  {
+                     strcpy(read_buffer_copy,read_buffer);
+                     ptr = strtok(read_buffer_copy," ");
+                     while(i < 3)
+                     {
+                       ptr = strtok(NULL," ");
+                       i++;
+                     }
+                     if (!ptr)
+                     {
+                        PRINT("Error: Unrecognized Command.\n");
+                        continue;
+                     }
+                     if(strncmp(ptr,"all",3) == 0)
+                     {
+                       if(mapping)
+                         display_group_info(&server_info);
+                     }
+                     else
+                     {
+                        display_mcast_group_node_by_name(&server_info, ptr);
+                     }
+                  }
+                  else if (0 == strcmp(read_buffer,"cls\0"))
+                  {
+                    system("clear");
+                  }
                   else
                   {
                     if (cnt != 1 && read_buffer[0] != '\n')
@@ -279,11 +341,24 @@ int main(int argc, char * argv[])
                       PRINT("Error in sending.");
                   }
                  }else{
-                int infd=events[index].data.fd;
-                strcpy(buf_copy,buf);
-                ptr=buf_copy+5;
-                //PRINT("Received request from client to joing group\n");
-                join_group(infd, ptr, mapping, num_groups);
+                   int infd=events[index].data.fd;
+                   strcpy(buf_copy,buf);
+                   ptr=buf_copy+5;
+                   //PRINT("Received request from client to joing group\n");
+                   if (join_group(infd, ptr, mapping, num_groups))
+                   {
+                      socklen_t addr_len;
+                      struct sockaddr_storage addr;
+
+                      char ipstr[INET6_ADDRSTRLEN];
+                      getpeername(infd, (struct sockaddr*) &addr, &addr_len);
+/*
+inet_ntop(addr.ss_family, get_in_addr((struct sockaddr*)&addr), ipstr, INET6_ADDRSTRLEN);
+sprintf(buf,"req came from %s",ipstr);
+PRINT(buf);
+*/
+                      UPDATE_GRP_CLIENT_LL(&server_info,ptr,(struct sockaddr*) &addr,infd);
+                   }
                }
              }
         }

@@ -1,5 +1,5 @@
 #SOURCE=server.c common.h logg.h
-SERVER_SOURCE=server.c common.c receiver.c
+SERVER_SOURCE=sn_ll.c server.c common.c receiver.c
 CLIENT_SOURCE=sn_ll.c client.c common.c receiver.c
 SERVER=server
 CLIENT=client
