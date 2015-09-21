@@ -30,20 +30,10 @@ void sendPeriodicMsg(int signal)
     }
     alarm(TIMEOUT_SECS);
 }
-bool handle_join_response(char *buf, client_information_t** client_info){
-   char * bufcpy=malloc((strlen(buf)+1)*sizeof(char));
-   //PRINT(buf);
+bool handle_join_response(client_information_t** client_info, char *grp_name, char *grp_ip_address)
+{
    char display[30];
    struct sockaddr_in group_ip;
-
-   strcpy(bufcpy,buf);
-   strtok(bufcpy, ":");
-   char * grp_name = strtok(NULL,",");
-   int len=strlen(grp_name);  
-   char grp_ip_address[INET_ADDRSTRLEN];
-
-   strncpy(grp_ip_address,grp_name+len+1,sizeof(grp_ip_address));
-   grp_ip_address[strlen(grp_ip_address)-2] = '\0';
 
    inet_pton(AF_INET, grp_ip_address, &(group_ip));
 
@@ -54,7 +44,6 @@ bool handle_join_response(char *buf, client_information_t** client_info){
    if(fd_id > 0){ 
    ADD_CLIENT_IN_LL(client_info,grp_name,group_ip,fd_id); 
    }
-   free(bufcpy);
 }
 void sendPeriodicMsg_XDR(int signal)
 {
@@ -120,7 +109,14 @@ void startKeepAlive(char * gname)
 /* Function to stop periodic timer */
 void stopKeepAlive()
 {
-    active_group.count ==0;
+    int i=0;
+
+    while(i < active_group.count){
+      strcpy(active_group.group_name[i] ,"IV");
+      i++;
+    }
+
+    active_group.count =0;
     alarm(0);
 }
 
@@ -138,14 +134,44 @@ void display_client_groups(client_information_t **client_info)
   display_mcast_client_node(client_info);
 }
 
+
+void decode_join_response(char *buf, int msglen, client_information_t **client_info)
+{
+  char *grp_ip, *grp_name;
+  char *buf_copy;
+  strcpy(buf_copy,buf);
+  char *ptr=buf_copy;
+  int len_join_res = strlen("JOIN RESPONSE:");
+  char *token;
+
+    char *ptr11 = strtok_r(buf_copy,"JOIN RESPONSE:",&token);
+    while (ptr11 != NULL && ptr11 < ptr11 + msglen)
+    {
+      char *token1;
+      char *ptr12 = strtok_r(ptr11,",",&token1);
+      grp_name = ptr12;
+      ptr12 = strtok_r(NULL,",",&token1);
+      grp_ip=ptr12;
+//      PRINT(grp_name);
+//      PRINT(grp_ip);
+
+      handle_join_response(client_info, grp_name, grp_ip);
+
+      ptr11 = strtok_r(NULL,"JOIN RESPONSE:",&token);
+    }
+
+}
+
 /* Function for handling received data on Client Socket */
 
 void client_socket_data(client_information_t **client_info, int fd)
 {
     char buf[512];
-    read(fd, buf, sizeof(buf));
+    int read_count;
+
+    read_count = read(fd, buf, sizeof(buf));
     if(strncmp(buf,"JOIN RESPONSE:",14 )==0){
-      handle_join_response(buf,client_info);
+      decode_join_response(buf, read_count, client_info);
     }
     else
     {

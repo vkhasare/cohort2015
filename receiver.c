@@ -49,7 +49,7 @@ bool send_join_response(int infd, grname_ip_mapping_t* map){
     char remoteIP[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(map->grp_ip), remoteIP, INET_ADDRSTRLEN);
 
-    sprintf(send_msg,"JOIN RESPONSE:%s,%s\r\n", map->grname, remoteIP);
+    sprintf(send_msg,"JOIN RESPONSE:%s,%s", map->grname, remoteIP);
     if ((numbytes = send(infd,send_msg,(strlen(send_msg) + 1),0)) < 0)
     {
         PRINT("Error in sending join rsp.");
@@ -66,9 +66,10 @@ bool join_msg(int cfd, char * group_name)
     char display_string[100];
     char msg[] ="JOIN";
     char send_msg[512];
-    sprintf(send_msg,"JOIN:%s\r\n",group_name);
+    sprintf(send_msg,"JOIN:%s",group_name);
     //sprintf(display_string,"Sending Join message for group %s\n",group_name );
     //PRINT(display_string);
+
     if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
     {
         PRINT("Error in sending join  msg.");

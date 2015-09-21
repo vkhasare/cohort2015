@@ -39,6 +39,36 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
   return count;
 }
 
+void process_join_request(server_information_t *server_info, int infd, char *grp_name, grname_ip_mapping_t *mapping, int num_groups)
+{
+  if (join_group(infd, grp_name, mapping, num_groups))
+  {
+    socklen_t addr_len;
+    struct sockaddr_storage addr;
+
+    char ipstr[INET6_ADDRSTRLEN];
+    getpeername(infd, (struct sockaddr*) &addr, &addr_len);
+    UPDATE_GRP_CLIENT_LL(&server_info,grp_name,(struct sockaddr*) &addr,infd);
+  }
+}
+
+decode_join_request(char *buf, int msglen, int infd, grname_ip_mapping_t *mapping, int num_groups, server_information_t **server_info)
+{
+  char *ptr=buf;
+  int len_join_req = strlen("JOIN:");
+  int i = len_join_req;
+  while (i <= msglen)
+  {
+    ptr += len_join_req;
+//    PRINT(ptr);
+
+    process_join_request(*server_info, infd, ptr, mapping, num_groups);
+
+    ptr = ptr + 3;
+    i += len_join_req + 3;
+  }
+}
+
 void accept_connections(int sfd,int efd,struct epoll_event *event)
 {
     char remoteIP[INET6_ADDRSTRLEN];
@@ -343,23 +373,9 @@ int main(int argc, char * argv[])
                  }else{
                    int infd=events[index].data.fd;
                    strcpy(buf_copy,buf);
-                   ptr=buf_copy+5;
                    //PRINT("Received request from client to joing group\n");
-                   if (join_group(infd, ptr, mapping, num_groups))
-                   {
-                      socklen_t addr_len;
-                      struct sockaddr_storage addr;
-
-                      char ipstr[INET6_ADDRSTRLEN];
-                      getpeername(infd, (struct sockaddr*) &addr, &addr_len);
-/*
-inet_ntop(addr.ss_family, get_in_addr((struct sockaddr*)&addr), ipstr, INET6_ADDRSTRLEN);
-sprintf(buf,"req came from %s",ipstr);
-PRINT(buf);
-*/
-                      UPDATE_GRP_CLIENT_LL(&server_info,ptr,(struct sockaddr*) &addr,infd);
-                   }
-               }
+                   decode_join_request(buf, count, infd, mapping, num_groups, &server_info);
+                }
              }
         }
       }
