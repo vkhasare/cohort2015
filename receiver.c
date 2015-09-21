@@ -35,11 +35,12 @@ bool join_group(int infd, char * group_name, grname_ip_mapping_t * mapping, int 
         //PRINT(mapping[index].grname);
         if(send_join_response(infd,(mapping+index) )){
           //update_client_group_mapping(client_info, mapping, index);
+          return 1;
         }
         break;
      }
-      
     }
+return 0;
 }
 
 bool send_join_response(int infd, grname_ip_mapping_t* map){
