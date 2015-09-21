@@ -134,30 +134,27 @@ void display_client_groups(client_information_t **client_info)
 }
 
 
-void decode_join_response(char *buf, int msglen, client_information_t **client_info)
+void decode_join_response(char *buf,  client_information_t **client_info)
 {
-  char *grp_ip, *grp_name;
-  char *buf_copy;
-  strcpy(buf_copy,buf);
-  char *ptr=buf_copy;
-  int len_join_res = strlen("JOIN RESPONSE:");
-  char *token;
+    char *grp_ip, *grp_name;
+//char *ptr=buf_copy;
+    char *token;
 
-    char *ptr11 = strtok_r(buf_copy,"JOIN RESPONSE:",&token);
-    while (ptr11 != NULL && ptr11 < ptr11 + msglen)
-    {
-      char *token1;
-      char *ptr12 = strtok_r(ptr11,",",&token1);
-      grp_name = ptr12;
-      ptr12 = strtok_r(NULL,",",&token1);
-      grp_ip=ptr12;
-//      PRINT(grp_name);
-//      PRINT(grp_ip);
+    char *ptr = strtok_r(buf,":",&token);
+//    char *ptr11 = buf;
+//      char *buf_copy,*token1;
+//      strcpy(buf_copy,ptr11);
+      
+      //PRINT(ptr);
+//      msglen -= (strlen(ptr11)+1);
+      char *ptr1 = strtok_r(NULL,",",&token);
+      grp_name = ptr1;
+      grp_ip=token;
+      //PRINT(grp_name);
+      //PRINT(grp_ip);
 
       handle_join_response(client_info, grp_name, grp_ip);
 
-      ptr11 = strtok_r(NULL,"JOIN RESPONSE:",&token);
-    }
 
 }
 
@@ -167,14 +164,26 @@ void client_socket_data(client_information_t **client_info, int fd)
 {
     char buf[512];
     int read_count;
-
+    char length[10];
+    char buf_copy[100];
     read_count = read(fd, buf, sizeof(buf));
-    if(strncmp(buf,"JOIN RESPONSE:",14 )==0){
-      decode_join_response(buf, read_count, client_info);
-    }
-    else
-    {
-      PRINT(buf);
+    int len = 0;
+    while(len < read_count){
+       strcpy(buf_copy, buf+len);
+       int slen = strlen(buf_copy);
+       //PRINT(buf_copy};
+       if(strncmp(buf_copy,"JOIN RESPONSE:",14 )==0){
+          //PRINT(buf_copy);
+        sprintf(length,"%d\n", read_count);
+          //PRINT(length);
+          decode_join_response(buf_copy,  client_info);
+       }
+       else
+       {
+          PRINT(buf);
+       }
+       slen++;
+       len +=slen;
     }
 }
 
@@ -327,6 +336,7 @@ int main(int argc, char * argv[])
     while(gname!=NULL){
       join_msg(cfd,gname); 
       gname=strtok(NULL,",");
+      //PRINT("Sending join message");
     }
     while (1) {
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
