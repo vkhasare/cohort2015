@@ -108,7 +108,14 @@ void startKeepAlive(char * gname)
 /* Function to stop periodic timer */
 void stopKeepAlive()
 {
-    active_group.count ==0;
+    int i=0;
+
+    while(i < active_group.count){
+      strcpy(active_group.group_name[i] ,"IV");
+      i++;
+    }
+
+    active_group.count =0;
     alarm(0);
 }
 
