@@ -60,8 +60,9 @@ decode_join_request(char *buf, int msglen, int infd, grname_ip_mapping_t *mappin
   while (i <= msglen)
   {
     ptr += len_join_req;
-//    PRINT(ptr);
 
+    PRINT("Received request from client to join group\n");
+    PRINT(ptr);
     process_join_request(*server_info, infd, ptr, mapping, num_groups);
 
     ptr = ptr + 3;
@@ -373,7 +374,8 @@ int main(int argc, char * argv[])
                  }else{
                    int infd=events[index].data.fd;
                    strcpy(buf_copy,buf);
-                   //PRINT("Received request from client to joing group\n");
+//                   PRINT("Received request from client to join group\n");
+//                   PRINT(buf);
                    decode_join_request(buf, count, infd, mapping, num_groups, &server_info);
                 }
              }
