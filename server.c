@@ -373,7 +373,7 @@ int main(int argc, char * argv[])
                  }else{
                    int infd=events[index].data.fd;
                    strcpy(buf_copy,buf);
-                   PRINT("Received request from client to joing group\n");
+                   PRINT("Received request from client to join group\n");
                    PRINT(buf);
                    decode_join_request(buf, count, infd, mapping, num_groups, &server_info);
                 }
