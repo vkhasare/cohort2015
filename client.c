@@ -17,16 +17,19 @@ void sendPeriodicMsg(int signal)
     char msg[] ="I am Alive";
     char send_msg[512];
     int i=active_group.count;
-    while(i>0){
-    i--;
-    sprintf(send_msg, "%s:%s\r\n",active_group.group_name[i],msg);
-     
-    PRINT("Sending periodic Request.");
-    if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
+
+    while(i>0)
     {
+      i--;
+      sprintf(send_msg, "%s:%s\r\n",active_group.group_name[i],msg);
+     
+      PRINT("Sending periodic Request.");
+      if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
+      {
         PRINT("Error in sending msg.");
+      }
     }
-    }
+
     alarm(TIMEOUT_SECS);
 }
 bool handle_join_response(client_information_t** client_info, char *grp_name, char *grp_ip_address)
@@ -67,12 +70,18 @@ void sendPeriodicMsg_XDR(int signal)
 }
 
 int is_gname_already_present(char *grp_name){
-   if(active_group.count == 0) return 0;  
+
+   if(active_group.count == 0)
+     return 0;  
+
    int i=0 , count=active_group.count;
-   while(i<count){
+
+   while(i<count)
+   {
      if(strcmp(grp_name,active_group.group_name[i])==0) return i+1;
      i++;
    }
+
    return 0;
 }
 void insert_gname(char *gname){
@@ -83,24 +92,26 @@ void insert_gname(char *gname){
 /* Function to start periodic timer for sending messages to server*/
 void startKeepAlive(char * gname)
 {
-    if(is_gname_already_present(gname)==0){
-      insert_gname(gname);
-    
-    if(active_group.count==1){
-    struct sigaction myaction;
-    myaction.sa_handler = sendPeriodicMsg;
-    sigfillset(&myaction.sa_mask);
-    myaction.sa_flags = 0;
-
-    if (sigaction(SIGALRM, &myaction, 0) < 0)
+    if(is_gname_already_present(gname) == 0)
     {
-        perror("\nError in sigaction.");
-        exit(0);
-    }
+       insert_gname(gname);
     
-    alarm(TIMEOUT_SECS);
-    }
-    }
+      if(active_group.count == 1)
+      {
+        struct sigaction myaction;
+        myaction.sa_handler = sendPeriodicMsg;
+        sigfillset(&myaction.sa_mask);
+        myaction.sa_flags = 0;
+
+        if (sigaction(SIGALRM, &myaction, 0) < 0)
+        {
+          perror("\nError in sigaction.");
+          exit(0);
+        }
+    
+        alarm(TIMEOUT_SECS);
+      }
+   }
 }
 
 
@@ -108,14 +119,15 @@ void startKeepAlive(char * gname)
 /* Function to stop periodic timer */
 void stopKeepAlive()
 {
-    int i=0;
+    int i = 0;
 
-    while(i < active_group.count){
+    while(i < active_group.count)
+    {
       strcpy(active_group.group_name[i] ,"IV");
       i++;
     }
 
-    active_group.count =0;
+    active_group.count = 0;
     alarm(0);
 }
 
@@ -137,16 +149,10 @@ void display_client_groups(client_information_t **client_info)
 void decode_join_response(char *buf,  client_information_t **client_info)
 {
     char *grp_ip, *grp_name;
-//char *ptr=buf_copy;
     char *token;
 
     char *ptr = strtok_r(buf,":",&token);
-//    char *ptr11 = buf;
-//      char *buf_copy,*token1;
-//      strcpy(buf_copy,ptr11);
       
-      //PRINT(ptr);
-//      msglen -= (strlen(ptr11)+1);
       char *ptr1 = strtok_r(NULL,",",&token);
       grp_name = ptr1;
       grp_ip=token;
@@ -171,11 +177,8 @@ void client_socket_data(client_information_t **client_info, int fd)
     while(len < read_count){
        strcpy(buf_copy, buf+len);
        int slen = strlen(buf_copy);
-       //PRINT(buf_copy};
-       if(strncmp(buf_copy,"JOIN RESPONSE:",14 )==0){
-          //PRINT(buf_copy);
-        sprintf(length,"%d\n", read_count);
-          //PRINT(length);
+       if(strncmp(buf_copy,"JOIN RESPONSE:",14 ) == 0)
+       {
           decode_join_response(buf_copy,  client_info);
        }
        else
@@ -192,7 +195,6 @@ void client_socket_data(client_information_t **client_info, int fd)
 void client_stdin_data(client_information_t **client_info, int fd)
 {
     char read_buffer[100];
-    //char read_buffer_copy[100];
     int cnt=0;
 
     cnt=read(fd, read_buffer, 99);
@@ -278,8 +280,6 @@ int main(int argc, char * argv[])
     strcpy(group_name,argv[3]);
 
     cfd = create_and_bind(addr, port, CLIENT_MODE);
-
-    //ADD_CLIENT_IN_LL(&client_info,group_name);
 
     if (cfd == -1)
     {

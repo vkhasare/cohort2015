@@ -203,7 +203,6 @@ int main(int argc, char * argv[])
     events = calloc(MAXEVENTS, sizeof(event));
 
     while (1) {
-        //printf("\nWaiting for something to happen.. (ACTIVE_CLIENTS - %d)",active_clients);
 
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
@@ -319,22 +318,7 @@ int main(int argc, char * argv[])
                 ssize_t count;
                 char buf[512];
                 char buf_copy[512];
-#if 0
-                FILE* fp = fdopen(events[index].data.fd, "rb");
-                my_struct_t m ;
-                XDR xdrs ;
-                
-                m.c = NULL;
-                xdrs.x_op = XDR_DECODE;
-               
-                xdrrec_create(&xdrs,0,0,fp,rdata,wdata);
-                xdrrec_skiprecord(&xdrs);
 
-                do{
-                    process_my_struct(&m , &xdrs);
-                }while(!xdrrec_eof(&xdrs));
-                
-#endif
                 count = read(events[index].data.fd, buf, sizeof(buf));
                 if (count == -1)
                 {
@@ -374,8 +358,6 @@ int main(int argc, char * argv[])
                  }else{
                    int infd=events[index].data.fd;
                    strcpy(buf_copy,buf);
-//                   PRINT("Received request from client to join group\n");
-//                   PRINT(buf);
                    decode_join_request(buf, count, infd, mapping, num_groups, &server_info);
                 }
              }

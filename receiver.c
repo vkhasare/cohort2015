@@ -27,14 +27,12 @@ multicast_join(my_address, "226.1.1.1");
 }*/
 
 bool join_group(int infd, char * group_name, grname_ip_mapping_t * mapping, int num_groups){
-   //void * client_info = get_client_info(infd);  
    int index=0;
    for(index=0;index<num_groups;index++){
-     if(MATCH_NAME(group_name, mapping[index].grname)){
-        //PRINT(group_name);
-        //PRINT(mapping[index].grname);
-        if(send_join_response(infd,(mapping+index) )){
-          //update_client_group_mapping(client_info, mapping, index);
+     if(MATCH_NAME(group_name, mapping[index].grname))
+     {
+        if(send_join_response(infd,(mapping+index) ))
+        {
           return 1;
         }
         break;
@@ -79,50 +77,50 @@ bool join_msg(int cfd, char * group_name)
     return TRUE;
 }
 
-int multicast_join(char * my_ip_address, struct sockaddr_in group_ip){
-int status=0;
-int sd;
-char display[100];
-char group_ip_address[INET_ADDRSTRLEN];
-
-inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
-
-/* Create a datagram socket on which to receive. */
-sd = socket(AF_INET, SOCK_DGRAM, 0);
-if(sd < 0)
+int multicast_join(char * my_ip_address, struct sockaddr_in group_ip)
 {
-perror("Opening datagram socket error");
-exit(1);
-}
-//else
-//PRINT("Opening datagram socket....OK.\n");
+  int status=0;
+  int sd;
+  char display[100];
+  char group_ip_address[INET_ADDRSTRLEN];
+
+  inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
+
+  /* Create a datagram socket on which to receive. */
+  sd = socket(AF_INET, SOCK_DGRAM, 0);
+  if(sd < 0)
+  {
+    perror("Opening datagram socket error");
+    exit(1);
+  }
  
-/* Enable SO_REUSEADDR to allow multiple instances of this */
-/* application to receive copies of the multicast datagrams. */
-{
-int reuse = 1;
-status =setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(reuse));
-if(status < 0) {
-perror("Setting SO_REUSEADDR error");
-close(sd);
-exit(1);
-}
+  /* Enable SO_REUSEADDR to allow multiple instances of this */
+  /* application to receive copies of the multicast datagrams. */
+  {
+    int reuse = 1;
+    status =setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(reuse));
+    if(status < 0) {
+      perror("Setting SO_REUSEADDR error");
+      close(sd);
+      exit(1);
+    }
 //else
 //PRINT("Setting SO_REUSEADDR...OK.\n");
-}
+  }
  
 /* Bind to the proper port number with the IP address */
 /* specified as INADDR_ANY. */
-memset((char *) &localSock, 0, sizeof(localSock));
-localSock.sin_family = AF_INET;
-localSock.sin_port = htons(4321);
-localSock.sin_addr.s_addr = INADDR_ANY;
-if(bind(sd, (struct sockaddr*)&localSock, sizeof(localSock)))
-{
-perror("Binding datagram socket error");
-close(sd);
-exit(1);
-}
+  memset((char *) &localSock, 0, sizeof(localSock));
+  localSock.sin_family = AF_INET;
+  localSock.sin_port = htons(4321);
+  localSock.sin_addr.s_addr = INADDR_ANY;
+
+  if(bind(sd, (struct sockaddr*)&localSock, sizeof(localSock)))
+  {
+    perror("Binding datagram socket error");
+    close(sd);
+    exit(1);
+  }
 //else
 //PRINT("Binding datagram socket...OK.\n");
  
@@ -130,17 +128,17 @@ exit(1);
 /* interface. Note that this IP_ADD_MEMBERSHIP option must be */
 /* called for each local interface over which the multicast */
 /* datagrams are to be received. */
-group.imr_multiaddr.s_addr = inet_addr(group_ip_address);
-group.imr_interface.s_addr = inet_addr(my_ip_address);
+  group.imr_multiaddr.s_addr = inet_addr(group_ip_address);
+  group.imr_interface.s_addr = inet_addr(my_ip_address);
 
-if(setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0)
-{
-sprintf(display,"New group ip address=%s & source ip address=%s",group_ip_address,my_ip_address);
-PRINT(display);
-perror("Adding multicast group error");
-close(sd);
-exit(1);
-}
+  if(setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0)
+  {
+    sprintf(display,"New group ip address=%s & source ip address=%s",group_ip_address,my_ip_address);
+    PRINT(display);
+    perror("Adding multicast group error");
+    close(sd);
+    exit(1);
+  }
 //else
 //PRINT("Adding multicast group...OK.\n");
  
