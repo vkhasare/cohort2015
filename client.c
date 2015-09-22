@@ -184,6 +184,7 @@ void client_socket_data(client_information_t **client_info, int fd)
        else
        {
           PRINT(buf);
+          break;
        }
        slen++;
        len +=slen;
