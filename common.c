@@ -194,7 +194,7 @@ void display_server_clis()
 {
   PRINT("show groups                        --  Displays list of groups");
   PRINT("show group info <group_name|all>   --  Displays group - client association");
-  PRINT("show msg group <group_name>        --  Enables display of messages for a specific group.");
+  PRINT("enable msg group <group_name>      --  Enables display of messages for a specific group.");
   PRINT("no msg group <group_name>          --  Disables display of messages for a specific group.");
   PRINT("cls                                --  Clears the screen");
 }

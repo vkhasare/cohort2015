@@ -228,7 +228,7 @@ int main(int argc, char * argv[])
                   {
                     display_server_clis();
                   }
-                  else if(strncmp(read_buffer,"show msg group",14) == 0)
+                  else if(strncmp(read_buffer,"enable msg group",16) == 0)
                   {
                     strcpy(read_buffer_copy,read_buffer);
                     ptr = strtok(read_buffer_copy," ");
