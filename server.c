@@ -43,8 +43,8 @@ void process_join_request(server_information_t *server_info, int infd, char *grp
 {
   if (join_group(infd, grp_name, mapping, num_groups))
   {
-    socklen_t addr_len;
     struct sockaddr_storage addr;
+    socklen_t addr_len = sizeof(addr);
 
     char ipstr[INET6_ADDRSTRLEN];
     getpeername(infd, (struct sockaddr*) &addr, &addr_len);
