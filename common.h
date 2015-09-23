@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -21,6 +22,8 @@
 #define MAXEVENTS 30000
 #define MAXDATASIZE 100
 
+extern const unsigned int max_groups;
+extern const unsigned int max_gname_len; //includes nul termination
 
 #define PRINT_PROMPT(str)                  \
  do {                                      \

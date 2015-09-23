@@ -5,12 +5,56 @@
 
 #define lo "127.0.0.1"
 int cfd;
+
 struct keep_alive{
-unsigned count;
-char group_name[10][10];
+    unsigned count;
+    char group_name[10][10];
+};
+struct keep_alive active_group;
+client_information_t *client_info = NULL;
+
+extern unsigned int echo_req_len;
+extern unsigned int echo_resp_len; //includes nul termination
+
+int handle_client_init(const int, const comm_struct_t, ...);
+void handle_echo_req(const int);
+int handle_echo_response(const int, const comm_struct_t, ...);
+
+typedef int (*fptr)(int, comm_struct_t, ...);
+
+fptr handle_wire_event[]={
+    NULL,               //UNUSED
+    NULL,               //client_req
+    handle_client_init, //client_init
+    NULL,               //server_task
+    NULL,               //client_answer
+    NULL,               //client_leave
+    handle_echo_req,    //echo_req
+    handle_echo_response//echo_response
 };
 
-struct keep_alive active_group;
+int handle_client_init(const int sockfd, const comm_struct_t const resp, ...){
+    struct sockaddr_in group_ip;
+    int iter; char* group_name; 
+    char display[30];
+    
+    for(iter = 0; iter < resp.idv.cl_init.num_groups; iter++){
+        group_ip.sin_family = resp.idv.cl_init.group_ips[iter].sin_family;
+        group_ip.sin_port = resp.idv.cl_init.group_ips[iter].sin_port;
+        group_ip.sin_addr.s_addr = resp.idv.cl_init.group_ips[iter].s_addr;
+        
+        group_name = resp.idv.cl_init.group_ips[iter].group_name;
+        
+        int sockfd = multicast_join(lo,group_ip); 
+        
+        sprintf(display,"Listening to group %s\n", group_name);
+        PRINT(display);
+        
+        if(sockfd > 0){ 
+            ADD_CLIENT_IN_LL(&client_info, group_name, group_ip, sockfd); 
+        }
+    }
+}
 
 void sendPeriodicMsg(int signal)
 {
@@ -42,34 +86,60 @@ bool handle_join_response(client_information_t** client_info, char *grp_name, ch
 
    int fd_id= multicast_join(lo,group_ip); 
    //sprintf(display,"Listening to group %s ip address %s\n", grp_name, grp_ip_address);
+   
    sprintf(display,"Listening to group %s\n", grp_name);
    PRINT(display);
+   
    if(fd_id > 0){ 
-   ADD_CLIENT_IN_LL(client_info,grp_name,group_ip,fd_id); 
+       ADD_CLIENT_IN_LL(client_info,grp_name,group_ip,fd_id); 
    }
 }
 void sendPeriodicMsg_XDR(int signal)
 {
     my_struct_t m;
     XDR xdrs;
+    int res;
     FILE* fp = fdopen(cfd, "wb");
     
-    populate_my_struct(&m);
+    populate_my_struct(&m, 2);
     
     xdrs.x_op = XDR_ENCODE;
     xdrrec_create(&xdrs, 0, 0, (char*)fp, rdata, wdata);
 
-    PRINT("Sending XDR local struct.");
-    if (!process_my_struct(&m, &xdrs))
+//  PRINT("Sending XDR local struct.");
+    res = process_my_struct(&m, &xdrs);
+    if (!res)
     {
         PRINT("Error in sending msg.");
     }
+    postprocess_struct_stream(&m, &xdrs, res);
     xdr_destroy(&xdrs);
     fflush(fp);
 
     alarm(TIMEOUT_SECS);
 }
 
+void handle_echo_req(int signal){
+    int i=active_group.count;
+    char msg[] =" I am Alive";
+    comm_struct_t resp;
+   
+    resp.id = echo_req;
+    resp.idv.echo_req.str = (char *) malloc (sizeof(char) * echo_req_len);
+    resp.idv.echo_req.str[0]='\0';
+    while(i-- > 0){
+        strcat(resp.idv.echo_req.str, active_group.group_name[i]);
+        strcat(resp.idv.echo_req.str,msg);
+    }
+    PRINT("Sending periodic Request.");
+    write_record(cfd, &resp);
+    alarm(TIMEOUT_SECS);
+}
+
+int handle_echo_response(const int sockfd, const comm_struct_t const req, ...){
+    PRINT(req.idv.echo_resp.str);
+    return 0;
+}
 int is_gname_already_present(char *grp_name){
 
    if(active_group.count == 0)
@@ -100,7 +170,7 @@ void startKeepAlive(char * gname)
       if(active_group.count == 1)
       {
         struct sigaction myaction;
-        myaction.sa_handler = sendPeriodicMsg;
+        myaction.sa_handler = handle_echo_req;
         sigfillset(&myaction.sa_mask);
         myaction.sa_flags = 0;
 
@@ -220,7 +290,7 @@ void client_stdin_data(client_information_t **client_info, int fd)
     }
     else if (strncmp(read_buffer,"join group ",11) == 0)
     {
-    
+       
        if (IS_GROUP_IN_CLIENT_LL(client_info,read_buffer+11))
        {
           char buf[100];
@@ -229,7 +299,12 @@ void client_stdin_data(client_information_t **client_info, int fd)
        }
        else
        {
-          join_msg(cfd,read_buffer+11);
+           comm_struct_t m;
+           m.id = client_req;
+           m.idv.cl_req.num_groups = 0; 
+           //join_msg(cfd,read_buffer+11);
+           populate_client_req(&m, read_buffer+11);
+           write_record(cfd, &m);
        }
     }
     else if (0 == strcmp(read_buffer,"cls\0"))
@@ -251,8 +326,7 @@ int main(int argc, char * argv[])
     struct addrinfo hints, *servinfo, *p;
     int count = 0;
 
-    active_group.count ==0;
-    client_information_t *client_info = NULL;
+    active_group.count = 0;
  
     int event_count, index; 
     int /*cfd,*/ status;
@@ -335,11 +409,21 @@ int main(int argc, char * argv[])
     events = calloc(MAXEVENTS, sizeof(event));
    
     char * gname=strtok(group_name,",");
-    while(gname!=NULL){
-      join_msg(cfd,gname); 
+    char * gr_list[max_groups];
+    comm_struct_t m; int iter = 0;
+    m.id = client_req;
+    m.idv.cl_req.num_groups = 0; 
+    while(gname!=NULL){ 
+//    join_msg(cfd,gname);
+      gr_list[iter++] = gname;
       gname=strtok(NULL,",");
       //PRINT("Sending join message");
     }
+    populate_client_req(&m, gr_list, iter);
+    write_record(cfd, &m);
+
+    
+//  join_msg(cfd,group_name); 
     while (1) {
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
@@ -347,7 +431,9 @@ int main(int argc, char * argv[])
             /* Code Block for receiving data on Client Socket */
             if ((cfd == events[index].data.fd) && (events[index].events & EPOLLIN))
             {
-                client_socket_data(&client_info, events[index].data.fd);
+                comm_struct_t req;
+//              client_socket_data(&client_info, events[index].data.fd);
+                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req);
             }
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd)

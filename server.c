@@ -1,5 +1,7 @@
 #include "common.h"
 #include "SLL/server_ll.h"
+#include "comm_primitives.h"
+
 /*
 typedef union epoll_data {
     void        *ptr;
@@ -15,7 +17,78 @@ typedef struct epoll_event
 };
 */
 
-uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping, server_information_t **server_info)
+grname_ip_mapping_t * mapping = NULL;
+server_information_t *server_info = NULL;
+extern unsigned int echo_req_len;
+extern unsigned int echo_resp_len; //includes nul termination
+int handle_client_req(const int sockfd, const comm_struct_t const req);
+int handle_echo_req(const int sockfd, const comm_struct_t const req);
+
+typedef int (*fptr)(int, comm_struct_t);
+
+fptr handle_wire_event[]={
+    NULL,               //UNUSED
+    handle_client_req,  //client_req
+    NULL,               //client_init
+    NULL,               //server_task
+    NULL,               //client_answer
+    NULL,               //client_leave
+    handle_echo_req,    //echo_req
+    NULL                //echo_response
+};
+
+int handle_client_req(const int sockfd, const comm_struct_t const req){
+    comm_struct_t resp;
+    uint8_t cl_iter, s_iter;
+    char *group_name;
+    
+    resp.id = client_init;
+    resp.idv.cl_init.num_groups = req.idv.cl_req.num_groups; 
+    resp.idv.cl_init.group_ips = (l_saddr_in_t *) malloc (sizeof(l_saddr_in_t) * req.idv.cl_req.num_groups);
+    
+    for(cl_iter = 0; cl_iter < req.idv.cl_req.num_groups; cl_iter++){
+        group_name = req.idv.cl_req.group_ids[cl_iter].str;
+
+        for(s_iter = 0; s_iter < max_groups; s_iter++ ){
+            if(strcmp(group_name, mapping[s_iter].grname) == 0){
+                //update internal structures
+                struct sockaddr_storage addr;
+                socklen_t addr_len = sizeof addr;
+
+                char ipstr[INET6_ADDRSTRLEN];
+                int pname = getpeername(sockfd, (struct sockaddr*) &addr, &addr_len);
+                UPDATE_GRP_CLIENT_LL(&server_info, group_name, (struct sockaddr*) &addr, sockfd);
+                
+                //add ip addr as response and break to search for next group
+                resp.idv.cl_init.group_ips[cl_iter].sin_family =
+                    mapping[s_iter].grp_ip.sin_family;
+                resp.idv.cl_init.group_ips[cl_iter].sin_port   =
+                    mapping[s_iter].grp_ip.sin_port;
+                resp.idv.cl_init.group_ips[cl_iter].s_addr     =
+                    mapping[s_iter].grp_ip.sin_addr.s_addr;
+                resp.idv.cl_init.group_ips[cl_iter].group_name =
+                    (char*) malloc(sizeof(char) * strlen(group_name) + 1);
+                strcpy(resp.idv.cl_init.group_ips[cl_iter].group_name, group_name);
+                break;
+            }
+        }
+    }
+    
+    write_record(sockfd, &resp);
+    return 0;
+}
+
+int handle_echo_req(const int sockfd, const comm_struct_t const req){
+    comm_struct_t resp;
+    
+    resp.id = echo_response;
+    resp.idv.echo_resp.str = (char *) malloc (sizeof(char) * echo_resp_len);
+    strcpy(resp.idv.echo_req.str, "EchoResponse.");
+    write_record(sockfd, &resp);
+    return 0;
+}
+
+uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping)
 {
     FILE *fp = NULL, *cmd_line = NULL;
     char ip_str[16], cmd[256];
@@ -33,13 +106,13 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
     for(i = 0; i < count; i++){
         fscanf(fp, "%s %s", (*mapping)[i].grname, ip_str);
         inet_pton(AF_INET, ip_str, &((*mapping)[i].grp_ip));
-        ADD_GROUP_IN_LL(server_info,(*mapping)[i].grname,(*mapping)[i].grp_ip);
+        ADD_GROUP_IN_LL(&server_info,(*mapping)[i].grname,(*mapping)[i].grp_ip);
     }
     fclose(fp);
   return count;
 }
 
-void process_join_request(server_information_t *server_info, int infd, char *grp_name, grname_ip_mapping_t *mapping, int num_groups)
+void process_join_request(int infd, char *grp_name, grname_ip_mapping_t *mapping, int num_groups)
 {
   if (join_group(infd, grp_name, mapping, num_groups))
   {
@@ -52,7 +125,7 @@ void process_join_request(server_information_t *server_info, int infd, char *grp
   }
 }
 
-decode_join_request(char *buf, int msglen, int infd, grname_ip_mapping_t *mapping, int num_groups, server_information_t **server_info)
+decode_join_request(char *buf, int msglen, int infd, grname_ip_mapping_t *mapping, int num_groups)
 {
   char *ptr=buf;
   int len_join_req = strlen("JOIN:");
@@ -63,7 +136,7 @@ decode_join_request(char *buf, int msglen, int infd, grname_ip_mapping_t *mappin
 
     PRINT("Received request from client to join group\n");
     PRINT(ptr);
-    process_join_request(*server_info, infd, ptr, mapping, num_groups);
+    process_join_request(infd, ptr, mapping, num_groups);
 
     ptr = ptr + 3;
     i += len_join_req + 3;
@@ -104,9 +177,9 @@ void accept_connections(int sfd,int efd,struct epoll_event *event)
 }
 
 
-void display_group_info(server_information_t **server_info)
+void display_group_info()
 {
-  display_mcast_group_node(server_info);
+  display_mcast_group_node(&server_info);
 }
 
 
@@ -126,12 +199,10 @@ int main(int argc, char * argv[])
     int group_msg[1000] = {0};
     uint32_t num_groups;
    
-    server_information_t *server_info = NULL;
-    grname_ip_mapping_t * mapping = NULL;
 
     allocate_server_info(&server_info);
 
-    num_groups = initialize_mapping("./ip_mappings.txt", &mapping, &server_info);
+    num_groups = initialize_mapping("./ip_mappings.txt", &mapping);
     
     if (argc != 3)
     {
@@ -318,7 +389,10 @@ int main(int argc, char * argv[])
                 ssize_t count;
                 char buf[512];
                 char buf_copy[512];
-
+                comm_struct_t req;
+                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req);
+                
+#if 0
                 count = read(events[index].data.fd, buf, sizeof(buf));
                 if (count == -1)
                 {
@@ -361,6 +435,7 @@ int main(int argc, char * argv[])
                    decode_join_request(buf, count, infd, mapping, num_groups, &server_info);
                 }
              }
+#endif
         }
       }
     }    

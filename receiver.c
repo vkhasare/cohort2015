@@ -149,19 +149,19 @@ int multicast_join(char * my_ip_address, struct sockaddr_in group_ip)
         exit(0);
     }
 
-/* Read from the socket. 
-datalen = sizeof(databuf);
-if(read(sd, databuf, datalen) < 0)
-{
-perror("Reading datagram message error");
-close(sd);
-exit(1);
-}
-else
-{
-printf("Reading datagram message...OK.\n");
-printf("The message from multicast server is: \"%s\"\n", databuf);
-}*/
+    /* Read from the socket. 
+       datalen = sizeof(databuf);
+       if(read(sd, databuf, datalen) < 0)
+       {
+       perror("Reading datagram message error");
+       close(sd);
+       exit(1);
+       }
+       else
+       {
+       printf("Reading datagram message...OK.\n");
+       printf("The message from multicast server is: \"%s\"\n", databuf);
+       }*/
 
-return sd;
+    return sd;
 }

@@ -11,7 +11,7 @@ GLOGDIRS=glog-master
 BUILD=buildgflags
 MYLIBRARIES=glog
 CPP=gcc
-CPPFLAGS=
+CPPFLAGS=-g
 AR=ar
 AR_OPT=cvq
 #CPPFLAGS=-g -W -O2
@@ -72,6 +72,7 @@ $(COMM_OBJ) : $(COMM_SOURCE)
 
 $(COMM_OUT) : $(COMM_OBJ)
 	$(AR) $(AR_OPT) $(COMM_OUT) $(COMM_OBJ)
+	rm -f $(COMM_OBJ)
 
 clean:
 	rm -f $(SERVER)
