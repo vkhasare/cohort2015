@@ -56,8 +56,8 @@ typedef struct common_struct{
 }comm_struct_t;
 
 void print_structs(comm_struct_t* m);
-void populate_my_struct(my_struct_t* m, int some_rand);
-bool process_my_struct(my_struct_t* m, XDR* xdrs);
+void populate_my_struct(my_struct_t*, int);
+bool process_my_struct(my_struct_t*, XDR*);
 int rdata ();
 int wdata ();
 #endif

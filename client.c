@@ -300,10 +300,11 @@ void client_stdin_data(client_information_t **client_info, int fd)
        else
        {
            comm_struct_t m;
+           char * gr_name_ptr = read_buffer+11;
            m.id = client_req;
            m.idv.cl_req.num_groups = 0; 
            //join_msg(cfd,read_buffer+11);
-           populate_client_req(&m, read_buffer+11);
+           populate_client_req(&m, &gr_name_ptr, 1);
            write_record(cfd, &m);
        }
     }
