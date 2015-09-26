@@ -21,14 +21,14 @@ grname_ip_mapping_t * mapping = NULL;
 server_information_t *server_info = NULL;
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
-int handle_client_req(const int sockfd, const comm_struct_t const req);
+int handle_join_req(const int sockfd, const comm_struct_t const req);
 int handle_echo_req(const int sockfd, const comm_struct_t const req);
 
 typedef int (*fptr)(int, comm_struct_t);
 
 fptr handle_wire_event[]={
     NULL,               //UNUSED
-    handle_client_req,  //client_req
+    handle_join_req,  //client_req
     NULL,               //client_init
     NULL,               //server_task
     NULL,               //client_answer
@@ -37,17 +37,19 @@ fptr handle_wire_event[]={
     NULL                //echo_response
 };
 
-int handle_client_req(const int sockfd, const comm_struct_t const req){
+int handle_join_req(const int sockfd, const comm_struct_t const req){
     comm_struct_t resp;
     uint8_t cl_iter, s_iter;
     char *group_name;
+
+    join_req_t joinReq = req.idv.join_req;   
+ 
+    resp.id = join_response;
+    resp.idv.join_rsp.num_groups = joinReq.num_groups; 
+    resp.idv.join_rsp.group_ips = (l_saddr_in_t *) malloc (sizeof(l_saddr_in_t) * joinReq.num_groups);
     
-    resp.id = client_init;
-    resp.idv.cl_init.num_groups = req.idv.cl_req.num_groups; 
-    resp.idv.cl_init.group_ips = (l_saddr_in_t *) malloc (sizeof(l_saddr_in_t) * req.idv.cl_req.num_groups);
-    
-    for(cl_iter = 0; cl_iter < req.idv.cl_req.num_groups; cl_iter++){
-        group_name = req.idv.cl_req.group_ids[cl_iter].str;
+    for(cl_iter = 0; cl_iter < joinReq.num_groups; cl_iter++){
+        group_name = joinReq.group_ids[cl_iter].str;
 
         for(s_iter = 0; s_iter < max_groups; s_iter++ ){
             if(strcmp(group_name, mapping[s_iter].grname) == 0){
@@ -60,15 +62,15 @@ int handle_client_req(const int sockfd, const comm_struct_t const req){
                 UPDATE_GRP_CLIENT_LL(&server_info, group_name, (struct sockaddr*) &addr, sockfd);
                 
                 //add ip addr as response and break to search for next group
-                resp.idv.cl_init.group_ips[cl_iter].sin_family =
+                resp.idv.join_rsp.group_ips[cl_iter].sin_family =
                     mapping[s_iter].grp_ip.sin_family;
-                resp.idv.cl_init.group_ips[cl_iter].sin_port   =
+                resp.idv.join_rsp.group_ips[cl_iter].sin_port   =
                     mapping[s_iter].grp_ip.sin_port;
-                resp.idv.cl_init.group_ips[cl_iter].s_addr     =
+                resp.idv.join_rsp.group_ips[cl_iter].s_addr     =
                     mapping[s_iter].grp_ip.sin_addr.s_addr;
-                resp.idv.cl_init.group_ips[cl_iter].group_name =
+                resp.idv.join_rsp.group_ips[cl_iter].group_name =
                     (char*) malloc(sizeof(char) * strlen(group_name) + 1);
-                strcpy(resp.idv.cl_init.group_ips[cl_iter].group_name, group_name);
+                strcpy(resp.idv.join_rsp.group_ips[cl_iter].group_name, group_name);
                 break;
             }
         }

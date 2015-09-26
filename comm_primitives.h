@@ -6,13 +6,13 @@
 #include <unistd.h>
 
 typedef enum struct_id{
-    client_req    = 1,
-    client_init   = 2,
-    server_task   = 3,
-    client_answer = 4,
-    client_leave  = 5,
-    echo_req      = 6,
-    echo_response = 7
+    join_request    = 1,
+    join_response   = 2,
+    server_task     = 3,
+    client_answer   = 4,
+    client_leave    = 5,
+    echo_req        = 6,
+    echo_response   = 7
 }e_struct_id_t; 
 
 typedef struct string{
@@ -26,16 +26,16 @@ typedef struct local_sockaddr_in{
     char *group_name;
 }l_saddr_in_t;
 
-typedef struct client_req{
+typedef struct join_request{
     unsigned int num_groups;
     string_t* group_ids; 
-}client_req_t;
+}join_req_t;
 
-typedef struct client_init{
+typedef struct join_response{
     unsigned int num_groups;
     l_saddr_in_t* group_ips; 
 //  int* group_ips; 
-}client_init_t;
+}join_rsp_t;
 
 typedef struct my_struct{
     int a;
@@ -48,8 +48,8 @@ typedef struct my_struct{
 typedef struct common_struct{
     e_struct_id_t id;
     union{
-        client_req_t cl_req;
-        client_init_t cl_init;
+        join_req_t join_req;
+        join_rsp_t join_rsp;
         string_t echo_req;
         string_t echo_resp;
     }idv;

@@ -16,8 +16,8 @@ client_information_t *client_info = NULL;
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 
-int handle_client_init(const int, const comm_struct_t, ...);
-void handle_echo_req(const int);
+int handle_join_response(const int, const comm_struct_t, ...);
+void send_echo_req(const int);
 int handle_echo_response(const int, const comm_struct_t, ...);
 
 typedef int (*fptr)(int, comm_struct_t, ...);
@@ -25,25 +25,27 @@ typedef int (*fptr)(int, comm_struct_t, ...);
 fptr handle_wire_event[]={
     NULL,               //UNUSED
     NULL,               //client_req
-    handle_client_init, //client_init
+    handle_join_response, //client_init
     NULL,               //server_task
     NULL,               //client_answer
     NULL,               //client_leave
-    handle_echo_req,    //echo_req
+    NULL,    //echo_req
     handle_echo_response//echo_response
 };
 
-int handle_client_init(const int sockfd, const comm_struct_t const resp, ...){
+int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
     struct sockaddr_in group_ip;
     int iter; char* group_name; 
     char display[30];
-    
-    for(iter = 0; iter < resp.idv.cl_init.num_groups; iter++){
-        group_ip.sin_family = resp.idv.cl_init.group_ips[iter].sin_family;
-        group_ip.sin_port = resp.idv.cl_init.group_ips[iter].sin_port;
-        group_ip.sin_addr.s_addr = resp.idv.cl_init.group_ips[iter].s_addr;
+
+    join_rsp_t  joinResponse = resp.idv.join_rsp; 
+ 
+    for(iter = 0; iter < joinResponse.num_groups; iter++){
+        group_ip.sin_family = joinResponse.group_ips[iter].sin_family;
+        group_ip.sin_port = joinResponse.group_ips[iter].sin_port;
+        group_ip.sin_addr.s_addr = joinResponse.group_ips[iter].s_addr;
         
-        group_name = resp.idv.cl_init.group_ips[iter].group_name;
+        group_name = joinResponse.group_ips[iter].group_name;
         
         int sockfd = multicast_join(lo,group_ip); 
         
@@ -77,7 +79,7 @@ void sendPeriodicMsg(int signal)
 
     alarm(TIMEOUT_SECS);
 }
-bool handle_join_response(client_information_t** client_info, char *grp_name, char *grp_ip_address)
+bool old_handle_join_response(client_information_t** client_info, char *grp_name, char *grp_ip_address)
 {
    char display[30];
    struct sockaddr_in group_ip;
@@ -119,11 +121,11 @@ void sendPeriodicMsg_XDR(int signal)
     alarm(TIMEOUT_SECS);
 }
 
-void handle_echo_req(int signal){
+void send_echo_req(int signal){
     int i=active_group.count;
     char msg[] =" I am Alive";
     comm_struct_t resp;
-   
+ 
     resp.id = echo_req;
     resp.idv.echo_req.str = (char *) malloc (sizeof(char) * echo_req_len);
     resp.idv.echo_req.str[0]='\0';
@@ -170,7 +172,7 @@ void startKeepAlive(char * gname)
       if(active_group.count == 1)
       {
         struct sigaction myaction;
-        myaction.sa_handler = handle_echo_req;
+        myaction.sa_handler = send_echo_req;
         sigfillset(&myaction.sa_mask);
         myaction.sa_flags = 0;
 
@@ -230,7 +232,7 @@ void decode_join_response(char *buf,  client_information_t **client_info)
       //PRINT(grp_name);
       //PRINT(grp_ip);
 
-      handle_join_response(client_info, grp_name, grp_ip);
+      old_handle_join_response(client_info, grp_name, grp_ip);
 
 
 }
@@ -299,13 +301,17 @@ void client_stdin_data(client_information_t **client_info, int fd)
        }
        else
        {
-           comm_struct_t m;
+           comm_struct_t msg;
+           join_req_t joinReq;
+
            char * gr_name_ptr = read_buffer+11;
-           m.id = client_req;
-           m.idv.cl_req.num_groups = 0; 
+
+           joinReq = msg.idv.join_req;
+           msg.id = join_request;
+           joinReq.num_groups = 0; 
            //join_msg(cfd,read_buffer+11);
-           populate_client_req(&m, &gr_name_ptr, 1);
-           write_record(cfd, &m);
+           populate_join_req(&msg, &gr_name_ptr, 1);
+           write_record(cfd, &msg);
        }
     }
     else if (0 == strcmp(read_buffer,"cls\0"))
@@ -411,16 +417,19 @@ int main(int argc, char * argv[])
    
     char * gname=strtok(group_name,",");
     char * gr_list[max_groups];
+
     comm_struct_t m; int iter = 0;
-    m.id = client_req;
-    m.idv.cl_req.num_groups = 0; 
+    join_req_t joinReq;
+
+    m.id = join_request;
+    joinReq.num_groups = 0; 
     while(gname!=NULL){ 
 //    join_msg(cfd,gname);
       gr_list[iter++] = gname;
       gname=strtok(NULL,",");
       //PRINT("Sending join message");
     }
-    populate_client_req(&m, gr_list, iter);
+    populate_join_req(&m, gr_list, iter);
     write_record(cfd, &m);
 
     

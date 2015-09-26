@@ -63,7 +63,7 @@ void print_echo_msg(char* echo_str){
     return;
 }
 
-void print_client_req(client_req_t* m){
+void print_join_req(join_req_t* m){
     char buf[max_groups * max_gname_len * 8 + 14];
     int iter;
     sprintf(buf,"\nNumber of groups=%d", 
@@ -76,7 +76,7 @@ void print_client_req(client_req_t* m){
     return;
 }
 
-void print_client_init(client_init_t* m){
+void print_join_rsp(join_rsp_t* m){
     char buf[max_groups * 15 * 8 + 14];
     int iter;
     sprintf(buf,"\nNumber of groups=%d", 
@@ -99,17 +99,17 @@ void populate_my_struct(my_struct_t* m, int some_rand){
     m->c[2]=100;
 }
 
-void populate_client_req(comm_struct_t* m, char** grnames, int num_groups){
+void populate_join_req(comm_struct_t* m, char** grnames, int num_groups){
     int iter;
-    m->idv.cl_req.num_groups = num_groups; 
-    m->idv.cl_req.group_ids = (string_t*) malloc (sizeof(string_t) * num_groups);
+    m->idv.join_req.num_groups = num_groups; 
+    m->idv.join_req.group_ids = (string_t*) malloc (sizeof(string_t) * num_groups);
 
     for(iter = 0; iter < num_groups; iter++){
-#define MALLOC_STRING(x)    m->idv.cl_req.group_ids[(x)].str = (char*) malloc(sizeof(char) * max_gname_len)
+#define MALLOC_STRING(x)    m->idv.join_req.group_ids[(x)].str = (char*) malloc(sizeof(char) * max_gname_len)
         MALLOC_STRING(iter);
 #undef MALLOC_STRING
 
-#define SUBS_TXT(x) (m->idv.cl_req.group_ids[(x)].str)
+#define SUBS_TXT(x) (m->idv.join_req.group_ids[(x)].str)
         strcpy(SUBS_TXT(iter),grnames[iter]);
 #undef SUBS_TXT     
     }
@@ -117,8 +117,8 @@ void populate_client_req(comm_struct_t* m, char** grnames, int num_groups){
 }
 
 void populate_client_init(comm_struct_t* m){
-    m->id = client_init;
-    m->idv.cl_init.num_groups = 4; /*
+    m->id = join_response;
+    m->idv.join_rsp.num_groups = 4; /*
     m->idv.cl_init.group_ips = (int *) malloc (sizeof(int) *
                                                m->idv.cl_init.num_groups);
     m->idv.cl_init.group_ips[0]=7945801;
@@ -129,11 +129,11 @@ void populate_client_init(comm_struct_t* m){
 
 void print_structs(comm_struct_t* m){
     switch(m->id){
-        case client_req: 
-            print_client_req(&m->idv.cl_req);
+        case join_request: 
+            print_join_req(&m->idv.join_req);
             break;
-        case client_init: 
-            print_client_init(&m->idv.cl_init);
+        case join_response: 
+            print_join_rsp(&m->idv.join_rsp);
             break;
         case echo_req:
             print_echo_msg(m->idv.echo_req.str);
@@ -282,7 +282,7 @@ bool xdr_gname_string(XDR* xdrs, string_t* m){
     return (xdr_string(xdrs, &(m->str), max_gname_len));
 }
 
-bool process_client_req(XDR* xdrs, client_req_t* m){
+bool process_join_req(XDR* xdrs, join_req_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->group_ids = NULL;
     }
@@ -310,7 +310,7 @@ bool xdr_l_saddr_in(XDR* xdrs, l_saddr_in_t* m){
     return short_res && ushort_res && ulong_res && string_res;
 }
 
-bool process_client_init(XDR* xdrs, client_init_t* m){
+bool process_join_resp(XDR* xdrs, join_rsp_t* m){
 /* return (xdr_u_int(xdrs, &(m->num_groups)) &&
            xdr_array(xdrs, (char**) &(m->group_ips), &(m->num_groups), max_groups,
                      sizeof(char),(xdrproc_t )xdr_int));*/
@@ -341,8 +341,8 @@ bool process_client_leave(my_struct_t* m, XDR* xdrs){
 
 bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
     struct xdr_discrim comm_discrim[] = {
-        {client_req,    (xdrproc_t)process_client_req},
-        {client_init,   (xdrproc_t)process_client_init},
+        {join_request,    (xdrproc_t)process_join_req},
+        {join_response,   (xdrproc_t)process_join_resp},
 //      {server_task, NULL},
 //      {client_answer, NULL},
 //      {client_leave, NULL},
