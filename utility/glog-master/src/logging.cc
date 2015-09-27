@@ -1071,8 +1071,8 @@ void LogFileObject::Write(bool force_flush,
                        << setw(2) << tm_time.tm_sec << '\n'
                        << "Running on machine: "
                        << LogDestination::hostname() << '\n'
-                       << "Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu "
-                       << "threadid file:line] msg" << '\n';
+                       << "Log line format: [IWEF] mmdd hh:mm:ss "
+                       << "file:line] msg" << '\n';
     const string& file_header_string = file_header_stream.str();
 
     const int header_len = file_header_string.size();
@@ -1232,17 +1232,14 @@ void LogMessage::Init(const char* file,
   //    (log level, GMT month, date, time, thread_id, file basename, line)
   // We exclude the thread_id for the default thread.
   if (FLAGS_log_prefix && (line != kNoLogPrefix)) {
-    stream() << LogSeverityNames[severity][0]
+    stream() << LogSeverityNames[severity]
+             << ' '
              << setw(2) << 1+data_->tm_time_.tm_mon
              << setw(2) << data_->tm_time_.tm_mday
              << ' '
              << setw(2) << data_->tm_time_.tm_hour  << ':'
              << setw(2) << data_->tm_time_.tm_min   << ':'
-             << setw(2) << data_->tm_time_.tm_sec   << "."
-             << setw(6) << usecs
-             << ' '
-             << setfill(' ') << setw(5)
-             << static_cast<unsigned int>(GetTID()) << setfill('0')
+             << setw(2) << data_->tm_time_.tm_sec   
              << ' '
              << data_->basename_ << ':' << data_->line_ << "] ";
   }
@@ -1627,15 +1624,15 @@ string LogSink::ToString(LogSeverity severity, const char* file, int line,
   // requires changing the signature for both this method and
   // LogSink::send().  This change needs to be done in a separate CL
   // so subclasses of LogSink can be updated at the same time.
-  int usecs = 0;
 
-  stream << LogSeverityNames[severity][0]
+  stream << LogSeverityNames[severity]
+         << ' '
          << setw(2) << 1+tm_time->tm_mon
          << setw(2) << tm_time->tm_mday
          << ' '
          << setw(2) << tm_time->tm_hour << ':'
          << setw(2) << tm_time->tm_min << ':'
-         << setw(2) << tm_time->tm_sec << '.'
+         << setw(2) << tm_time->tm_sec
          << ' '
          << file << ':' << line << "] ";
 
