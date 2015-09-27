@@ -79,6 +79,10 @@ void display_mcast_client_node(client_information_t **client_info)
   client_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->client_list->client_node),
                                         mcast_client_node_t,
                                         list_element);
+
+  if (client_node == NULL)
+    SIMPLE_PRINT("\t  Client has 0 groups.\n");
+
   while (client_node)
   {
      inet_ntop(AF_INET, &(client_node->group_addr), groupIP, INET_ADDRSTRLEN);
@@ -113,6 +117,30 @@ bool is_group_present_in_client_info(client_information_t **client_info, char *g
   }
 
   return 0;
+}
+
+bool remove_group_from_client(client_information_t **client_info, char *grp_name)
+{
+  mcast_client_node_t *client_node = NULL;
+
+  client_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->client_list->client_node),
+                                        mcast_client_node_t,
+                                        list_element);
+  while (client_node)
+  {
+
+     if (strcmp(client_node->group_name,grp_name) == 0)
+     {
+        SN_LIST_MEMBER_REMOVE(&((*client_info)->client_list->client_node), client_node, list_element);      
+        return TRUE;
+     }
+
+     client_node =     SN_LIST_MEMBER_NEXT(client_node,
+                                          mcast_client_node_t,
+                                          list_element);
+  }
+
+  return FALSE;
 }
 
 void ADD_CLIENT_IN_LL(client_information_t **client_info, char *group_name, struct sockaddr_in group_addrIP, int fd_id)

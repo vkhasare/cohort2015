@@ -1,5 +1,30 @@
 #include "common.h"
 
+char* enum_to_str(msg_cause cause)
+{
+   switch(cause)
+   {
+      case ACCEPTED:
+                    return "ACCEPTED";
+      case REJECTED:
+                    return "REJECTED";
+      default:
+                    return "UNKNOWN";
+   }
+}
+
+
+msg_cause str_to_enum(char *str)
+{
+    if (!strcmp(str,"ACCEPTED"))
+        return ACCEPTED;
+    else if (!strcmp(str,"REJECTED"))
+        return REJECTED;
+    else
+        return UNKNOWN;
+
+}
+
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
 {
   uint32_t i;

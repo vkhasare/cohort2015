@@ -43,6 +43,15 @@ extern const unsigned int max_gname_len; //includes nul termination
    write(STDOUT_FILENO,str,strlen(str));   \
  } while(0)
 
+#define TRUE  1
+#define FALSE 0
+
+typedef enum {
+ ACCEPTED,
+ REJECTED,
+ UNKNOWN
+} msg_cause;
+
 typedef struct grname_ip_mapping{
     char grname[10];
     struct sockaddr_in grp_ip;

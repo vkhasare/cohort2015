@@ -5,14 +5,25 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+#define MALLOC_IE(count)                            \
+ ({                                                 \
+   (string_t*) malloc (sizeof(string_t) * count);   \
+ })
+
+#define MALLOC_STR                                  \
+ ({                                                 \
+   (char*) malloc(sizeof(char) * max_gname_len);    \
+ })
+
 typedef enum struct_id{
     join_request    = 1,
     join_response   = 2,
     server_task     = 3,
     client_answer   = 4,
-    client_leave    = 5,
-    echo_req        = 6,
-    echo_response   = 7
+    echo_req        = 5,
+    echo_response   = 6,
+    leave_request   = 7,
+    leave_response  = 8
 }e_struct_id_t; 
 
 typedef struct string{
@@ -37,6 +48,18 @@ typedef struct join_response{
 //  int* group_ips; 
 }join_rsp_t;
 
+typedef struct leave_request{
+    unsigned int num_groups;
+    unsigned int client_id;
+    string_t* group_ids;
+}leave_req_t;
+
+typedef struct leave_response{
+    unsigned int num_groups;
+    string_t* group_ids;
+    string_t* cause;
+}leave_rsp_t;
+
 typedef struct my_struct{
     int a;
     float b;
@@ -52,6 +75,8 @@ typedef struct common_struct{
         join_rsp_t join_rsp;
         string_t echo_req;
         string_t echo_resp;
+        leave_req_t leave_req;
+        leave_rsp_t leave_rsp;
     }idv;
 }comm_struct_t;
 

@@ -273,6 +273,46 @@ void display_mcast_group_node_by_name(server_information_t **server_info, char *
 }
 
 
+bool remove_client_from_mcast_group_node(server_information_t **server_info, char *grp_name, int target_fd)
+{
+  char buf[100];
+  char groupIP[INET_ADDRSTRLEN];
+
+  mcast_group_node_t *group_node = get_group_node_by_name(server_info,grp_name);
+
+   if (group_node)
+   {
+      if (group_node->client_info)
+      {
+           mcast_client_node_t *client_node = NULL, *temp_node = NULL;
+
+           client_node = SN_LIST_MEMBER_HEAD(&(group_node->client_info->client_node),
+                                              mcast_client_node_t,
+                                              list_element);
+
+            while(client_node)
+            {
+               if (client_node->client_fd == target_fd)
+               {
+                    SN_LIST_MEMBER_REMOVE(&(group_node->client_info->client_node), client_node, list_element);
+                    group_node->number_of_clients--;
+                    return TRUE;
+               }
+                 client_node = SN_LIST_MEMBER_NEXT(client_node,
+                                                  mcast_client_node_t,
+                                                  list_element);
+            }
+      }
+   }
+   else
+   {
+     PRINT("Error: Couldnot find group.");
+   }
+
+  return FALSE;
+}
+
+
 void ADD_GROUP_IN_LL(server_information_t **server_info, char *group_name, struct sockaddr_in group_addrIP)
 {
   mcast_group_node_t *group_node = NULL;

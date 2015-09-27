@@ -19,33 +19,59 @@ extern unsigned int echo_resp_len; //includes nul termination
 int handle_join_response(const int, const comm_struct_t, ...);
 void send_echo_req(const int);
 int handle_echo_response(const int, const comm_struct_t, ...);
+int handle_leave_response(const int, const comm_struct_t, ...);
 
 typedef int (*fptr)(int, comm_struct_t, ...);
 
 fptr handle_wire_event[]={
-    NULL,               //UNUSED
-    NULL,               //client_req
-    handle_join_response, //client_init
-    NULL,               //server_task
-    NULL,               //client_answer
-    NULL,               //client_leave
-    NULL,    //echo_req
-    handle_echo_response//echo_response
+    NULL,                          //UNUSED
+    NULL,                          //join_req
+    handle_join_response,          //join_response
+    NULL,                          //server_task
+    NULL,                          //client_answer
+    NULL,                          //echo_req
+    handle_echo_response,          //echo_response
+    NULL,                          //group_leave_req
+    handle_leave_response          //group_leave_response
 };
+
+int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
+{
+        uint8_t cl_iter;
+        char *cause, *group_name;
+        char buf[50];
+
+        leave_rsp_t leave_rsp = resp.idv.leave_rsp;
+
+        for(cl_iter = 0; cl_iter < leave_rsp.num_groups; cl_iter++){
+            group_name = leave_rsp.group_ids[cl_iter].str;
+            cause = leave_rsp.cause[cl_iter].str;
+
+            msg_cause enum_cause = str_to_enum(cause);
+
+            if (enum_cause == ACCEPTED)
+            {
+              remove_group_from_client(&client_info, group_name);
+            }
+
+            sprintf(buf,"[Leave_Response: GRP - %s] Cause : %s.", group_name, cause);
+            PRINT(buf);
+        }
+}
 
 int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
     struct sockaddr_in group_ip;
     int iter; char* group_name; 
     char display[30];
 
-    join_rsp_t  joinResponse = resp.idv.join_rsp; 
+    join_rsp_t join_response = resp.idv.join_rsp; 
  
-    for(iter = 0; iter < joinResponse.num_groups; iter++){
-        group_ip.sin_family = joinResponse.group_ips[iter].sin_family;
-        group_ip.sin_port = joinResponse.group_ips[iter].sin_port;
-        group_ip.sin_addr.s_addr = joinResponse.group_ips[iter].s_addr;
+    for(iter = 0; iter < join_response.num_groups; iter++){
+        group_ip.sin_family = join_response.group_ips[iter].sin_family;
+        group_ip.sin_port = join_response.group_ips[iter].sin_port;
+        group_ip.sin_addr.s_addr = join_response.group_ips[iter].s_addr;
         
-        group_name = joinResponse.group_ips[iter].group_name;
+        group_name = join_response.group_ips[iter].group_name;
         
         int sockfd = multicast_join(lo,group_ip); 
         
@@ -210,12 +236,13 @@ void display_client_clis()
    PRINT("enable keepalive group <group_name>          --  Sends periodic messages to Server");
    PRINT("disable keepalive                            --  Stops periodic messages to Server");
    PRINT("join group <name>                            --  Joins a new group");
+   PRINT("leave group <name>                           --  Leaves a group");
    PRINT("cls                                          --  Clears the screen");
 }
 
-void display_client_groups(client_information_t **client_info)
+void display_client_groups()
 {
-  display_mcast_client_node(client_info);
+  display_mcast_client_node(&client_info);
 }
 
 
@@ -239,7 +266,7 @@ void decode_join_response(char *buf,  client_information_t **client_info)
 
 /* Function for handling received data on Client Socket */
 
-void client_socket_data(client_information_t **client_info, int fd)
+void client_socket_data(int fd)
 {
     char buf[512];
     int read_count;
@@ -252,7 +279,7 @@ void client_socket_data(client_information_t **client_info, int fd)
        int slen = strlen(buf_copy);
        if(strncmp(buf_copy,"JOIN RESPONSE:",14 ) == 0)
        {
-          decode_join_response(buf_copy,  client_info);
+          decode_join_response(buf_copy,  &client_info);
        }
        else
        {
@@ -266,10 +293,11 @@ void client_socket_data(client_information_t **client_info, int fd)
 
 /* Function for handling input from STDIN */
 
-void client_stdin_data(client_information_t **client_info, int fd)
+void client_stdin_data(int fd)
 {
     char read_buffer[100];
     int cnt=0;
+    char buf[50];
 
     cnt=read(fd, read_buffer, 99);
     read_buffer[cnt-1] = '\0';
@@ -280,7 +308,7 @@ void client_stdin_data(client_information_t **client_info, int fd)
     }
     else if (strncmp(read_buffer,"show client groups",22) == 0)
     {
-       display_client_groups(client_info);
+       display_client_groups(&client_info);
     }
     else if (strncmp(read_buffer,"enable keepalive group ",23) == 0)
     {
@@ -293,9 +321,8 @@ void client_stdin_data(client_information_t **client_info, int fd)
     else if (strncmp(read_buffer,"join group ",11) == 0)
     {
        
-       if (IS_GROUP_IN_CLIENT_LL(client_info,read_buffer+11))
+       if (IS_GROUP_IN_CLIENT_LL(&client_info,read_buffer+11))
        {
-          char buf[100];
           sprintf(buf,"Error: Client is already member of group %s.",read_buffer+11);
           PRINT(buf);
        }
@@ -312,6 +339,31 @@ void client_stdin_data(client_information_t **client_info, int fd)
            //join_msg(cfd,read_buffer+11);
            populate_join_req(&msg, &gr_name_ptr, 1);
            write_record(cfd, &msg);
+       }
+    }
+    else if (strncmp(read_buffer,"leave group ",12) == 0)
+    {
+
+       if (IS_GROUP_IN_CLIENT_LL(&client_info, read_buffer+12))
+       {
+           comm_struct_t msg;
+           char * gr_name_ptr = read_buffer+12;
+
+           msg.id = leave_request;
+           populate_leave_req(&msg, &gr_name_ptr, 1);
+
+           /*TODO - hardcoded for now.. needs to be done when client has its unique client id.*/
+           msg.idv.leave_req.client_id = 5;
+           write_record(cfd, &msg);
+
+           sprintf(buf,"[Leave_Request: GRP - %s] Leave Group Request sent to Server.", gr_name_ptr);
+           PRINT(buf);
+       }
+       else
+       {
+          char buf[100];
+          sprintf(buf,"Error: Client is not member of group %s.", read_buffer+12);
+          PRINT(buf);
        }
     }
     else if (0 == strcmp(read_buffer,"cls\0"))
@@ -448,7 +500,7 @@ int main(int argc, char * argv[])
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd)
             {
-                client_stdin_data(&client_info, events[index].data.fd);
+                client_stdin_data(events[index].data.fd);
 
                 PRINT_PROMPT("[client] ");
             }

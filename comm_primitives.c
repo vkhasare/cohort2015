@@ -22,7 +22,7 @@ bool process_client_leave();
 #endif
 
 const unsigned int max_groups = 1000;
-const unsigned int max_gname_len = 5; //includes nul termination
+const unsigned int max_gname_len = 25; //includes nul termination
 const unsigned int echo_req_len = 256; //includes nul termination
 const unsigned int echo_resp_len = 21; //includes nul termination
 
@@ -102,10 +102,10 @@ void populate_my_struct(my_struct_t* m, int some_rand){
 void populate_join_req(comm_struct_t* m, char** grnames, int num_groups){
     int iter;
     m->idv.join_req.num_groups = num_groups; 
-    m->idv.join_req.group_ids = (string_t*) malloc (sizeof(string_t) * num_groups);
-
+//    m->idv.join_req.group_ids = (string_t*) malloc (sizeof(string_t) * num_groups);
+    m->idv.join_req.group_ids = MALLOC_IE(num_groups);
     for(iter = 0; iter < num_groups; iter++){
-#define MALLOC_STRING(x)    m->idv.join_req.group_ids[(x)].str = (char*) malloc(sizeof(char) * max_gname_len)
+#define MALLOC_STRING(x)    m->idv.join_req.group_ids[(x)].str = MALLOC_STR
         MALLOC_STRING(iter);
 #undef MALLOC_STRING
 
@@ -114,6 +114,46 @@ void populate_join_req(comm_struct_t* m, char** grnames, int num_groups){
 #undef SUBS_TXT     
     }
     
+}
+
+void populate_leave_req(comm_struct_t* m, char** grnames, int num_groups){
+    int iter;
+    m->idv.leave_req.num_groups = num_groups;
+    m->idv.leave_req.group_ids = MALLOC_IE(num_groups);
+
+    for(iter = 0; iter < num_groups; iter++){
+#define MALLOC_STRING(x)    m->idv.leave_req.group_ids[(x)].str = MALLOC_STR
+        MALLOC_STRING(iter);
+#undef MALLOC_STRING
+
+#define SUBS_TXT(x) (m->idv.leave_req.group_ids[(x)].str)
+        strcpy(SUBS_TXT(iter),grnames[iter]);
+#undef SUBS_TXT
+    }
+}
+
+void populate_leave_rsp(comm_struct_t* m, char** grnames, char **cause, int num_groups){
+    int iter;
+    m->idv.leave_rsp.num_groups = num_groups;
+    m->idv.leave_rsp.group_ids = MALLOC_IE(num_groups);
+
+    for(iter = 0; iter < num_groups; iter++){
+#define MALLOC_STRING(x)    \
+m->idv.leave_rsp.group_ids[(x)].str = MALLOC_STR;  \
+m->idv.leave_rsp.cause[(x)].str = MALLOC_STR
+
+        MALLOC_STRING(iter);
+
+#undef MALLOC_STRING
+
+#define SUBS_TXT(x) (m->idv.leave_rsp.group_ids[(x)].str)
+#define SUBS_CAUSE(x) (m->idv.leave_rsp.cause[(x)].str)
+
+
+        strcpy(SUBS_TXT(iter),grnames[iter]);
+        strcpy(SUBS_CAUSE(iter),cause[iter]);
+#undef SUBS_TXT
+    }
 }
 
 void populate_client_init(comm_struct_t* m){
@@ -142,7 +182,7 @@ void print_structs(comm_struct_t* m){
 //          print_echo_msg(m->idv.echo_resp.str);
             break;
         default:
-            PRINT("\nstructure unhandled as of now.");
+//            PRINT("\nstructure unhandled as of now.");
             break;
     }
     return;
@@ -294,6 +334,43 @@ bool process_join_req(XDR* xdrs, join_req_t* m){
 //          xdr_string(xdrs, &(m->group_ids), max_groups * max_gname_len));
 }
 
+bool process_leave_req(XDR* xdrs, leave_req_t* m){
+    if(xdrs->x_op == XDR_DECODE){
+        m->group_ids = NULL;
+    }
+
+    return (xdr_u_int(xdrs, &(m->num_groups)) &&
+            xdr_u_int(xdrs, &(m->client_id))  &&
+            xdr_array(xdrs, (char **)&(m->group_ids), &(m->num_groups), max_groups,
+                             (sizeof(string_t)),
+                             (xdrproc_t )xdr_gname_string));
+}
+
+
+bool process_leave_resp(XDR* xdrs, leave_rsp_t* m){
+    if(xdrs->x_op == XDR_DECODE){
+        m->group_ids = NULL;
+        m->cause = NULL;
+    }
+/*
+    return (xdr_u_int(xdrs, &(m->num_groups)) &&
+            xdr_array(xdrs, (char **)&(m->group_ids), &(m->num_groups), max_groups,
+                             (sizeof(string_t)),
+                             (xdrproc_t )xdr_gname_string) &&
+            xdr_array(xdrs, (char **)&(m->cause), &(m->num_groups), max_groups,
+                             (sizeof(string_t)),
+                             (xdrproc_t )xdr_gname_string));*/
+    int uint_res = xdr_u_int(xdrs, &(m->num_groups));
+    int gid_res = xdr_array(xdrs, (char **)&(m->group_ids), &(m->num_groups), max_groups,
+                                  (sizeof(string_t)),
+                                  (xdrproc_t )xdr_gname_string);
+    int c_res = xdr_array(xdrs, (char **)&(m->cause), &(m->num_groups), max_groups,
+                                (sizeof(string_t)),
+                                (xdrproc_t )xdr_gname_string);
+    return uint_res && gid_res && c_res;
+//  return uint_res && c_res;
+}
+
 bool xdr_l_saddr_in(XDR* xdrs, l_saddr_in_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->group_name = NULL;
@@ -348,6 +425,8 @@ bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
 //      {client_leave, NULL},
         {echo_req,      (xdrproc_t)xdr_echo_req},
         {echo_response, (xdrproc_t)xdr_echo_resp},
+        {leave_request, (xdrproc_t)process_leave_req},
+        {leave_response, (xdrproc_t)process_leave_resp},
         { __dontcare__, NULL }
     };
     int enum_res = xdr_enum(xdrs, (enum_t *)(&(m->id)));
