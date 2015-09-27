@@ -1636,9 +1636,6 @@ string LogSink::ToString(LogSeverity severity, const char* file, int line,
          << setw(2) << tm_time->tm_hour << ':'
          << setw(2) << tm_time->tm_min << ':'
          << setw(2) << tm_time->tm_sec << '.'
-         << setw(6) << usecs
-         << ' '
-         << setfill(' ') << setw(5) << GetTID() << setfill('0')
          << ' '
          << file << ':' << line << "] ";
 
