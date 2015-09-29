@@ -40,6 +40,7 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
         uint8_t cl_iter;
         char *cause, *group_name;
         char buf[50];
+        mcast_client_node_t *client_node = NULL;
 
         leave_rsp_t leave_rsp = resp.idv.leave_rsp;
 
@@ -49,13 +50,23 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 
             msg_cause enum_cause = str_to_enum(cause);
 
-            if (enum_cause == ACCEPTED)
-            {
-              remove_group_from_client(&client_info, group_name);
-            }
-
             sprintf(buf,"[Leave_Response: GRP - %s] Cause : %s.", group_name, cause);
             PRINT(buf);
+
+            if (enum_cause == ACCEPTED)
+            {
+              client_node = (mcast_client_node_t *) get_client_node_by_group_name(&client_info, group_name);
+
+              if (TRUE == multicast_leave(client_node->mcast_fd, client_node->group_addr)) {
+                  sprintf(buf, "Client has left multicast group %s.", group_name);
+              } else {
+                  sprintf(buf, "[Error] Error in leaving multicast group %s.", group_name);
+              }
+
+              PRINT(buf);
+              remove_group_from_client(&client_info, client_node);
+            }
+
         }
 }
 
@@ -63,6 +74,7 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
     struct sockaddr_in group_ip;
     int iter; char* group_name; 
     char display[30];
+    int m_port = 3333;
 
     join_rsp_t join_response = resp.idv.join_rsp; 
  
@@ -73,13 +85,25 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
         
         group_name = join_response.group_ips[iter].group_name;
         
-        int sockfd = multicast_join(lo,group_ip); 
+        int mcast_fd = multicast_join(lo,group_ip); 
         
         sprintf(display,"Listening to group %s\n", group_name);
         PRINT(display);
         
         if(sockfd > 0){ 
-            ADD_CLIENT_IN_LL(&client_info, group_name, group_ip, sockfd); 
+            mcast_client_node_t node;
+            memset(&node,0,sizeof(node));
+
+            strcpy(node.group_name,group_name);
+            node.group_addr = group_ip;
+            node.client_fd  = sockfd;
+            node.mcast_fd   = mcast_fd;
+            node.group_port = m_port;
+
+            if (ADD_CLIENT_IN_LL(&client_info, &node) == FALSE)
+            {
+              multicast_leave(mcast_fd, group_ip);
+            }
         }
     }
 }
@@ -105,6 +129,8 @@ void sendPeriodicMsg(int signal)
 
     alarm(TIMEOUT_SECS);
 }
+
+/*
 bool old_handle_join_response(client_information_t** client_info, char *grp_name, char *grp_ip_address)
 {
    char display[30];
@@ -122,6 +148,8 @@ bool old_handle_join_response(client_information_t** client_info, char *grp_name
        ADD_CLIENT_IN_LL(client_info,grp_name,group_ip,fd_id); 
    }
 }
+*/
+
 void sendPeriodicMsg_XDR(int signal)
 {
     my_struct_t m;
@@ -259,7 +287,7 @@ void decode_join_response(char *buf,  client_information_t **client_info)
       //PRINT(grp_name);
       //PRINT(grp_ip);
 
-      old_handle_join_response(client_info, grp_name, grp_ip);
+      //old_handle_join_response(client_info, grp_name, grp_ip);
 
 
 }

@@ -165,3 +165,28 @@ int multicast_join(char * my_ip_address, struct sockaddr_in group_ip)
 
     return sd;
 }
+
+bool multicast_leave(int mcast_fd, struct sockaddr_in group_ip)
+{
+  char display[100];
+  struct ip_mreq group;
+  char group_ip_address[INET_ADDRSTRLEN];
+
+  inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
+
+  group.imr_multiaddr.s_addr = inet_addr(group_ip_address);
+  group.imr_interface.s_addr = inet_addr("127.0.0.1");
+
+  if(setsockopt(mcast_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char *)&group, sizeof(group)) < 0)
+  {
+    sprintf(display,"Group Ip Address = %s & mcast_fd = %d",group_ip_address, mcast_fd);
+    PRINT(display);
+    perror("Leaving multicast group error");
+    exit(1);
+  }
+
+  close(mcast_fd);
+  return TRUE;
+}
+
+
