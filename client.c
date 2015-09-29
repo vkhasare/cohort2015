@@ -96,7 +96,6 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
 
             strcpy(node.group_name,group_name);
             node.group_addr = group_ip;
-            node.client_fd  = sockfd;
             node.mcast_fd   = mcast_fd;
             node.group_port = m_port;
 
@@ -457,6 +456,8 @@ int main(int argc, char * argv[])
         perror("\nError while making the socket non-blocking.");
         exit(0);
     }
+
+    client_info->client_fd = cfd;
 
     PRINT("..WELCOME TO CLIENT..");
     PRINT("\r   <Use \"show help\" to see all supported clis.>\n");

@@ -8,7 +8,6 @@ typedef struct {
 
 typedef struct {
   char group_name[10];
-  unsigned int client_fd;
   struct sockaddr_in group_addr;
   int group_port;
   unsigned int mcast_fd;
@@ -16,6 +15,7 @@ typedef struct {
 } mcast_client_node_t;
 
 typedef struct {
+  unsigned int client_fd;
   mcast_client_t *client_list;
 } client_information_t;
 
@@ -29,8 +29,6 @@ void allocate_mcast_client_list(client_information_t *client_info)
    client_info->client_list = mcast_client;
 }
 
-static int j = 0;
-
 void allocate_client_list(client_information_t **client_info)
 {
    mcast_client_t  *mcast_client = NULL;
@@ -42,6 +40,7 @@ void allocate_client_list(client_information_t **client_info)
 void allocate_client_info(client_information_t **client_info)
 {
    *client_info = (client_information_t *) malloc(sizeof(client_information_t));
+   (*client_info)->client_fd = -1;
 
    allocate_client_list(client_info);
 }
@@ -97,7 +96,7 @@ void display_mcast_client_node(client_information_t **client_info)
   {
      inet_ntop(AF_INET, &(client_node->group_addr), groupIP, INET_ADDRSTRLEN);
 
-     sprintf(buf,"\n\t%s \t\t %s \t\t %d \t\t %d \t\t %d",client_node->group_name, groupIP, client_node->group_port, client_node->mcast_fd, client_node->client_fd);
+     sprintf(buf,"\n\t%s \t\t %s \t\t %d \t\t %d \t\t %d",client_node->group_name, groupIP, client_node->group_port, client_node->mcast_fd, (*client_info)->client_fd);
      SIMPLE_PRINT(buf);
 
      client_node =     SN_LIST_MEMBER_NEXT(client_node,
@@ -148,10 +147,10 @@ bool ADD_CLIENT_IN_LL(client_information_t **client_info, mcast_client_node_t *n
   if (client_node)
   {
     strcpy(client_node->group_name,node->group_name);
-    client_node->client_fd = node->client_fd;
     client_node->group_addr = node->group_addr;
     client_node->group_port = node->group_port;
     client_node->mcast_fd = node->mcast_fd;
+
     return TRUE;
   }
 
@@ -161,5 +160,4 @@ bool ADD_CLIENT_IN_LL(client_information_t **client_info, mcast_client_node_t *n
 bool IS_GROUP_IN_CLIENT_LL(client_information_t **client_info, char *group_name)
 {
   get_client_node_by_group_name(client_info, group_name);
-
 }
