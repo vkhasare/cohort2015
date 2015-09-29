@@ -75,6 +75,7 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
     int iter; char* group_name; 
     char display[30];
     int m_port = 3333;
+    mcast_client_node_t node;
 
     join_rsp_t join_response = resp.idv.join_rsp; 
  
@@ -90,8 +91,7 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
         sprintf(display,"Listening to group %s\n", group_name);
         PRINT(display);
         
-        if(sockfd > 0){ 
-            mcast_client_node_t node;
+        if(mcast_fd > 0){ 
             memset(&node,0,sizeof(node));
 
             strcpy(node.group_name,group_name);
