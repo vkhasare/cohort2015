@@ -1,10 +1,5 @@
 #include "common.h"
 #include "SLL/client_ll.h"
-#include "comm_primitives.h"
-#define TIMEOUT_SECS 5
-
-extern unsigned int echo_req_len;
-extern unsigned int echo_resp_len; //includes nul termination
 
 int cfd;
 extern unsigned int echo_req_len;
@@ -16,13 +11,19 @@ struct keep_alive{
 };
 struct keep_alive active_group;
 
-int handle_join_response(const int, const comm_struct_t, ...);
-void send_echo_req(const int);
-int handle_echo_response(const int, const comm_struct_t, ...);
-int handle_leave_response(const int, const comm_struct_t, ...);
+static int handle_join_response(const int, const comm_struct_t, ...);
+static void send_echo_req(const int);
+static int handle_echo_response(const int, const comm_struct_t, ...);
+static int handle_leave_response(const int, const comm_struct_t, ...);
 
-typedef int (*fptr)(int, comm_struct_t, ...);
-
+/* <doc>
+ * client_func_handler(unsigned int msgType)
+ * This function takes the msg type as input
+ * and returns the respective function handler
+ * name.
+ *
+ * </doc>
+ */
 fptr client_func_handler(unsigned int msgType)
 {
   char buf[50];
@@ -55,6 +56,7 @@ fptr client_func_handler(unsigned int msgType)
  *  
  * </doc>
  */
+static
 int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 {
         uint8_t cl_iter;
@@ -102,6 +104,7 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
  *
  * </doc>
  */
+static
 int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
 {
     struct sockaddr_in group_ip;
@@ -209,6 +212,7 @@ void sendPeriodicMsg_XDR(int signal)
     alarm(TIMEOUT_SECS);
 }
 
+static
 void send_echo_req(int signal){
     int i=active_group.count;
     char msg[] =" I am Alive";
@@ -226,6 +230,7 @@ void send_echo_req(int signal){
     alarm(TIMEOUT_SECS);
 }
 
+static
 int handle_echo_response(const int sockfd, const comm_struct_t const req, ...){
     PRINT(req.idv.echo_resp.str);
     return 0;

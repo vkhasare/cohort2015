@@ -15,8 +15,10 @@
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <limits.h>
+#include "comm_primitives.h"
 
 //#define port "3490"
+#define TIMEOUT_SECS 5
 #define CLIENT_MODE 101
 #define SERVER_MODE 202
 #define BACKLOG 30000
@@ -70,8 +72,8 @@ extern const unsigned int max_gname_len; //includes nul termination
   va_end (arguments);                           \
 })
 
-#define TRUE  1
-#define FALSE 0
+//#define TRUE  1
+//#define FALSE 0
 
 typedef enum {
  ACCEPTED,
@@ -94,3 +96,6 @@ int IS_CLIENT(int oper);
 //uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping, server_information_t ** server_info);
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count);
 void display_clis();
+typedef int (*fptr)(int, comm_struct_t, ...);
+
+

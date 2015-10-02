@@ -1,31 +1,22 @@
 #include "common.h"
 #include "SLL/server_ll.h"
-#include "comm_primitives.h"
-
-/*
-typedef union epoll_data {
-    void        *ptr;
-    int          fd;
-    uint32_t     u32;
-    uint64_t     u64;
-} epoll_data_t;
-
-typedef struct epoll_event
-{
-    __uint32_t event;
-    epoll_data_t data;
-};
-*/
 
 grname_ip_mapping_t * mapping = NULL;
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
-int handle_join_req(const int sockfd, const comm_struct_t const req, ...);
-int handle_echo_req(const int sockfd, const comm_struct_t const req, ...);
-int handle_leave_req(const int sockfd, const comm_struct_t const req, ...);
 
-typedef int (*fptr)(int, comm_struct_t, ...);
+static int handle_join_req(const int sockfd, const comm_struct_t const req, ...);
+static int handle_echo_req(const int sockfd, const comm_struct_t const req, ...);
+static int handle_leave_req(const int sockfd, const comm_struct_t const req, ...);
 
+/* <doc>
+ * server_func_handler(unsigned int msgType)
+ * This function takes the msg type as input
+ * and returns the respective function handler
+ * name.
+ *
+ * </doc>
+ */
 fptr server_func_handler(unsigned int msgType)
 {
   char buf[50];
@@ -51,6 +42,7 @@ fptr server_func_handler(unsigned int msgType)
   return func_name;
 }
 
+static
 int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
 {
     comm_struct_t resp;
@@ -99,7 +91,7 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
     return 0;
 }
 
-
+static
 int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
     comm_struct_t resp;
     uint8_t cl_iter, s_iter;
@@ -151,6 +143,7 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
     return 0;
 }
 
+static
 int handle_echo_req(const int sockfd, const comm_struct_t const req, ...){
     comm_struct_t resp;
         
