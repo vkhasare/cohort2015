@@ -23,17 +23,30 @@ int handle_leave_response(const int, const comm_struct_t, ...);
 
 typedef int (*fptr)(int, comm_struct_t, ...);
 
-fptr handle_wire_event[]={
-    NULL,                          //UNUSED
-    NULL,                          //join_req
-    handle_join_response,          //join_response
-    NULL,                          //server_task
-    NULL,                          //client_answer
-    NULL,                          //echo_req
-    handle_echo_response,          //echo_response
-    NULL,                          //group_leave_req
-    handle_leave_response          //group_leave_response
-};
+fptr client_func_handler(unsigned int msgType)
+{
+  char buf[50];
+  fptr func_name;
+
+  switch(msgType)
+  {
+    case join_response:
+        func_name = handle_join_response;
+        break;
+    case leave_response:
+        func_name = handle_leave_response;
+        break;
+    case echo_response:
+        func_name = handle_echo_response;
+        break;
+    default:
+        sprintf(buf, "Invalid msg type of type - %d.", msgType);
+        PRINT(buf);
+        func_name = NULL;
+  }
+
+  return func_name;
+}
 
 /* <doc>
  * int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
@@ -101,9 +114,10 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
     struct epoll_event *event;
     client_information_t *client_info = NULL;
 
-    join_rsp_t join_response = resp.idv.join_rsp; 
-
+    /* Extracting client_info from variadic args*/
     EXTRACT_ARG(resp, client_information_t*, client_info);
+
+    join_rsp_t join_response = resp.idv.join_rsp; 
 
     event = client_info->epoll_evt;
  
@@ -372,7 +386,6 @@ void client_stdin_data(int fd, client_information_t *client_info)
 
            msg.id = leave_request;
            populate_leave_req(&msg, &gr_name_ptr, 1);
-
            /*TODO - hardcoded for now.. needs to be done when client has its unique client id.*/
            msg.idv.leave_req.client_id = 5;
            write_record(cfd, &msg);
@@ -497,10 +510,9 @@ int main(int argc, char * argv[])
     char * gr_list[max_groups];
 
     comm_struct_t m; int iter = 0;
-    join_req_t joinReq;
 
     m.id = join_request;
-    joinReq.num_groups = 0; 
+
     while(gname!=NULL){ 
       gr_list[iter++] = gname;
       gname=strtok(NULL,",");
@@ -516,7 +528,12 @@ int main(int argc, char * argv[])
             if ((cfd == events[index].data.fd) && (events[index].events & EPOLLIN))
             {
                 comm_struct_t req;
-                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req, client_info);
+                fptr func;
+                if ((func = client_func_handler(read_record(events[index].data.fd, &req))))
+                {
+                    (func)(events[index].data.fd, req, client_info);
+                }
+                
             }
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd)

@@ -26,17 +26,30 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...);
 
 typedef int (*fptr)(int, comm_struct_t, ...);
 
-fptr handle_wire_event[]={
-    NULL,                     //UNUSED
-    handle_join_req,          //join_req
-    NULL,                     //join_response
-    NULL,                     //server_task
-    NULL,                     //client_answer
-    handle_echo_req,          //echo_req
-    NULL,                     //echo_response
-    handle_leave_req,         //group_leave_req
-    NULL                      //group_leave_response
-};
+fptr server_func_handler(unsigned int msgType)
+{
+  char buf[50];
+  fptr func_name;
+
+  switch(msgType)
+  {
+    case join_request:
+        func_name = handle_join_req;
+        break;
+    case leave_request:
+        func_name = handle_leave_req;
+        break;
+    case echo_req:
+        func_name = handle_echo_req;
+        break;
+    default:
+        sprintf(buf, "Invalid msg type of type - %d.", msgType);
+        PRINT(buf);
+        func_name = NULL;
+  }
+
+  return func_name;
+}
 
 int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
 {
@@ -91,6 +104,7 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
     comm_struct_t resp;
     uint8_t cl_iter, s_iter;
     char *group_name;
+
     server_information_t *server_info = NULL;
 
     /* Extracting server_info from variadic args*/
@@ -459,11 +473,12 @@ int main(int argc, char * argv[])
             /* Code Block for handling events on connection sockets  */
             else
             {
-                ssize_t count;
-                char buf[512];
-                char buf_copy[512];
                 comm_struct_t req;
-                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req, server_info);
+                fptr func;
+                if ((func = server_func_handler(read_record(events[index].data.fd, &req))))
+                {
+                    (func)(events[index].data.fd, req, server_info);
+                }
             }
         }
     }

@@ -16,14 +16,14 @@
  })
 
 typedef enum struct_id{
-    join_request    = 1,
-    join_response   = 2,
-    server_task     = 3,
-    client_answer   = 4,
-    echo_req        = 5,
-    echo_response   = 6,
-    leave_request   = 7,
-    leave_response  = 8
+    join_request    = 32,
+    join_response   = 33,
+    server_task     = 34,
+    client_answer   = 35,
+    echo_req        = 36,
+    echo_response   = 37,
+    leave_request   = 38,
+    leave_response  = 39
 }e_struct_id_t; 
 
 typedef struct string{
