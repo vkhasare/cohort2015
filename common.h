@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
+#include <limits.h>
 
 //#define port "3490"
 #define CLIENT_MODE 101
@@ -24,6 +25,14 @@
 
 extern const unsigned int max_groups;
 extern const unsigned int max_gname_len; //includes nul termination
+
+/* <doc>
+ * PRINT_PROMPT(str)
+ * Macro to Print cli prompt 
+ *
+ * where str - text to printed for prompt
+ * </doc>
+ */
 
 #define PRINT_PROMPT(str)                  \
  do {                                      \
@@ -42,6 +51,25 @@ extern const unsigned int max_gname_len; //includes nul termination
  do {                                      \
    write(STDOUT_FILENO,str,strlen(str));   \
  } while(0)
+
+
+/* <doc>
+ * EXTRACT_ARG(lastArg, type, var)
+ * Macro to extract variadic parameter
+ * 
+ * where, lastArg - name of last function argument
+ *        type - data type of expected variable
+ *        varName - name of destination variable
+ * </doc>
+ */
+
+#define EXTRACT_ARG(lastArg, type, varName)     \
+({                                              \
+  va_list arguments;                            \
+  va_start (arguments, lastArg);                \
+  varName = va_arg (arguments, type);           \
+  va_end (arguments);                           \
+})
 
 #define TRUE  1
 #define FALSE 0

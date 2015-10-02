@@ -16,6 +16,8 @@ typedef struct {
 
 typedef struct {
   unsigned int client_fd;
+  unsigned int epoll_fd;
+  struct epoll_event *epoll_evt;
   mcast_client_t *client_list;
 } client_information_t;
 
@@ -40,8 +42,9 @@ void allocate_client_list(client_information_t **client_info)
 void allocate_client_info(client_information_t **client_info)
 {
    *client_info = (client_information_t *) malloc(sizeof(client_information_t));
-   (*client_info)->client_fd = -1;
-
+   (*client_info)->client_fd = INT_MAX;
+   (*client_info)->epoll_fd = INT_MAX;
+   (*client_info)->epoll_evt = NULL;
    allocate_client_list(client_info);
 }
 

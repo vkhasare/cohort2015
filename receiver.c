@@ -77,7 +77,7 @@ bool join_msg(int cfd, char * group_name)
     return true;
 }
 
-int multicast_join(char * my_ip_address, struct sockaddr_in group_ip, unsigned int port)
+int multicast_join(struct sockaddr_in group_ip, unsigned int port)
 {
   int status=0;
   int sd;
@@ -133,7 +133,7 @@ int multicast_join(char * my_ip_address, struct sockaddr_in group_ip, unsigned i
 
   if(setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0)
   {
-    sprintf(display,"New group ip address=%s & source ip address=%s",group_ip_address,my_ip_address);
+    sprintf(display,"New group ip address=%s ",group_ip_address);
     PRINT(display);
     perror("Adding multicast group error");
     close(sd);

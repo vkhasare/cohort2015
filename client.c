@@ -3,20 +3,20 @@
 #include "comm_primitives.h"
 #define TIMEOUT_SECS 5
 
-#define lo "127.0.0.1"
+extern unsigned int echo_req_len;
+extern unsigned int echo_resp_len; //includes nul termination
+
 int cfd;
+extern unsigned int echo_req_len;
+extern unsigned int echo_resp_len; //includes nul termination
 
 struct keep_alive{
     unsigned count;
     char group_name[10][10];
 };
 struct keep_alive active_group;
-client_information_t *client_info = NULL;
 
-extern unsigned int echo_req_len;
-extern unsigned int echo_resp_len; //includes nul termination
-
-int handle_join_response(const int, const comm_struct_t, int efd, struct epoll_event *event, ...);
+int handle_join_response(const int, const comm_struct_t, ...);
 void send_echo_req(const int);
 int handle_echo_response(const int, const comm_struct_t, ...);
 int handle_leave_response(const int, const comm_struct_t, ...);
@@ -35,12 +35,23 @@ fptr handle_wire_event[]={
     handle_leave_response          //group_leave_response
 };
 
+/* <doc>
+ * int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
+ * Group Leave Response handler. If cause in Response PDU is ACCEPTED, then leaves 
+ * the multicast group. Else ignores for other causes.
+ *  
+ * </doc>
+ */
 int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 {
         uint8_t cl_iter;
         char *cause, *group_name;
         char buf[50];
         mcast_client_node_t *client_node = NULL;
+        client_information_t *client_info;
+
+        /* Extracting client_info from variadic args*/
+        EXTRACT_ARG(resp, client_information_t*, client_info);
 
         leave_rsp_t leave_rsp = resp.idv.leave_rsp;
 
@@ -55,30 +66,45 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 
             if (enum_cause == ACCEPTED)
             {
-              client_node = (mcast_client_node_t *) get_client_node_by_group_name(&client_info, group_name);
+                client_node = (mcast_client_node_t *) get_client_node_by_group_name(&client_info, group_name);
 
-              if (TRUE == multicast_leave(client_node->mcast_fd, client_node->group_addr)) {
-                  sprintf(buf, "Client has left multicast group %s.", group_name);
-              } else {
-                  sprintf(buf, "[Error] Error in leaving multicast group %s.", group_name);
-              }
+                if (TRUE == multicast_leave(client_node->mcast_fd, client_node->group_addr)) {
+                    sprintf(buf, "Client has left multicast group %s.", group_name);
+                } else {
+                    sprintf(buf, "[Error] Error in leaving multicast group %s.", group_name);
+                }
 
-              PRINT(buf);
-              remove_group_from_client(&client_info, client_node);
+                PRINT(buf);
+                remove_group_from_client(&client_info, client_node);
             }
 
         }
 }
 
-int handle_join_response(const int sockfd, const comm_struct_t const resp, int efd, struct epoll_event *event, ...){
+/* <doc>
+ * int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
+ * Join Group Response Handler. Reads the join response PDU, and fetches the
+ * IP for required multicast group. Joins the multicast group.
+ *
+ * </doc>
+ */
+int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
+{
     struct sockaddr_in group_ip;
-    int iter; char* group_name; 
+    int iter;
+    char* group_name;
     char display[30];
-    unsigned int m_port = 4321;
+    unsigned int m_port;
     mcast_client_node_t node;
     int status;
+    struct epoll_event *event;
+    client_information_t *client_info = NULL;
 
     join_rsp_t join_response = resp.idv.join_rsp; 
+
+    EXTRACT_ARG(resp, client_information_t*, client_info);
+
+    event = client_info->epoll_evt;
  
     for(iter = 0; iter < join_response.num_groups; iter++){
         group_ip.sin_family = join_response.group_ips[iter].sin_family;
@@ -88,7 +114,7 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, int e
         group_name = join_response.group_ips[iter].group_name;
         m_port = join_response.group_ips[iter].grp_port;
         
-        int mcast_fd = multicast_join(lo,group_ip,m_port); 
+        int mcast_fd = multicast_join(group_ip,m_port);
         
         sprintf(display,"Listening to group %s\n", group_name);
         PRINT(display);
@@ -99,7 +125,7 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, int e
             event->data.fd = mcast_fd;
             event->events = EPOLLIN|EPOLLET;
 
-            status = epoll_ctl(efd, EPOLL_CTL_ADD, mcast_fd, event);
+            status = epoll_ctl(client_info->epoll_fd, EPOLL_CTL_ADD, mcast_fd, event);
 
             if (status == -1)
             {
@@ -142,25 +168,6 @@ void sendPeriodicMsg(int signal)
     alarm(TIMEOUT_SECS);
 }
 
-/*
-bool old_handle_join_response(client_information_t** client_info, char *grp_name, char *grp_ip_address)
-{
-   char display[30];
-   struct sockaddr_in group_ip;
-
-   inet_pton(AF_INET, grp_ip_address, &(group_ip));
-
-   int fd_id= multicast_join(lo,group_ip); 
-   //sprintf(display,"Listening to group %s ip address %s\n", grp_name, grp_ip_address);
-   
-   sprintf(display,"Listening to group %s\n", grp_name);
-   PRINT(display);
-   
-   if(fd_id > 0){ 
-       ADD_CLIENT_IN_LL(client_info,grp_name,group_ip,fd_id); 
-   }
-}
-*/
 
 void sendPeriodicMsg_XDR(int signal)
 {
@@ -208,6 +215,7 @@ int handle_echo_response(const int sockfd, const comm_struct_t const req, ...){
     PRINT(req.idv.echo_resp.str);
     return 0;
 }
+
 int is_gname_already_present(char *grp_name){
 
    if(active_group.count == 0)
@@ -223,12 +231,19 @@ int is_gname_already_present(char *grp_name){
 
    return 0;
 }
+
 void insert_gname(char *gname){
    strcpy(active_group.group_name[active_group.count], gname);
    active_group.count++;
 }
 
-/* Function to start periodic timer for sending messages to server*/
+/* <doc>
+ * void startKeepAlive(char * gname)
+ * Function to start periodic timer for sending messages to server.
+ * Takes the group name as argument.
+ *
+ * </doc>
+ */
 void startKeepAlive(char * gname)
 {
     if(is_gname_already_present(gname) == 0)
@@ -254,8 +269,13 @@ void startKeepAlive(char * gname)
 }
 
 
+/* <doc>
+ * void stopKeepAlive()
+ * Function to stop periodic timer
+ *
+ * </doc>
+ */
 
-/* Function to stop periodic timer */
 void stopKeepAlive()
 {
     int i = 0;
@@ -270,6 +290,13 @@ void stopKeepAlive()
     alarm(0);
 }
 
+/* <doc>
+ * void display_client_clis()
+ * Displays all available Cli's.
+ *
+ * </doc>
+ */
+
 void display_client_clis()
 {
    PRINT("show client groups                           --  displays list of groups joined by client");
@@ -280,60 +307,14 @@ void display_client_clis()
    PRINT("cls                                          --  Clears the screen");
 }
 
-void display_client_groups()
+void display_client_groups(client_information_t *client_info)
 {
   display_mcast_client_node(&client_info);
 }
 
-
-void decode_join_response(char *buf,  client_information_t **client_info)
-{
-    char *grp_ip, *grp_name;
-    char *token;
-
-    char *ptr = strtok_r(buf,":",&token);
-      
-      char *ptr1 = strtok_r(NULL,",",&token);
-      grp_name = ptr1;
-      grp_ip=token;
-      //PRINT(grp_name);
-      //PRINT(grp_ip);
-
-      //old_handle_join_response(client_info, grp_name, grp_ip);
-
-
-}
-
-/* Function for handling received data on Client Socket */
-
-void client_socket_data(int fd)
-{
-    char buf[512];
-    int read_count;
-    char length[10];
-    char buf_copy[100];
-    read_count = read(fd, buf, sizeof(buf));
-    int len = 0;
-    while(len < read_count){
-       strcpy(buf_copy, buf+len);
-       int slen = strlen(buf_copy);
-       if(strncmp(buf_copy,"JOIN RESPONSE:",14 ) == 0)
-       {
-          decode_join_response(buf_copy,  &client_info);
-       }
-       else
-       {
-          PRINT(buf);
-          break;
-       }
-       slen++;
-       len +=slen;
-    }
-}
-
 /* Function for handling input from STDIN */
 
-void client_stdin_data(int fd)
+void client_stdin_data(int fd, client_information_t *client_info)
 {
     char read_buffer[100];
     int cnt=0;
@@ -348,7 +329,7 @@ void client_stdin_data(int fd)
     }
     else if (strncmp(read_buffer,"show client groups",22) == 0)
     {
-       display_client_groups(&client_info);
+       display_client_groups(client_info);
     }
     else if (strncmp(read_buffer,"enable keepalive group ",23) == 0)
     {
@@ -376,7 +357,6 @@ void client_stdin_data(int fd)
            joinReq = msg.idv.join_req;
            msg.id = join_request;
            joinReq.num_groups = 0; 
-           //join_msg(cfd,read_buffer+11);
            populate_join_req(&msg, &gr_name_ptr, 1);
            write_record(cfd, &msg);
        }
@@ -419,16 +399,15 @@ void client_stdin_data(int fd)
 
 int main(int argc, char * argv[])
 {
-    int sockfd, numbytes;
     char buf[MAXDATASIZE];
     char group_name[50];
-    struct addrinfo hints, *servinfo, *p;
+    struct addrinfo hints;
     int count = 0;
 
     active_group.count = 0;
  
     int event_count, index; 
-    int /*cfd,*/ status;
+    int status;
     int efd;
     struct epoll_event event;
     struct epoll_event *events;    
@@ -437,6 +416,8 @@ int main(int argc, char * argv[])
     socklen_t sin_size;
     char remoteIP[INET6_ADDRSTRLEN];
     char *addr,*port;
+
+    client_information_t *client_info = NULL;
 
     allocate_client_info(&client_info);
 
@@ -470,14 +451,16 @@ int main(int argc, char * argv[])
         exit(0);
     }
 
-    client_info->client_fd = cfd;
-
     PRINT("..WELCOME TO CLIENT..");
     PRINT("\r   <Use \"show help\" to see all supported clis.>\n");
 
     PRINT_PROMPT("[client] ");
 
     efd = epoll_create(MAXEVENTS);
+
+    client_info->client_fd = cfd; 
+    client_info->epoll_fd = efd;
+    client_info->epoll_evt = &event;
 
     if (efd == -1)
     {
@@ -518,16 +501,12 @@ int main(int argc, char * argv[])
     m.id = join_request;
     joinReq.num_groups = 0; 
     while(gname!=NULL){ 
-//    join_msg(cfd,gname);
       gr_list[iter++] = gname;
       gname=strtok(NULL,",");
-      //PRINT("Sending join message");
     }
     populate_join_req(&m, gr_list, iter);
     write_record(cfd, &m);
 
-    
-//  join_msg(cfd,group_name); 
     while (1) {
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
@@ -536,13 +515,12 @@ int main(int argc, char * argv[])
             if ((cfd == events[index].data.fd) && (events[index].events & EPOLLIN))
             {
                 comm_struct_t req;
-//              client_socket_data(&client_info, events[index].data.fd);
-                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req, efd, &event);
+                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req, client_info);
             }
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd)
             {
-                client_stdin_data(events[index].data.fd);
+                client_stdin_data(events[index].data.fd, client_info);
 
                 PRINT_PROMPT("[client] ");
             }
@@ -573,7 +551,7 @@ int main(int argc, char * argv[])
         }
     }
     
-    close(sockfd);
+    close(cfd);
     
     return 0;
 }
