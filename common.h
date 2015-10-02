@@ -33,7 +33,6 @@ extern const unsigned int max_gname_len; //includes nul termination
  * where str - text to printed for prompt
  * </doc>
  */
-
 #define PRINT_PROMPT(str)                  \
  do {                                      \
    write(STDOUT_FILENO,"\n",1);            \

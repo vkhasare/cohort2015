@@ -48,7 +48,7 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
         char *cause, *group_name;
         char buf[50];
         mcast_client_node_t *client_node = NULL;
-        client_information_t *client_info;
+        client_information_t *client_info = NULL;
 
         /* Extracting client_info from variadic args*/
         EXTRACT_ARG(resp, client_information_t*, client_info);
@@ -76,6 +76,7 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 
                 PRINT(buf);
                 remove_group_from_client(&client_info, client_node);
+                free(client_node);
             }
 
         }

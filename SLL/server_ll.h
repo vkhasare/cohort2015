@@ -274,6 +274,8 @@ void display_mcast_group_node_by_name(server_information_t **server_info, char *
 }
 
 
+
+
 bool remove_client_from_mcast_group_node(server_information_t **server_info, char *grp_name, int target_fd)
 {
   char buf[100];
@@ -296,6 +298,7 @@ bool remove_client_from_mcast_group_node(server_information_t **server_info, cha
                if (client_node->client_fd == target_fd)
                {
                     SN_LIST_MEMBER_REMOVE(&(group_node->client_info->client_node), client_node, list_element);
+                    free(client_node);
                     group_node->number_of_clients--;
                     return TRUE;
                }

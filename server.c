@@ -18,14 +18,13 @@ typedef struct epoll_event
 */
 
 grname_ip_mapping_t * mapping = NULL;
-server_information_t *server_info = NULL;
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
-int handle_join_req(const int sockfd, const comm_struct_t const req);
-int handle_echo_req(const int sockfd, const comm_struct_t const req);
-int handle_leave_req(const int sockfd, const comm_struct_t const req);
+int handle_join_req(const int sockfd, const comm_struct_t const req, ...);
+int handle_echo_req(const int sockfd, const comm_struct_t const req, ...);
+int handle_leave_req(const int sockfd, const comm_struct_t const req, ...);
 
-typedef int (*fptr)(int, comm_struct_t);
+typedef int (*fptr)(int, comm_struct_t, ...);
 
 fptr handle_wire_event[]={
     NULL,                     //UNUSED
@@ -39,7 +38,7 @@ fptr handle_wire_event[]={
     NULL                      //group_leave_response
 };
 
-int handle_leave_req(const int sockfd, const comm_struct_t const req)
+int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
 {
     comm_struct_t resp;
     uint8_t cl_iter, s_iter;
@@ -48,6 +47,10 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req)
     bool found;
     int clientid;
     char buf[100];
+    server_information_t *server_info = NULL;
+
+    /* Extracting server_info from variadic args*/
+    EXTRACT_ARG(req, server_information_t*, server_info);
 
     leave_req_t leave_req = req.idv.leave_req;
     leave_rsp_t *leave_rsp = &resp.idv.leave_rsp;
@@ -63,15 +66,10 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req)
     sprintf(buf,"[Leave_Request: GRP - %s, CL - %d] Leave Request Received.", group_name, clientid);
     PRINT(buf);
 
-    for(s_iter = 0; s_iter < max_groups; s_iter++ ){
 
-        if(strcmp(group_name, mapping[s_iter].grname) == 0){
-            if (remove_client_from_mcast_group_node(&server_info, group_name, clientid))
-            {
-                cause = ACCEPTED;
-            }
-            break;
-        }
+    if (remove_client_from_mcast_group_node(&server_info, group_name, clientid))
+    {
+       cause = ACCEPTED;
     }
 
     leave_rsp->group_ids[0].str = MALLOC_STR;
@@ -89,10 +87,14 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req)
 }
 
 
-int handle_join_req(const int sockfd, const comm_struct_t const req){
+int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
     comm_struct_t resp;
     uint8_t cl_iter, s_iter;
     char *group_name;
+    server_information_t *server_info = NULL;
+
+    /* Extracting server_info from variadic args*/
+    EXTRACT_ARG(req, server_information_t*, server_info);
 
     join_req_t join_req = req.idv.join_req;   
     join_rsp_t *join_rsp = &resp.idv.join_rsp;
@@ -135,7 +137,7 @@ int handle_join_req(const int sockfd, const comm_struct_t const req){
     return 0;
 }
 
-int handle_echo_req(const int sockfd, const comm_struct_t const req){
+int handle_echo_req(const int sockfd, const comm_struct_t const req, ...){
     comm_struct_t resp;
         
     resp.id = echo_response;
@@ -145,7 +147,7 @@ int handle_echo_req(const int sockfd, const comm_struct_t const req){
     return 0;
 }
 
-uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping)
+uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping, server_information_t *server_info)
 {
     FILE *fp = NULL, *cmd_line = NULL;
     char ip_str[16], cmd[256], port[16];
@@ -170,36 +172,6 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
   return count;
 }
 
-void process_join_request(int infd, char *grp_name, grname_ip_mapping_t *mapping, int num_groups)
-{
-  if (join_group(infd, grp_name, mapping, num_groups))
-  {
-    struct sockaddr_storage addr;
-    socklen_t addr_len = sizeof(addr);
-
-    char ipstr[INET6_ADDRSTRLEN];
-    getpeername(infd, (struct sockaddr*) &addr, &addr_len);
-    UPDATE_GRP_CLIENT_LL(&server_info,grp_name,(struct sockaddr*) &addr,infd);
-  }
-}
-
-decode_join_request(char *buf, int msglen, int infd, grname_ip_mapping_t *mapping, int num_groups)
-{
-  char *ptr=buf;
-  int len_join_req = strlen("JOIN:");
-  int i = len_join_req;
-  while (i <= msglen)
-  {
-    ptr += len_join_req;
-
-    PRINT("Received request from client to join group\n");
-    PRINT(ptr);
-    process_join_request(infd, ptr, mapping, num_groups);
-
-    ptr = ptr + 3;
-    i += len_join_req + 3;
-  }
-}
 
 void accept_connections(int sfd,int efd,struct epoll_event *event)
 {
@@ -235,7 +207,7 @@ void accept_connections(int sfd,int efd,struct epoll_event *event)
 }
 
 
-void display_group_info()
+void display_group_info(server_information_t *server_info)
 {
   display_mcast_group_node(&server_info);
 }
@@ -249,6 +221,7 @@ int main(int argc, char * argv[])
     struct epoll_event *events;
 
     int active_clients = 0;
+    server_information_t *server_info = NULL;
 
     struct sockaddr_storage their_addr;
     socklen_t sin_size;
@@ -259,11 +232,9 @@ int main(int argc, char * argv[])
     struct sockaddr_in maddr;
     char *message="Hello!!!";
     
-   
-
     allocate_server_info(&server_info);
 
-    num_groups = initialize_mapping("./ip_mappings.txt", &mapping);
+    num_groups = initialize_mapping("./ip_mappings.txt", &mapping,server_info);
     
     if (argc != 3)
     {
@@ -424,7 +395,7 @@ int main(int argc, char * argv[])
                      if(strncmp(ptr,"all",3) == 0)
                      {
                        if(mapping)
-                         display_group_info(&server_info);
+                         display_group_info(server_info);
                      }
                      else
                      {
@@ -492,55 +463,10 @@ int main(int argc, char * argv[])
                 char buf[512];
                 char buf_copy[512];
                 comm_struct_t req;
-                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req);
-                
-#if 0
-                count = read(events[index].data.fd, buf, sizeof(buf));
-                if (count == -1)
-                {
-                    break;
-                }
-                else if (count == 0)
-                {
-                    sprintf(buf,"Client is dead having Socket no. %d.",events[index].data.fd);
-                    PRINT(buf);
-                    //Implicitly removed fd from epoll as well.
-                    close(events[index].data.fd);
-                    active_clients--;
-                    break;
-                }
-                else
-                {
-                  if(strncmp(buf,"JOIN:",5 )){
-                  int j =0;
-                  for(j = 0; j< num_groups; j++)
-                  {
-                    if(group_msg[j]) 
-                    {
-                      strcpy(buf_copy,buf);
-                      ptr = strtok(buf_copy,":");
-
-                      if(strcmp(ptr,mapping[j].grname) == 0) {
-                        PRINT(buf);
-                      }
-                    }
-                  }
-
-                  int numbytes;
-                  if ((numbytes = send(events[index].data.fd,"EchoResponse.",15,0)) < 0)
-                  {
-                      PRINT("Error in sending.");
-                  }
-                 }else{
-                   int infd=events[index].data.fd;
-                   strcpy(buf_copy,buf);
-                   decode_join_request(buf, count, infd, mapping, num_groups, &server_info);
-                }
-             }
-#endif
+                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req, server_info);
+            }
         }
-      }
-    }    
+    }
     return 0;
 }
 
