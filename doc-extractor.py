@@ -22,7 +22,7 @@ for fileName in D_Files:
 
     header = "------------------ File : %s ------------------\n\n" % fileName
     docPtr.write(header)
-    print header
+#    print header
 
     for index in range(len(lines)):
         #if <doc> is hit, then start recording
@@ -32,13 +32,13 @@ for fileName in D_Files:
         #if </doc> is hit, then stop recording
         elif re.search("</doc>", lines[index]):
             printMode = False
-            print "\n"
+#            print "\n"
             docPtr.write("\n")
 
         if printMode:
-            print lines[index]
+#            print lines[index]
             docPtr.write(lines[index])
             docPtr.write("\n")
 
-
+print "Documentation File Name: %s" % (docFile)
 
