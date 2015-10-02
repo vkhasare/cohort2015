@@ -34,7 +34,7 @@ void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
   for(i = 0;i < count; i++)
   {
     inet_ntop(AF_INET, &(mapping[i].grp_ip), remoteIP, INET_ADDRSTRLEN);
-    sprintf(buf,"Group name: %s \t\tIP addr: %s", mapping[i].grname,remoteIP);
+    sprintf(buf,"Group name: %s \t\tIP addr: %s \t\tPort Number: %d", mapping[i].grname,remoteIP, mapping[i].port_no);
     PRINT(buf);
   }
 }
@@ -153,6 +153,7 @@ void display_server_clis()
   PRINT("show group info <group_name|all>   --  Displays group - client association");
   PRINT("enable msg group <group_name>      --  Enables display of messages for a specific group.");
   PRINT("no msg group <group_name>          --  Disables display of messages for a specific group.");
+  PRINT("send msg <group_name>              --  Sends a multicast message to the specified Group");
   PRINT("cls                                --  Clears the screen");
 }
 

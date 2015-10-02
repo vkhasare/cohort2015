@@ -77,7 +77,7 @@ bool join_msg(int cfd, char * group_name)
     return true;
 }
 
-int multicast_join(char * my_ip_address, struct sockaddr_in group_ip)
+int multicast_join(char * my_ip_address, struct sockaddr_in group_ip, unsigned int port)
 {
   int status=0;
   int sd;
@@ -112,7 +112,7 @@ int multicast_join(char * my_ip_address, struct sockaddr_in group_ip)
 /* specified as INADDR_ANY. */
   memset((char *) &localSock, 0, sizeof(localSock));
   localSock.sin_family = AF_INET;
-  localSock.sin_port = htons(4321);
+  localSock.sin_port = htons(port);
   localSock.sin_addr.s_addr = INADDR_ANY;
 
   if(bind(sd, (struct sockaddr*)&localSock, sizeof(localSock)))
@@ -129,7 +129,7 @@ int multicast_join(char * my_ip_address, struct sockaddr_in group_ip)
 /* called for each local interface over which the multicast */
 /* datagrams are to be received. */
   group.imr_multiaddr.s_addr = inet_addr(group_ip_address);
-  group.imr_interface.s_addr = inet_addr(my_ip_address);
+  group.imr_interface.s_addr = INADDR_ANY;
 
   if(setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0)
   {
@@ -163,6 +163,7 @@ int multicast_join(char * my_ip_address, struct sockaddr_in group_ip)
        printf("The message from multicast server is: \"%s\"\n", databuf);
        }*/
 
+
     return sd;
 }
 
@@ -175,7 +176,8 @@ bool multicast_leave(int mcast_fd, struct sockaddr_in group_ip)
   inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
 
   group.imr_multiaddr.s_addr = inet_addr(group_ip_address);
-  group.imr_interface.s_addr = inet_addr("127.0.0.1");
+  //group.imr_interface.s_addr = inet_addr("127.0.0.1");
+  group.imr_interface.s_addr = INADDR_ANY;
 
   if(setsockopt(mcast_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char *)&group, sizeof(group)) < 0)
   {

@@ -55,6 +55,7 @@ typedef enum {
 typedef struct grname_ip_mapping{
     char grname[10];
     struct sockaddr_in grp_ip;
+    unsigned int port_no;
 }grname_ip_mapping_t; 
   
 

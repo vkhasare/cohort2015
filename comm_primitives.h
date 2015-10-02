@@ -35,6 +35,7 @@ typedef struct local_sockaddr_in{
     unsigned short sin_port;
     unsigned long s_addr;
     char *group_name;
+    unsigned int grp_port;
 }l_saddr_in_t;
 
 typedef struct join_request{

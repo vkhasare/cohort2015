@@ -16,7 +16,7 @@ client_information_t *client_info = NULL;
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 
-int handle_join_response(const int, const comm_struct_t, ...);
+int handle_join_response(const int, const comm_struct_t, int efd, struct epoll_event *event, ...);
 void send_echo_req(const int);
 int handle_echo_response(const int, const comm_struct_t, ...);
 int handle_leave_response(const int, const comm_struct_t, ...);
@@ -70,12 +70,13 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
         }
 }
 
-int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
+int handle_join_response(const int sockfd, const comm_struct_t const resp, int efd, struct epoll_event *event, ...){
     struct sockaddr_in group_ip;
     int iter; char* group_name; 
     char display[30];
-    int m_port = 3333;
+    unsigned int m_port = 4321;
     mcast_client_node_t node;
+    int status;
 
     join_rsp_t join_response = resp.idv.join_rsp; 
  
@@ -85,8 +86,9 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
         group_ip.sin_addr.s_addr = join_response.group_ips[iter].s_addr;
         
         group_name = join_response.group_ips[iter].group_name;
+        m_port = join_response.group_ips[iter].grp_port;
         
-        int mcast_fd = multicast_join(lo,group_ip); 
+        int mcast_fd = multicast_join(lo,group_ip,m_port); 
         
         sprintf(display,"Listening to group %s\n", group_name);
         PRINT(display);
@@ -94,6 +96,17 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...){
         if(mcast_fd > 0){ 
             memset(&node,0,sizeof(node));
 
+            event->data.fd = mcast_fd;
+            event->events = EPOLLIN|EPOLLET;
+
+            status = epoll_ctl(efd, EPOLL_CTL_ADD, mcast_fd, event);
+
+            if (status == -1)
+            {
+              perror("\nError while adding FD to epoll event.");
+              exit(0);
+            }
+            
             strcpy(node.group_name,group_name);
             node.group_addr = group_ip;
             node.mcast_fd   = mcast_fd;
@@ -524,7 +537,7 @@ int main(int argc, char * argv[])
             {
                 comm_struct_t req;
 //              client_socket_data(&client_info, events[index].data.fd);
-                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req);
+                handle_wire_event[read_record(events[index].data.fd, &req)](events[index].data.fd, req, efd, &event);
             }
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd)
@@ -532,6 +545,30 @@ int main(int argc, char * argv[])
                 client_stdin_data(events[index].data.fd);
 
                 PRINT_PROMPT("[client] ");
+            }
+            /* Data for multicast grp */
+            else
+            {
+              mcast_client_node_t *client_node = NULL;
+              char message[512];
+
+              client_node =     SN_LIST_MEMBER_HEAD(&((client_info)->client_list->client_node),                                                              
+                                                   mcast_client_node_t,            
+                                                   list_element);
+              while (client_node)
+              {
+                if(client_node->mcast_fd == events[index].data.fd)
+                {
+                  read(events[index].data.fd, message, sizeof(message));
+                  char buffer[30];
+                  sprintf(buffer,"This Message is intended for Group %s: %s",client_node->group_name, message);
+                  PRINT(buffer);
+                  PRINT_PROMPT("[client] ");
+                }
+                client_node =     SN_LIST_MEMBER_NEXT(client_node,                      
+                                                      mcast_client_node_t,         
+                                                      list_element);
+              }
             }
         }
     }

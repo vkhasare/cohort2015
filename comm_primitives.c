@@ -384,7 +384,8 @@ bool xdr_l_saddr_in(XDR* xdrs, l_saddr_in_t* m){
     int ushort_res = xdr_u_short(xdrs, &(m->sin_port));
     int ulong_res = xdr_u_long(xdrs, &(m->s_addr));
     int string_res = xdr_string(xdrs, &(m->group_name), max_gname_len);
-    return short_res && ushort_res && ulong_res && string_res;
+    int uint_res = xdr_u_int(xdrs, &(m->grp_port));
+    return short_res && ushort_res && ulong_res && string_res && uint_res;
 }
 
 bool process_join_resp(XDR* xdrs, join_rsp_t* m){

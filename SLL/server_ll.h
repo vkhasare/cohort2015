@@ -20,6 +20,7 @@ typedef struct {
   char *group_name;
   int number_of_clients;
   struct sockaddr_in group_addr;
+  unsigned int port_no;
   mcast_client_t *client_info;
   sn_list_element_t list_element;
 } mcast_group_node_t;
@@ -226,8 +227,8 @@ void display_mcast_group_node(server_information_t **server_info)
      inet_ntop(AF_INET, &(group_node->group_addr), groupIP, INET_ADDRSTRLEN);
 
      sprintf(buf,
-     "\n\n\rGroup Name: %s    Group IP: %s    Client Count: %d",
-     group_node->group_name, groupIP, group_node->number_of_clients);
+     "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d",
+     group_node->group_name, groupIP, group_node->port_no, group_node->number_of_clients);
 
      SIMPLE_PRINT(buf);
 
@@ -255,8 +256,8 @@ void display_mcast_group_node_by_name(server_information_t **server_info, char *
       inet_ntop(AF_INET, &(group_node->group_addr), groupIP, INET_ADDRSTRLEN);
 
       sprintf(buf,
-      "\n\n\rGroup Name: %s \t Group IP: %s   Client Count: %d",
-      group_node->group_name, groupIP, group_node->number_of_clients);
+      "\n\n\rGroup Name: %s \t Group IP: %s   Group Port: %d   Client Count: %d",
+      group_node->group_name, groupIP, group_node->port_no, group_node->number_of_clients);
 
       SIMPLE_PRINT(buf);
 
@@ -313,7 +314,7 @@ bool remove_client_from_mcast_group_node(server_information_t **server_info, cha
 }
 
 
-void ADD_GROUP_IN_LL(server_information_t **server_info, char *group_name, struct sockaddr_in group_addrIP)
+void ADD_GROUP_IN_LL(server_information_t **server_info, char *group_name, struct sockaddr_in group_addrIP, unsigned int port)
 {
   mcast_group_node_t *group_node = NULL;
 
@@ -321,6 +322,7 @@ void ADD_GROUP_IN_LL(server_information_t **server_info, char *group_name, struc
 
   group_node->group_name = group_name;
   group_node->group_addr = group_addrIP;
+  group_node->port_no = port;
 }
 
 void ADD_CLIENT_IN_GROUP(mcast_group_node_t **group_node, struct sockaddr *addr, int infd)

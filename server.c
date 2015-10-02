@@ -124,6 +124,8 @@ int handle_join_req(const int sockfd, const comm_struct_t const req){
                 join_rsp->group_ips[cl_iter].group_name =
                     (char*) malloc(sizeof(char) * strlen(group_name) + 1);
                 strcpy(join_rsp->group_ips[cl_iter].group_name, group_name);
+                join_rsp->group_ips[cl_iter].grp_port     =
+                    mapping[s_iter].port_no;
                 break;
             }
         }
@@ -146,7 +148,7 @@ int handle_echo_req(const int sockfd, const comm_struct_t const req){
 uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping)
 {
     FILE *fp = NULL, *cmd_line = NULL;
-    char ip_str[16], cmd[256];
+    char ip_str[16], cmd[256], port[16];
     uint32_t count, i;
 
     strcpy(cmd, "wc -l ");
@@ -159,9 +161,10 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
 
     fp = fopen(filename, "r");
     for(i = 0; i < count; i++){
-        fscanf(fp, "%s %s", (*mapping)[i].grname, ip_str);
+        fscanf(fp, "%s %s %s", (*mapping)[i].grname, ip_str,port);
         inet_pton(AF_INET, ip_str, &((*mapping)[i].grp_ip));
-        ADD_GROUP_IN_LL(&server_info,(*mapping)[i].grname,(*mapping)[i].grp_ip);
+        (*mapping)[i].port_no = atoi(port);
+        ADD_GROUP_IN_LL(&server_info,(*mapping)[i].grname,(*mapping)[i].grp_ip,(*mapping)[i].port_no);
     }
     fclose(fp);
   return count;
@@ -240,7 +243,7 @@ void display_group_info()
 
 int main(int argc, char * argv[])
 {
-    int sfd, efd, status;
+    int sfd, efd, status, msfd;
     int event_count, index;
     struct epoll_event event;
     struct epoll_event *events;
@@ -253,6 +256,9 @@ int main(int argc, char * argv[])
     char *ptr;
     int group_msg[1000] = {0};
     uint32_t num_groups;
+    struct sockaddr_in maddr;
+    char *message="Hello!!!";
+    
    
 
     allocate_server_info(&server_info);
@@ -429,6 +435,47 @@ int main(int argc, char * argv[])
                   {
                     system("clear");
                   }
+                  else if( strncmp(read_buffer,"send msg",8) == 0)
+                  {
+                     char remoteIP[INET_ADDRSTRLEN];
+                     unsigned int port;
+                     strcpy(read_buffer_copy,read_buffer);
+                     ptr = strtok(read_buffer_copy," ");
+                     while(i < 2)
+                     {
+                       ptr = strtok(NULL," ");
+                       i++;
+                     }
+                     for(i = 0;i < num_groups; i++)
+                     {
+                       if(strcmp(mapping[i].grname,ptr) == 0)
+                       {
+                         inet_ntop(AF_INET, &(mapping[i].grp_ip), remoteIP, INET_ADDRSTRLEN);
+                         port = mapping[i].port_no;
+                       }
+                     }
+                     if ((msfd=socket(AF_INET,SOCK_DGRAM,0)) < 0) 
+                     {
+                        PRINT("Error .. ");
+                        exit(1);
+                     }
+                     memset(&maddr,0,sizeof(maddr));
+                     maddr.sin_family=AF_INET;
+                     maddr.sin_addr.s_addr=inet_addr(remoteIP);
+                     maddr.sin_port=htons(port);
+
+                     if (sendto(msfd,message,strlen(message),0,(struct sockaddr *) &maddr,sizeof(maddr)) < 0) 
+                     {
+                       PRINT("could not send multicast msg");
+                       exit(1);
+                     }
+                     else
+                     {
+                       char buffer[30];
+                       sprintf(buffer,"Sent msg %s to group %s",message,ptr);
+                       PRINT(buffer);
+                     }
+                   }
                   else
                   {
                     if (cnt != 1 && read_buffer[0] != '\n')
