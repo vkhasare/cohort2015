@@ -72,3 +72,4 @@ clean:
 	rm -f $(SERVER)
 	rm -f $(CLIENT)
 	rm -f $(COMM_OBJ) $(COMM_OUT)
+        rm- f *.h.gch
