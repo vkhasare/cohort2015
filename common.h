@@ -69,4 +69,3 @@ void display_mapping(grname_ip_mapping_t * mapping, uint32_t count);
 void display_clis();
 char* enum_to_str(msg_cause cause);
 msg_cause str_to_enum(char *str);
-typedef int (*fptr)(int, comm_struct_t, ...);
