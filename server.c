@@ -10,7 +10,7 @@ static int handle_echo_req(const int sockfd, const comm_struct_t const req, ...)
 static int handle_leave_req(const int sockfd, const comm_struct_t const req, ...);
 
 /* <doc>
- * server_func_handler(unsigned int msgType)
+ * fptr server_func_handler(unsigned int msgType)
  * This function takes the msg type as input
  * and returns the respective function handler
  * name.
@@ -19,7 +19,6 @@ static int handle_leave_req(const int sockfd, const comm_struct_t const req, ...
  */
 fptr server_func_handler(unsigned int msgType)
 {
-  char buf[50];
   fptr func_name;
 
   switch(msgType)
@@ -34,8 +33,7 @@ fptr server_func_handler(unsigned int msgType)
         func_name = handle_echo_req;
         break;
     default:
-        sprintf(buf, "Invalid msg type of type - %d.", msgType);
-        PRINT(buf);
+        PRINT("Invalid msg type of type - %d.", msgType);
         func_name = NULL;
   }
 
@@ -51,7 +49,6 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
     msg_cause cause = REJECTED;
     bool found;
     int clientid;
-    char buf[100];
     server_information_t *server_info = NULL;
 
     /* Extracting server_info from variadic args*/
@@ -68,9 +65,7 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
     clientid = leave_req.client_id;
     group_name = leave_req.group_ids[0].str;
 
-    sprintf(buf,"[Leave_Request: GRP - %s, CL - %d] Leave Request Received.", group_name, clientid);
-    PRINT(buf);
-
+    PRINT("[Leave_Request: GRP - %s, CL - %d] Leave Request Received.", group_name, clientid);
 
     if (remove_client_from_mcast_group_node(&server_info, group_name, clientid))
     {
@@ -84,8 +79,7 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
 
     strcpy(leave_rsp->cause[0].str, enum_to_str(cause));
 
-    sprintf(buf,"[Leave_Response: GRP - %s, CL - %d] Cause: %s.",group_name, clientid, enum_to_str(cause));
-    PRINT(buf);
+    PRINT("[Leave_Response: GRP - %s, CL - %d] Cause: %s.",group_name, clientid, enum_to_str(cause));
 
     write_record(sockfd, &resp);
     return 0;
@@ -186,7 +180,6 @@ void accept_connections(int sfd,int efd,struct epoll_event *event)
     struct sockaddr_storage in_addr;
     socklen_t in_len;
     int infd, status;
-    char buf[512];
 
     in_len = sizeof(in_addr);
 
@@ -197,8 +190,7 @@ void accept_connections(int sfd,int efd,struct epoll_event *event)
     }
 
     inet_ntop(in_addr.ss_family, get_in_addr((struct sockaddr*)&in_addr), remoteIP, INET6_ADDRSTRLEN);
-    sprintf(buf,"New connection came from %s and socket %d.\n",remoteIP,infd);
-    PRINT(buf);
+    PRINT("New connection came from %s and socket %d.\n",remoteIP,infd);
 
     status = make_socket_non_blocking(infd);
 
@@ -449,9 +441,7 @@ int main(int argc, char * argv[])
                      }
                      else
                      {
-                       char buffer[30];
-                       sprintf(buffer,"Sent msg %s to group %s",message,ptr);
-                       PRINT(buffer);
+                       PRINT("Sent msg %s to group %s",message,ptr);
                      }
                    }
                   else
@@ -468,6 +458,9 @@ int main(int argc, char * argv[])
             {
                 comm_struct_t req;
                 fptr func;
+
+                memset(&req, 0 ,sizeof(req));
+
                 if ((func = server_func_handler(read_record(events[index].data.fd, &req))))
                 {
                     (func)(events[index].data.fd, req, server_info);

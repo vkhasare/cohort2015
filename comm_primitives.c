@@ -1,17 +1,5 @@
 #include "comm_primitives.h"
-
-#define PRINT_PROMPT(str)                  \
- do {                                      \
-   write(STDOUT_FILENO,"\n",1);            \
-   write(STDOUT_FILENO,str,strlen(str));   \
- } while(0)
-
-#define PRINT(str)                         \
- do {                                      \
-   write(STDOUT_FILENO,"\n\n",2);          \
-   write(STDOUT_FILENO,"\t",1);            \
-   write(STDOUT_FILENO,str,strlen(str));   \
- } while(0)
+#include "print.h"
 
 #if 0
 bool process_client_req();
@@ -50,11 +38,8 @@ unsigned int get_index(uint8_t idx){
 }
 
 void print_my_struct(my_struct_t* m){
-    char buf[512];
-    sprintf(buf, 
-            "\na=%d\nb=%f\nc=%u\nd=%lf\nc[0]=%d", 
+    PRINT("\na=%d\nb=%f\nc=%u\nd=%lf\nc[0]=%d", 
             m->a,m->b,m->c_count,m->d,m->c[0]);
-    PRINT(buf);
     return;
 }
 
@@ -64,26 +49,22 @@ void print_echo_msg(char* echo_str){
 }
 
 void print_join_req(join_req_t* m){
-    char buf[max_groups * max_gname_len * 8 + 14];
     int iter;
-    sprintf(buf,"\nNumber of groups=%d", 
+    PRINT("\nNumber of groups=%d", 
             m->num_groups);
     for(iter = 0; iter < m->num_groups; iter++){
 //      sprintf(buf, "\n(%d): %s", iter, m->group_ids[get_index(iter)]);
-        sprintf(buf, "\n(%d): %s", iter, m->group_ids[iter].str);
-        PRINT(buf);
+        PRINT("\n(%d): %s", iter, m->group_ids[iter].str);
     }
     return;
 }
 
 void print_join_rsp(join_rsp_t* m){
-    char buf[max_groups * 15 * 8 + 14];
     int iter;
-    sprintf(buf,"\nNumber of groups=%d", 
+    PRINT("\nNumber of groups=%d", 
             m->num_groups);
     for(iter = 0; iter < m->num_groups; iter++){
-        sprintf(buf,"\n(%d): %d", iter, m->group_ips[iter]);
-        PRINT(buf);
+        PRINT("\n(%d): %d", iter, m->group_ips[iter]);
     }
     return;
 }
@@ -222,14 +203,12 @@ bool postprocess_my_struct_stream(my_struct_t* m, XDR* xdrs, bool op_res){
     
     if (xdrs->x_op == XDR_ENCODE){
         ret_res = xdrrec_endofrecord(xdrs, TRUE);
-        sprintf(buf, "[I] Encode res: %d, Push res: %d, ", op_res ,ret_res);
-        PRINT(buf);
+        PRINT("[I] Encode res: %d, Push res: %d, ", op_res ,ret_res);
     }
     
     if (xdrs->x_op == XDR_DECODE){
         ret_res = xdrrec_skiprecord (xdrs);
-        sprintf(buf, "[I] Decode res: %d, Skip rec res: %d, ", op_res, ret_res);
-        PRINT(buf);
+        PRINT("[I] Decode res: %d, Skip rec res: %d, ", op_res, ret_res);
         op_res ? print_my_struct(m): NULL;
     }
     return ret_res;
@@ -435,3 +414,4 @@ bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
 
     return enum_res && union_res;
 }
+

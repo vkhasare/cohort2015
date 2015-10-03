@@ -17,7 +17,7 @@ static int handle_echo_response(const int, const comm_struct_t, ...);
 static int handle_leave_response(const int, const comm_struct_t, ...);
 
 /* <doc>
- * client_func_handler(unsigned int msgType)
+ * fptr client_func_handler(unsigned int msgType)
  * This function takes the msg type as input
  * and returns the respective function handler
  * name.
@@ -26,7 +26,6 @@ static int handle_leave_response(const int, const comm_struct_t, ...);
  */
 fptr client_func_handler(unsigned int msgType)
 {
-  char buf[50];
   fptr func_name;
 
   switch(msgType)
@@ -41,8 +40,7 @@ fptr client_func_handler(unsigned int msgType)
         func_name = handle_echo_response;
         break;
     default:
-        sprintf(buf, "Invalid msg type of type - %d.", msgType);
-        PRINT(buf);
+        PRINT("Invalid msg type of type - %d.", msgType);
         func_name = NULL;
   }
 
@@ -61,7 +59,6 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 {
         uint8_t cl_iter;
         char *cause, *group_name;
-        char buf[50];
         mcast_client_node_t *client_node = NULL;
         client_information_t *client_info = NULL;
 
@@ -76,22 +73,22 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 
             msg_cause enum_cause = str_to_enum(cause);
 
-            sprintf(buf,"[Leave_Response: GRP - %s] Cause : %s.", group_name, cause);
-            PRINT(buf);
+            PRINT("[Leave_Response: GRP - %s] Cause : %s.", group_name, cause);
 
+            /* if cause other than ACCEPTED, ignore the response */
             if (enum_cause == ACCEPTED)
             {
                 client_node = (mcast_client_node_t *) get_client_node_by_group_name(&client_info, group_name);
 
+                /* Leave the multicast group if response cause is Accepted */
                 if (TRUE == multicast_leave(client_node->mcast_fd, client_node->group_addr)) {
-                    sprintf(buf, "Client has left multicast group %s.", group_name);
+                    PRINT("Client has left multicast group %s.", group_name);
                 } else {
-                    sprintf(buf, "[Error] Error in leaving multicast group %s.", group_name);
+                    PRINT("[Error] Error in leaving multicast group %s.", group_name);
                 }
 
-                PRINT(buf);
-                remove_group_from_client(&client_info, client_node);
-                free(client_node);
+                /* Removing group association from list */
+                deallocate_mcast_client_node(client_info, client_node);
             }
 
         }
@@ -110,7 +107,6 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
     struct sockaddr_in group_ip;
     int iter;
     char* group_name;
-    char display[30];
     unsigned int m_port;
     mcast_client_node_t node;
     int status;
@@ -131,15 +127,16 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
         
         group_name = join_response.group_ips[iter].group_name;
         m_port = join_response.group_ips[iter].grp_port;
-        
+
+        /* Join the multicast group with the groupIP present in join_response msg*/
         int mcast_fd = multicast_join(group_ip,m_port);
         
-        sprintf(display,"Listening to group %s\n", group_name);
-        PRINT(display);
+        PRINT("Listening to group %s\n", group_name);
         
         if(mcast_fd > 0){ 
             memset(&node,0,sizeof(node));
 
+            /* Register multicast FD with EPOLL for listening events.*/
             event->data.fd = mcast_fd;
             event->events = EPOLLIN|EPOLLET;
 
@@ -151,11 +148,13 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
               exit(0);
             }
             
+            /* Update the client-group association in list */
             strcpy(node.group_name,group_name);
             node.group_addr = group_ip;
             node.mcast_fd   = mcast_fd;
             node.group_port = m_port;
 
+            /* If unable to add in list, then leave the multicast group. */
             if (ADD_CLIENT_IN_LL(&client_info, &node) == FALSE)
             {
               multicast_leave(mcast_fd, group_ip);
@@ -174,7 +173,7 @@ void sendPeriodicMsg(int signal)
     while(i>0)
     {
       i--;
-      sprintf(send_msg, "%s:%s\r\n",active_group.group_name[i],msg);
+      PRINT(send_msg, "%s:%s\r\n",active_group.group_name[i],msg);
      
       PRINT("Sending periodic Request.");
       if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
@@ -336,9 +335,8 @@ void display_client_groups(client_information_t *client_info)
 
 void client_stdin_data(int fd, client_information_t *client_info)
 {
-    char read_buffer[100];
+    char read_buffer[MAXDATASIZE];
     int cnt=0;
-    char buf[50];
 
     cnt=read(fd, read_buffer, 99);
     read_buffer[cnt-1] = '\0';
@@ -364,8 +362,7 @@ void client_stdin_data(int fd, client_information_t *client_info)
        
        if (IS_GROUP_IN_CLIENT_LL(&client_info,read_buffer+11))
        {
-          sprintf(buf,"Error: Client is already member of group %s.",read_buffer+11);
-          PRINT(buf);
+          PRINT("Error: Client is already member of group %s.",read_buffer+11);
        }
        else
        {
@@ -395,14 +392,11 @@ void client_stdin_data(int fd, client_information_t *client_info)
            msg.idv.leave_req.client_id = 5;
            write_record(cfd, &msg);
 
-           sprintf(buf,"[Leave_Request: GRP - %s] Leave Group Request sent to Server.", gr_name_ptr);
-           PRINT(buf);
+           PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", gr_name_ptr);
        }
        else
        {
-          char buf[100];
-          sprintf(buf,"Error: Client is not member of group %s.", read_buffer+12);
-          PRINT(buf);
+          PRINT("Error: Client is not member of group %s.", read_buffer+12);
        }
     }
     else if (0 == strcmp(read_buffer,"cls\0"))
@@ -418,7 +412,6 @@ void client_stdin_data(int fd, client_information_t *client_info)
 
 int main(int argc, char * argv[])
 {
-    char buf[MAXDATASIZE];
     char group_name[50];
     struct addrinfo hints;
     int count = 0;
@@ -442,7 +435,7 @@ int main(int argc, char * argv[])
 
     if (argc != 4)
     {
-      printf("Usage: %s <client_IP> <client_port> <group_name>\n", argv[0]);
+      PRINT("Usage: %s <client_IP> <client_port> <group_name>\n", argv[0]);
 //      exit(1);
 //      Temporary code
       argv[1] = "127.0.0.1";
@@ -534,6 +527,9 @@ int main(int argc, char * argv[])
             {
                 comm_struct_t req;
                 fptr func;
+
+                memset(&req, 0 ,sizeof(req));
+
                 if ((func = client_func_handler(read_record(events[index].data.fd, &req))))
                 {
                     (func)(events[index].data.fd, req, client_info);
@@ -561,9 +557,7 @@ int main(int argc, char * argv[])
                 if(client_node->mcast_fd == events[index].data.fd)
                 {
                   read(events[index].data.fd, message, sizeof(message));
-                  char buffer[30];
-                  sprintf(buffer,"This Message is intended for Group %s: %s",client_node->group_name, message);
-                  PRINT(buffer);
+                  PRINT("This Message is intended for Group %s: %s",client_node->group_name, message);
                   PRINT_PROMPT("[client] ");
                 }
                 client_node =     SN_LIST_MEMBER_NEXT(client_node,                      

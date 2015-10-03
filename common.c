@@ -13,7 +13,6 @@ char* enum_to_str(msg_cause cause)
    }
 }
 
-
 msg_cause str_to_enum(char *str)
 {
     if (!strcmp(str,"ACCEPTED"))
@@ -28,14 +27,12 @@ msg_cause str_to_enum(char *str)
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
 {
   uint32_t i;
-  char buf[512];
   char remoteIP[INET_ADDRSTRLEN];
 
   for(i = 0;i < count; i++)
   {
     inet_ntop(AF_INET, &(mapping[i].grp_ip), remoteIP, INET_ADDRSTRLEN);
-    sprintf(buf,"Group name: %s \t\tIP addr: %s \t\tPort Number: %d", mapping[i].grname,remoteIP, mapping[i].port_no);
-    PRINT(buf);
+    PRINT("Group name: %s \t\tIP addr: %s \t\tPort Number: %d", mapping[i].grname,remoteIP, mapping[i].port_no);
   }
 }
 
@@ -146,6 +143,7 @@ void *get_in_addr(struct sockaddr *sa)
         return &(((struct sockaddr_in6*) sa)->sin6_addr);
     }
 }
+
 
 void display_server_clis()
 {

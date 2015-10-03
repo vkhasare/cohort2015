@@ -20,7 +20,7 @@ typedef struct {
   char *group_name;
   int number_of_clients;
   struct sockaddr_in group_addr;
-  unsigned int port_no;
+  unsigned int group_port;
   mcast_client_t *client_info;
   sn_list_element_t list_element;
 } mcast_group_node_t;
@@ -50,7 +50,7 @@ mcast_client_node_t *allocate_mcast_client_node(mcast_group_node_t **mcast_group
    }
 
    new_client_node = malloc(sizeof(mcast_client_node_t));
-//  memset(&node,0,sizeof(node));
+
    (*mcast_group_node)->number_of_clients++;
    SN_LIST_MEMBER_INSERT_HEAD(&((*mcast_group_node)->client_info->client_node),
                                new_client_node,
@@ -119,6 +119,8 @@ mcast_group_node_t *allocate_mcast_group_node(server_information_t **server_info
    new_group_node = malloc(sizeof(mcast_group_node_t));
    new_group_node->client_info = NULL;
    new_group_node->number_of_clients = 0;
+   new_group_node->group_port = INT_MAX;
+   
    SN_LIST_MEMBER_INSERT_HEAD(&((*server_info)->server_list->group_node),
                              new_group_node,
                              list_element);
@@ -228,7 +230,7 @@ void display_mcast_group_node(server_information_t **server_info)
 
      sprintf(buf,
      "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d",
-     group_node->group_name, groupIP, group_node->port_no, group_node->number_of_clients);
+     group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);
 
      SIMPLE_PRINT(buf);
 
@@ -257,7 +259,7 @@ void display_mcast_group_node_by_name(server_information_t **server_info, char *
 
       sprintf(buf,
       "\n\n\rGroup Name: %s \t Group IP: %s   Group Port: %d   Client Count: %d",
-      group_node->group_name, groupIP, group_node->port_no, group_node->number_of_clients);
+      group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);
 
       SIMPLE_PRINT(buf);
 
@@ -297,8 +299,8 @@ bool remove_client_from_mcast_group_node(server_information_t **server_info, cha
             {
                if (client_node->client_fd == target_fd)
                {
-                    SN_LIST_MEMBER_REMOVE(&(group_node->client_info->client_node), client_node, list_element);
-                    free(client_node);
+                    deallocate_mcast_client_node(group_node, client_node);
+
                     group_node->number_of_clients--;
                     return TRUE;
                }
@@ -325,7 +327,7 @@ void ADD_GROUP_IN_LL(server_information_t **server_info, char *group_name, struc
 
   group_node->group_name = group_name;
   group_node->group_addr = group_addrIP;
-  group_node->port_no = port;
+  group_node->group_port = port;
 }
 
 void ADD_CLIENT_IN_GROUP(mcast_group_node_t **group_node, struct sockaddr *addr, int infd)

@@ -6,6 +6,7 @@ typedef struct {
   sn_list_t client_node;
 } mcast_client_t;
 
+/* client node */
 typedef struct {
   char group_name[10];
   struct sockaddr_in group_addr;
@@ -14,6 +15,7 @@ typedef struct {
   sn_list_element_t list_element;
 } mcast_client_node_t;
 
+/* client info  */
 typedef struct {
   unsigned int client_fd;
   unsigned int epoll_fd;
@@ -39,6 +41,11 @@ void allocate_client_list(client_information_t **client_info)
    (*client_info)->client_list = mcast_client;
 }
 
+/* <doc>
+ * void allocate_client_info(client_information_t **client_info)
+ * Allocates and initializes the main linked list - client_info
+ * </doc>
+ */
 void allocate_client_info(client_information_t **client_info)
 {
    *client_info = (client_information_t *) malloc(sizeof(client_information_t));
@@ -48,6 +55,13 @@ void allocate_client_info(client_information_t **client_info)
    allocate_client_list(client_info);
 }
 
+/* <doc>
+ * mcast_client_node_t *allocate_mcast_client_node(client_information_t **client_info)
+ * This function allocates the node, inserts it into client_info list and 
+ * returns node to the caller.
+ * 
+ * </doc>
+ */
 mcast_client_node_t *allocate_mcast_client_node(client_information_t **client_info)
 {
    mcast_client_node_t *new_client_node = NULL;
@@ -58,11 +72,24 @@ mcast_client_node_t *allocate_mcast_client_node(client_information_t **client_in
    }
 
    new_client_node = malloc(sizeof(mcast_client_node_t));
+
+   new_client_node->group_port = -1;
+   new_client_node->mcast_fd = INT_MAX;
+   memset(&(new_client_node->group_name), '\0', sizeof(new_client_node->group_name));
+
    SN_LIST_MEMBER_INSERT_HEAD(&((*client_info)->client_list->client_node),
                              new_client_node,
                              list_element);
+
    return new_client_node;
 }
+
+/* <doc>
+ * void deallocate_mcast_client_node(client_information_t *client_info, mcast_client_node_t *node)
+ * This function removes the specied node from the client_info list.
+ * 
+ * </doc>
+ */
 
 void deallocate_mcast_client_node(client_information_t *client_info, mcast_client_node_t *node)
 {
@@ -72,7 +99,12 @@ void deallocate_mcast_client_node(client_information_t *client_info, mcast_clien
    free(node);
 }
 
-
+/* <doc>
+ * void display_mcast_client_node(client_information_t **client_info)
+ * This function traverses and prints the client_info linked list.
+ *
+ * </doc>
+ */
 void display_mcast_client_node(client_information_t **client_info)
 {
   mcast_client_node_t *client_node = NULL;
@@ -109,7 +141,13 @@ void display_mcast_client_node(client_information_t **client_info)
 
 }
 
-
+/* <doc>
+ * mcast_client_node_t* get_client_node_by_group_name(client_information_t **client_info, char *grp_name)
+ * This is the internal function, called by IS_GROUP_IN_CLIENT_LL. This function searches for the
+ * node and return it.
+ *
+ * </doc>
+ */
 mcast_client_node_t* get_client_node_by_group_name(client_information_t **client_info, char *grp_name)
 {
 
@@ -121,7 +159,7 @@ mcast_client_node_t* get_client_node_by_group_name(client_information_t **client
   while (client_node)
   {
 
-     if (strcmp(client_node->group_name,grp_name) == 0)
+     if (strncmp(client_node->group_name,grp_name,strlen(grp_name)) == 0)
      {
         break;
      }
@@ -135,12 +173,14 @@ mcast_client_node_t* get_client_node_by_group_name(client_information_t **client
 }
 
 
-void remove_group_from_client(client_information_t **client_info, mcast_client_node_t *node)
-{
-      SN_LIST_MEMBER_REMOVE(&((*client_info)->client_list->client_node), node, list_element); 
-}
-
-
+/* <doc>
+ * bool ADD_CLIENT_IN_LL(client_information_t **client_info, mcast_client_node_t *node)
+ * Add the client node in client_info list. client node contains information related
+ * to multicast group IP/port and other related information.
+ * Returns TRUE if added successfully, otherwise FALSE.
+ *
+ * </doc>
+ */
 bool ADD_CLIENT_IN_LL(client_information_t **client_info, mcast_client_node_t *node)
 {
   mcast_client_node_t *client_node = NULL;
@@ -160,7 +200,21 @@ bool ADD_CLIENT_IN_LL(client_information_t **client_info, mcast_client_node_t *n
   return FALSE;
 }
 
+/* <doc>
+ * bool IS_GROUP_IN_CLIENT_LL(client_information_t **client_info, char *group_name)
+ * Traverses the client_info list and checks for node with group_name.
+ * Returns TRUE if node is found, Otherwise FALSE.
+ *
+ * </doc>
+ */
 bool IS_GROUP_IN_CLIENT_LL(client_information_t **client_info, char *group_name)
 {
-  get_client_node_by_group_name(client_info, group_name);
+  mcast_client_node_t *client_node = NULL;
+
+  client_node = get_client_node_by_group_name(client_info, group_name);
+
+  if (client_node)
+    return TRUE;
+
+  return FALSE;
 }

@@ -16,6 +16,7 @@
 #include <sys/epoll.h>
 #include <limits.h>
 #include "comm_primitives.h"
+#include "print.h"
 
 //#define port "3490"
 #define TIMEOUT_SECS 5
@@ -29,32 +30,6 @@ extern const unsigned int max_groups;
 extern const unsigned int max_gname_len; //includes nul termination
 
 /* <doc>
- * PRINT_PROMPT(str)
- * Macro to Print cli prompt 
- *
- * where str - text to printed for prompt
- * </doc>
- */
-#define PRINT_PROMPT(str)                  \
- do {                                      \
-   write(STDOUT_FILENO,"\n",1);            \
-   write(STDOUT_FILENO,str,strlen(str));   \
- } while(0)
-
-#define PRINT(str)                         \
- do {                                      \
-   write(STDOUT_FILENO,"\n\n",2);          \
-   write(STDOUT_FILENO,"\t",1);            \
-   write(STDOUT_FILENO,str,strlen(str));   \
- } while(0)
-
-#define SIMPLE_PRINT(str)                  \
- do {                                      \
-   write(STDOUT_FILENO,str,strlen(str));   \
- } while(0)
-
-
-/* <doc>
  * EXTRACT_ARG(lastArg, type, var)
  * Macro to extract variadic parameter
  * 
@@ -63,7 +38,6 @@ extern const unsigned int max_gname_len; //includes nul termination
  *        varName - name of destination variable
  * </doc>
  */
-
 #define EXTRACT_ARG(lastArg, type, varName)     \
 ({                                              \
   va_list arguments;                            \
@@ -71,9 +45,6 @@ extern const unsigned int max_gname_len; //includes nul termination
   varName = va_arg (arguments, type);           \
   va_end (arguments);                           \
 })
-
-//#define TRUE  1
-//#define FALSE 0
 
 typedef enum {
  ACCEPTED,
@@ -96,6 +67,7 @@ int IS_CLIENT(int oper);
 //uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping, server_information_t ** server_info);
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count);
 void display_clis();
+char* enum_to_str(msg_cause cause);
+msg_cause str_to_enum(char *str);
 typedef int (*fptr)(int, comm_struct_t, ...);
-
 

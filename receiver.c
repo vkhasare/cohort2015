@@ -8,23 +8,16 @@
 #include <stdbool.h>
 #include <string.h>
 #include "common.h"
-//#include "ip_address_picking.c" 
-//#include "SLL/client_ll.h"
+
+#define MATCH_NAME(name1, name2)  (strncmp(name1, name2,2)==0)
+
 struct sockaddr_in localSock;
 struct ip_mreq group;
-//int sd;
 int datalen;
 char databuf[1024];
-#define MATCH_NAME(name1, name2)  (strncmp(name1, name2,2)==0) 
+
+/*
 bool send_join_response(int infd, grname_ip_mapping_t * map);
-
-
-/*int main(int argc, char *argv[])
-{
-char my_address[16];
-get_my_ip_address(my_address, "eth0");
-multicast_join(my_address, "226.1.1.1");
-}*/
 
 bool join_group(int infd, char * group_name, grname_ip_mapping_t * mapping, int num_groups){
    int index=0;
@@ -38,7 +31,7 @@ bool join_group(int infd, char * group_name, grname_ip_mapping_t * mapping, int 
         break;
      }
     }
-return 0;
+ return 0;
 }
 
 bool send_join_response(int infd, grname_ip_mapping_t* map){
@@ -76,12 +69,11 @@ bool join_msg(int cfd, char * group_name)
     }
     return true;
 }
-
+*/
 int multicast_join(struct sockaddr_in group_ip, unsigned int port)
 {
   int status=0;
   int sd;
-  char display[100];
   char group_ip_address[INET_ADDRSTRLEN];
 
   inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
@@ -104,8 +96,6 @@ int multicast_join(struct sockaddr_in group_ip, unsigned int port)
       close(sd);
       exit(1);
     }
-//else
-//PRINT("Setting SO_REUSEADDR...OK.\n");
   }
  
 /* Bind to the proper port number with the IP address */
@@ -121,8 +111,6 @@ int multicast_join(struct sockaddr_in group_ip, unsigned int port)
     close(sd);
     exit(1);
   }
-//else
-//PRINT("Binding datagram socket...OK.\n");
  
 /* Join the multicast group 226.1.1.1 on the local 203.106.93.94 */
 /* interface. Note that this IP_ADD_MEMBERSHIP option must be */
@@ -133,14 +121,11 @@ int multicast_join(struct sockaddr_in group_ip, unsigned int port)
 
   if(setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0)
   {
-    sprintf(display,"New group ip address=%s ",group_ip_address);
-    PRINT(display);
+    PRINT("New group ip address=%s ",group_ip_address);
     perror("Adding multicast group error");
     close(sd);
     exit(1);
   }
-//else
-//PRINT("Adding multicast group...OK.\n");
  
     status=make_socket_non_blocking(sd);
     if (status == -1)
@@ -149,40 +134,22 @@ int multicast_join(struct sockaddr_in group_ip, unsigned int port)
         exit(0);
     }
 
-    /* Read from the socket. 
-       datalen = sizeof(databuf);
-       if(read(sd, databuf, datalen) < 0)
-       {
-       perror("Reading datagram message error");
-       close(sd);
-       exit(1);
-       }
-       else
-       {
-       printf("Reading datagram message...OK.\n");
-       printf("The message from multicast server is: \"%s\"\n", databuf);
-       }*/
-
-
     return sd;
 }
 
 bool multicast_leave(int mcast_fd, struct sockaddr_in group_ip)
 {
-  char display[100];
   struct ip_mreq group;
   char group_ip_address[INET_ADDRSTRLEN];
 
   inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
 
   group.imr_multiaddr.s_addr = inet_addr(group_ip_address);
-  //group.imr_interface.s_addr = inet_addr("127.0.0.1");
   group.imr_interface.s_addr = INADDR_ANY;
 
   if(setsockopt(mcast_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char *)&group, sizeof(group)) < 0)
   {
-    sprintf(display,"Group Ip Address = %s & mcast_fd = %d",group_ip_address, mcast_fd);
-    PRINT(display);
+    PRINT("Group Ip Address = %s & mcast_fd = %d",group_ip_address, mcast_fd);
     perror("Leaving multicast group error");
     exit(1);
   }
