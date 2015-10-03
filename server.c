@@ -4,6 +4,7 @@
 grname_ip_mapping_t * mapping = NULL;
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
+unsigned int num_groups = 0; // should be removed in future, when we remove mapping array and completely migrate on LL.
 
 static int handle_join_req(const int sockfd, const comm_struct_t const req, ...);
 static int handle_echo_req(const int sockfd, const comm_struct_t const req, ...);
@@ -60,7 +61,6 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
     resp.id = leave_response;
     leave_rsp->num_groups = 1;
     leave_rsp->group_ids = MALLOC_IE(1);
-    leave_rsp->cause = MALLOC_IE(1);
     
     clientid = leave_req.client_id;
     group_name = leave_req.group_ids[0].str;
@@ -75,9 +75,7 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
     leave_rsp->group_ids[0].str = MALLOC_STR;
     strcpy(leave_rsp->group_ids[0].str,group_name);
 
-    leave_rsp->cause[0].str = MALLOC_STR;
-
-    strcpy(leave_rsp->cause[0].str, enum_to_str(cause));
+    leave_rsp->cause = cause;
 
     PRINT("[Leave_Response: GRP - %s, CL - %d] Cause: %s.",group_name, clientid, enum_to_str(cause));
 
@@ -90,7 +88,7 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
     comm_struct_t resp;
     uint8_t cl_iter, s_iter;
     char *group_name;
-
+    msg_cause cause;
     server_information_t *server_info = NULL;
 
     /* Extracting server_info from variadic args*/
@@ -100,37 +98,50 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
     join_rsp_t *join_rsp = &resp.idv.join_rsp;
 
     resp.id = join_response;
-    join_rsp->num_groups = join_req.num_groups; 
-    join_rsp->group_ips = (l_saddr_in_t *) malloc (sizeof(l_saddr_in_t) * join_req.num_groups);
+    join_rsp->num_groups = join_req.num_groups;
+    /* Initializing is must for xdr msg. */
+    join_rsp->group_ips = (l_saddr_in_t *) calloc (join_req.num_groups, sizeof(l_saddr_in_t));
     
     for(cl_iter = 0; cl_iter < join_req.num_groups; cl_iter++){
+
+        cause = REJECTED;
         group_name = join_req.group_ids[cl_iter].str;
 
-        for(s_iter = 0; s_iter < max_groups; s_iter++ ){
+        PRINT("[Join_Request: GRP - %s] Join Request Received.", group_name);
+
+        for(s_iter = 0; s_iter < num_groups; s_iter++ ){
             if(strcmp(group_name, mapping[s_iter].grname) == 0){
                 //update internal structures
                 struct sockaddr_storage addr;
                 socklen_t addr_len = sizeof addr;
-
+                
                 char ipstr[INET6_ADDRSTRLEN];
                 int pname = getpeername(sockfd, (struct sockaddr*) &addr, &addr_len);
+
+                cause = ACCEPTED;
+
                 UPDATE_GRP_CLIENT_LL(&server_info, group_name, (struct sockaddr*) &addr, sockfd);
-                
-                //add ip addr as response and break to search for next group
+
+                /* Add ip addr as response and break to search for next group. */
                 join_rsp->group_ips[cl_iter].sin_family =
-                    mapping[s_iter].grp_ip.sin_family;
+                      mapping[s_iter].grp_ip.sin_family;
                 join_rsp->group_ips[cl_iter].sin_port   =
-                    mapping[s_iter].grp_ip.sin_port;
+                      mapping[s_iter].grp_ip.sin_port;
                 join_rsp->group_ips[cl_iter].s_addr     =
-                    mapping[s_iter].grp_ip.sin_addr.s_addr;
-                join_rsp->group_ips[cl_iter].group_name =
-                    (char*) malloc(sizeof(char) * strlen(group_name) + 1);
-                strcpy(join_rsp->group_ips[cl_iter].group_name, group_name);
-                join_rsp->group_ips[cl_iter].grp_port     =
-                    mapping[s_iter].port_no;
+                      mapping[s_iter].grp_ip.sin_addr.s_addr;
+                join_rsp->group_ips[cl_iter].grp_port   =
+                     mapping[s_iter].port_no;
                 break;
             }
         }
+
+         /* cause is ACCEPTED if group is valid, otherwise REJECTED. */
+        join_rsp->group_ips[cl_iter].group_name = MALLOC_STR;
+        strcpy(join_rsp->group_ips[cl_iter].group_name, group_name);
+
+        join_rsp->group_ips[cl_iter].cause =  cause;
+
+        PRINT("[Join_Response: GRP - %s] Cause: %s.", group_name, enum_to_str(cause));
     }
     
     write_record(sockfd, &resp);
@@ -170,6 +181,7 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
         ADD_GROUP_IN_LL(&server_info,(*mapping)[i].grname,(*mapping)[i].grp_ip,(*mapping)[i].port_no);
     }
     fclose(fp);
+
   return count;
 }
 
@@ -227,7 +239,7 @@ int main(int argc, char * argv[])
     char *addr,*port;
     char *ptr;
     int group_msg[1000] = {0};
-    uint32_t num_groups;
+    //uint32_t num_groups;
     struct sockaddr_in maddr;
     char *message="Hello!!!";
     

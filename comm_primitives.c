@@ -113,26 +113,24 @@ void populate_leave_req(comm_struct_t* m, char** grnames, int num_groups){
     }
 }
 
-void populate_leave_rsp(comm_struct_t* m, char** grnames, char **cause, int num_groups){
+void populate_leave_rsp(comm_struct_t* m, char** grnames, unsigned int cause, int num_groups){
     int iter;
     m->idv.leave_rsp.num_groups = num_groups;
     m->idv.leave_rsp.group_ids = MALLOC_IE(num_groups);
+    m->idv.leave_rsp.cause = cause;
 
     for(iter = 0; iter < num_groups; iter++){
 #define MALLOC_STRING(x)    \
-m->idv.leave_rsp.group_ids[(x)].str = MALLOC_STR;  \
-m->idv.leave_rsp.cause[(x)].str = MALLOC_STR
+m->idv.leave_rsp.group_ids[(x)].str = MALLOC_STR;
 
         MALLOC_STRING(iter);
 
 #undef MALLOC_STRING
 
 #define SUBS_TXT(x) (m->idv.leave_rsp.group_ids[(x)].str)
-#define SUBS_CAUSE(x) (m->idv.leave_rsp.cause[(x)].str)
 
 
         strcpy(SUBS_TXT(iter),grnames[iter]);
-        strcpy(SUBS_CAUSE(iter),cause[iter]);
 #undef SUBS_TXT
     }
 }
@@ -192,7 +190,7 @@ bool postprocess_struct_stream(comm_struct_t* m, XDR* xdrs, bool op_res){
         ret_res = xdrrec_skiprecord (xdrs);
 //      sprintf(buf, "[I] Decode res: %d, Skip rec res: %d, ", op_res, ret_res);
 //      PRINT(buf);
-        op_res ? print_structs(m): NULL;
+//        op_res ? print_structs(m): NULL;
     }
     return ret_res;
 }
@@ -329,7 +327,7 @@ bool process_leave_req(XDR* xdrs, leave_req_t* m){
 bool process_leave_resp(XDR* xdrs, leave_rsp_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->group_ids = NULL;
-        m->cause = NULL;
+        m->cause = 0;
     }
 /*
     return (xdr_u_int(xdrs, &(m->num_groups)) &&
@@ -343,10 +341,8 @@ bool process_leave_resp(XDR* xdrs, leave_rsp_t* m){
     int gid_res = xdr_array(xdrs, (char **)&(m->group_ids), &(m->num_groups), max_groups,
                                   (sizeof(string_t)),
                                   (xdrproc_t )xdr_gname_string);
-    int c_res = xdr_array(xdrs, (char **)&(m->cause), &(m->num_groups), max_groups,
-                                (sizeof(string_t)),
-                                (xdrproc_t )xdr_gname_string);
-    return uint_res && gid_res && c_res;
+    int uint_cause = xdr_u_int(xdrs, &(m->cause));
+    return uint_res && gid_res && uint_cause;
 //  return uint_res && c_res;
 }
 
@@ -363,8 +359,9 @@ bool xdr_l_saddr_in(XDR* xdrs, l_saddr_in_t* m){
     int ushort_res = xdr_u_short(xdrs, &(m->sin_port));
     int ulong_res = xdr_u_long(xdrs, &(m->s_addr));
     int string_res = xdr_string(xdrs, &(m->group_name), max_gname_len);
+    int uint_cause = xdr_u_int(xdrs, &(m->cause));
     int uint_res = xdr_u_int(xdrs, &(m->grp_port));
-    return short_res && ushort_res && ulong_res && string_res && uint_res;
+    return short_res && ushort_res && ulong_res && string_res && uint_cause && uint_res;
 }
 
 bool process_join_resp(XDR* xdrs, join_rsp_t* m){

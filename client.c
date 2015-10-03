@@ -61,7 +61,8 @@ static
 int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 {
         uint8_t cl_iter;
-        char *cause, *group_name;
+        msg_cause enum_cause = REJECTED;
+        char *group_name;
         mcast_client_node_t *client_node = NULL;
         client_information_t *client_info = NULL;
 
@@ -72,11 +73,9 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 
         for(cl_iter = 0; cl_iter < leave_rsp.num_groups; cl_iter++){
             group_name = leave_rsp.group_ids[cl_iter].str;
-            cause = leave_rsp.cause[cl_iter].str;
+            enum_cause = leave_rsp.cause;
 
-            msg_cause enum_cause = str_to_enum(cause);
-
-            PRINT("[Leave_Response: GRP - %s] Cause : %s.", group_name, cause);
+            PRINT("[Leave_Response: GRP - %s] Cause : %s.", group_name, enum_to_str(enum_cause));
 
             /* if cause other than ACCEPTED, ignore the response */
             if (enum_cause == ACCEPTED)
@@ -114,6 +113,8 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
     mcast_client_node_t node;
     int status;
     struct epoll_event *event;
+    msg_cause enum_cause;
+
     client_information_t *client_info = NULL;
 
     /* Extracting client_info from variadic args*/
@@ -125,11 +126,22 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
     event = client_info->epoll_evt;
  
     for(iter = 0; iter < join_response.num_groups; iter++){
+        enum_cause = join_response.group_ips[iter].cause;
+
+        group_name = join_response.group_ips[iter].group_name;
+
+        if (enum_cause == REJECTED)
+        {
+            PRINT("[Join_Response: GRP - %s] Cause : %s. (Reason : Non-existent Group)", group_name, enum_to_str(enum_cause));
+            continue;
+        }
+
+        PRINT("[Join_Response: GRP - %s] Cause : %s.", group_name, enum_to_str(enum_cause));
+
         group_ip.sin_family = join_response.group_ips[iter].sin_family;
         group_ip.sin_port = join_response.group_ips[iter].sin_port;
         group_ip.sin_addr.s_addr = join_response.group_ips[iter].s_addr;
         
-        group_name = join_response.group_ips[iter].group_name;
         m_port = join_response.group_ips[iter].grp_port;
 
         /* Join the multicast group with the groupIP present in join_response msg*/
