@@ -11,10 +11,9 @@ struct keep_alive{
 };
 struct keep_alive active_group;
 
-static int handle_join_response(const int, const comm_struct_t, ...);
-static void send_echo_req(const int);
-static int handle_echo_response(const int, const comm_struct_t, ...);
-static int handle_leave_response(const int, const comm_struct_t, ...);
+extern int handle_join_response(const int, const comm_struct_t, ...);
+extern int handle_echo_response(const int, const comm_struct_t, ...);
+extern int handle_leave_response(const int, const comm_struct_t, ...);
 
 /* <doc>
  * fptr client_func_handler(unsigned int msgType)
@@ -54,7 +53,7 @@ fptr client_func_handler(unsigned int msgType)
  *  
  * </doc>
  */
-static
+//static
 int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 {
         uint8_t cl_iter;
@@ -101,7 +100,7 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
  *
  * </doc>
  */
-static
+//static
 int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
 {
     struct sockaddr_in group_ip;
@@ -211,7 +210,7 @@ void sendPeriodicMsg_XDR(int signal)
     alarm(TIMEOUT_SECS);
 }
 
-static
+//static
 void send_echo_req(int signal){
     int i=active_group.count;
     char msg[] =" I am Alive";
@@ -229,7 +228,7 @@ void send_echo_req(int signal){
     alarm(TIMEOUT_SECS);
 }
 
-static
+//static
 int handle_echo_response(const int sockfd, const comm_struct_t const req, ...){
     PRINT(req.idv.echo_resp.str);
     return 0;

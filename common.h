@@ -39,12 +39,12 @@ extern const unsigned int max_gname_len; //includes nul termination
  * </doc>
  */
 #define EXTRACT_ARG(lastArg, type, varName)     \
-({                                              \
+{                                              \
   va_list arguments;                            \
   va_start (arguments, lastArg);                \
   varName = va_arg (arguments, type);           \
   va_end (arguments);                           \
-})
+}
 
 typedef enum {
  ACCEPTED,
@@ -58,7 +58,7 @@ typedef struct grname_ip_mapping{
     unsigned int port_no;
 }grname_ip_mapping_t; 
   
-
+typedef int (*fptr)(int, comm_struct_t, ...);
 int create_and_bind(char *machine_addr, char *machine_port, int oper_mode);
 int make_socket_non_blocking (int sfd);
 void *get_in_addr(struct sockaddr *sa);
@@ -69,5 +69,8 @@ void display_mapping(grname_ip_mapping_t * mapping, uint32_t count);
 void display_clis();
 char* enum_to_str(msg_cause cause);
 msg_cause str_to_enum(char *str);
-typedef int (*fptr)(int, comm_struct_t, ...);
+int handle_join_response(const int, const comm_struct_t, ...);
+void send_echo_req(const int);
+int handle_echo_response(const int, const comm_struct_t, ...);
+int handle_leave_response(const int, const comm_struct_t, ...);
 

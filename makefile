@@ -11,7 +11,8 @@ GLOGDIRS=/root/glog-master
 BUILD=buildgflags
 MYLIBRARIES=glog
 CPP=gcc
-CPPFLAGS=-g
+CPPFLAGS=-g 
+CPPFLAGS2=-g -Werror-implicit-function-declaration
 AR=ar
 AR_OPT=cvq
 #CPPFLAGS=-g -W -O2
@@ -47,15 +48,15 @@ client: $(CLIENT)
 
 all: comm server client
 
-$(SERVER): $(SERVER_SOURCE) $(COMM_OUT)
+$(SERVER): $(SERVER_SOURCE) $(COMM_OUT) 
 	$(CPP) $(CPPFLAGS) $(SERVER_SOURCE) -o$(SERVER) $(COMM_OUT)
 #	$(CPP) $(CPPFLAGS) -I$(MYINCLUDES) $(SERVER_SOURCE) -o$(SERVER)  $(COMM_OUT) -l$(MYLIBRARIES)
 
-$(CLIENT): $(CLIENT_SOURCE) $(COMM_OUT)
+$(CLIENT): $(CLIENT_SOURCE) $(COMM_OUT) 
 
 	$(CPP) $(CPPFLAGS) $(CLIENT_SOURCE) -o$(CLIENT) $(COMM_OUT)
 
-COMM_INC = comm_primitives.h
+COMM_INC = comm_primitives.h common.h 
 COMM_SRC = comm_primitives.c 
 COMM_OUT = commprimitives.a
 COMM_OBJ = $(COMM_SRC:.c=.o)
