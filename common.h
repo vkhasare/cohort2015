@@ -39,12 +39,12 @@ extern const unsigned int max_gname_len; //includes nul termination
  * </doc>
  */
 #define EXTRACT_ARG(lastArg, type, varName)     \
-({                                              \
+{                                              \
   va_list arguments;                            \
   va_start (arguments, lastArg);                \
   varName = va_arg (arguments, type);           \
   va_end (arguments);                           \
-})
+}
 
 typedef enum {
  ACCEPTED,
