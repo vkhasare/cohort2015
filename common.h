@@ -46,6 +46,14 @@ extern const unsigned int max_gname_len; //includes nul termination
   va_end (arguments);                           \
 }
 
+/* <doc>
+ * enum msg_cause
+ * Consists of Response message cause
+ * - ACCEPTED
+ * - REJECTED
+ * - UNKNOWN
+ * </doc>
+ */
 typedef enum {
  ACCEPTED = 10,
  REJECTED = 11,
