@@ -21,6 +21,7 @@ create_build_env:
   mkdir -p ${CMAKE_BR}; \
   mkdir -p ${GFLAGS_BR}; \
   mkdir -p ${GLOG_BR}; \
+	mkdir -p ${OBJ}; \
   gcc ${SRC}/checker.c -o ${OBJ}/checker
 
 build_cmake: create_build_env 
