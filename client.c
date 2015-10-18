@@ -162,7 +162,7 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
         }
     }
 }
-
+/*Commenting as not used currently 
 void sendPeriodicMsg(int signal)
 {
     int numbytes;
@@ -210,7 +210,7 @@ void sendPeriodicMsg_XDR(int signal)
 
     alarm(TIMEOUT_SECS);
 }
-
+*/
 static
 void send_echo_req(int signal){
     int i=active_group.count;
@@ -375,7 +375,7 @@ void client_stdin_data(int fd, client_information_t *client_info)
            msg.id = join_request;
            joinReq.num_groups = 0; 
            populate_join_req(&msg, &gr_name_ptr, 1);
-           write_record(cfd, &msg);
+           write_record(client_info->client_fd, &msg);
        }
     }
     else if (strncmp(read_buffer,"leave group ",12) == 0)
@@ -390,7 +390,7 @@ void client_stdin_data(int fd, client_information_t *client_info)
            populate_leave_req(&msg, &gr_name_ptr, 1);
            /*TODO - hardcoded for now.. needs to be done when client has its unique client id.*/
            msg.idv.leave_req.client_id = 5;
-           write_record(cfd, &msg);
+           write_record(client_info->client_fd, &msg);
 
            PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", gr_name_ptr);
        }
@@ -409,7 +409,7 @@ void client_stdin_data(int fd, client_information_t *client_info)
         PRINT("Error: Unrecognized Command.\n");
     }
 }
-
+#ifndef TEST_CLIENT_C
 int main(int argc, char * argv[])
 {
     char group_name[50];
@@ -572,3 +572,4 @@ int main(int argc, char * argv[])
     
     return 0;
 }
+#endif
