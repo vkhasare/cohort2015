@@ -74,5 +74,9 @@ comm:
 	${MAKE} -f ../src/makefile comm
 
 .PHONY: build_cmake build_gflags_real
+
 clean:
+	rm -rf ${OBJ}/* ${ROOT}/server ${ROOT}/client;
+
+clean_all:
 	rm -rf ${OBJ}/* ${ROOT}/server ${ROOT}/client ${UTIL_BUILD_ROOT};
