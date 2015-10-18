@@ -14,6 +14,8 @@ OBJ=${ROOT}/obj
 #	tar -xvf ${TAR_ROOT}/gflags-2.1.2.tar -C GFLAGS_BR; 
 #	tar -xvf ${TAR_ROOT}/glog-master.tar -C GLOG_BR; 
 
+apps: comm server client 
+all: utils apps
 utils: build_gflags build_glog
 
 create_build_env:
@@ -71,9 +73,6 @@ comm:
 	cd obj/; \
 	${MAKE} -f ../src/makefile comm
 
-all: comm server client
-
 .PHONY: build_cmake build_gflags_real
-
 clean:
-	rm ${OBJ}/* ${ROOT}/server ${ROOT}/client;
+	rm -rf ${OBJ}/* ${ROOT}/server ${ROOT}/client ${UTIL_BUILD_ROOT};

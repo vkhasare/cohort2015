@@ -269,6 +269,7 @@ void sendPeriodicMsg(int signal)
 }
 */
 
+/*
 void sendPeriodicMsg_XDR(int signal)
 {
     my_struct_t m;
