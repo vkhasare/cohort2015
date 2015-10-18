@@ -35,6 +35,7 @@ typedef struct local_sockaddr_in{
     unsigned short sin_port;
     unsigned long s_addr;
     char *group_name;
+    unsigned int cause;
     unsigned int grp_port;
 }l_saddr_in_t;
 
@@ -58,7 +59,7 @@ typedef struct leave_request{
 typedef struct leave_response{
     unsigned int num_groups;
     string_t* group_ids;
-    string_t* cause;
+    unsigned int cause;
 }leave_rsp_t;
 
 typedef struct my_struct{

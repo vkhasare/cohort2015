@@ -46,10 +46,18 @@ extern const unsigned int max_gname_len; //includes nul termination
   va_end (arguments);                           \
 }
 
+/* <doc>
+ * enum msg_cause
+ * Consists of Response message cause
+ * - ACCEPTED
+ * - REJECTED
+ * - UNKNOWN
+ * </doc>
+ */
 typedef enum {
- ACCEPTED,
- REJECTED,
- UNKNOWN
+ ACCEPTED = 10,
+ REJECTED = 11,
+ UNKNOWN  = 12
 } msg_cause;
 
 typedef struct grname_ip_mapping{

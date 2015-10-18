@@ -1,75 +1,79 @@
-#SOURCE=server.c common.h logg.h
-SERVER_SOURCE=sn_ll.c server.c common.c receiver.c
-CLIENT_SOURCE=sn_ll.c client.c common.c receiver.c
-SERVER=server
-CLIENT=client
-MYINCLUDES=/usr/local/lib
-CMAKE_PATH=${PWD}/cmake-2.8.11
-GFLAGDIRS=/root/gflags-2.1.2
-CMAKEDIRS=/root/cmake-2.8.11
-GLOGDIRS=/root/glog-master
-BUILD=buildgflags
-MYLIBRARIES=glog
-CPP=gcc
-CPPFLAGS=-g
-AR=ar
-AR_OPT=cvq
-#CPPFLAGS=-g -W -O2
+SHELL := /bin/bash
+ROOT=${PWD}
+TAR_ROOT=${ROOT}/utility
+UTIL_BUILD_ROOT=${TAR_ROOT}/builddirs
+CMAKE_BR=${UTIL_BUILD_ROOT}/cmake
+GLOG_BR=${UTIL_BUILD_ROOT}/glog
+GFLAGS_BR=${UTIL_BUILD_ROOT}/gflags
 
+SRC=${ROOT}/src
+INCLUDE=${ROOT}/include
+OBJ=${ROOT}/obj
 
-build_cmake: 
-	cp -r ${PWD}/utility/cmake-2.8.11.tar /root/; cd /root; tar -xvf cmake-2.8.11.tar; cd $(CMAKEDIRS) \
-          ./configure; \
-    make && make install; \
-    rm /usr/bin/cmake; \
-    ln -s /usr/local/bin/cmake /usr/bin/cmake; \
+# cd ${UTIL_BUILD_ROOT}
+#	tar -xvf ${TAR_ROOT}/gflags-2.1.2.tar -C GFLAGS_BR; 
+#	tar -xvf ${TAR_ROOT}/glog-master.tar -C GLOG_BR; 
 
+utils: build_gflags build_glog
 
-build_gflags: 
-	cp -r ${PWD}/utility/gflags-2.1.2.tar /root/; cd /root; tar -xvf gflags-2.1.2.tar; cd $(GFLAGDIRS) \
-	mkdir $(BUILD); \
-    for subdir in $(BUILD); do\
-    cd $$subdir; \
-    ccmake ..; \
-    make && make install; \
-    sudo ldconfig; \
-    done
+create_build_env:
+	mkdir -p ${UTIL_BUILD_ROOT}; \
+  mkdir -p ${CMAKE_BR}; \
+  mkdir -p ${GFLAGS_BR}; \
+  mkdir -p ${GLOG_BR}; \
+	mkdir -p ${OBJ}; \
+  gcc ${SRC}/checker.c -o ${OBJ}/checker
 
-build_glog:
-	cp -r ${PWD}/utility/glog-master.tar /root/; cd /root; tar -xvf glog-master.tar; cd $(GLOGDIRS) \
-          ./configure; \
-        make && make install; \
+build_cmake: create_build_env 
+	(${OBJ}/checker cmake && ${MAKE} build_gflags_real) || ( \
+	${OBJ}/checker /router/bin/cmake && \
+  ([ $$? -eq 0 ] && export PATH=${PATH}:/router/bin && ${MAKE} build_gflags_real ) || ( \
+	cd ${CMAKE_BR} && ${TAR_ROOT}/cmake-2.8.11/configure --prefix=${CMAKE_BR}; \
+  make && make install; \
+  export PATH=${PATH}:${CMAKE_BR}/bin; \
+	cd ${ROOT}; ${MAKE} build_gflags_real; ))
 
-server: $(SERVER)
-client: $(CLIENT)
+build_gflags_real: create_build_env 
+	cd ${GFLAGS_BR}; \
+	cmake ${TAR_ROOT}/gflags-2.1.2 -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=ON \
+	-DCMAKE_BUILD_TYPE=Debug \
+	-DCMAKE_INSTALL_PREFIX=${GFLAGS_BR} -DLIBRARY_INSTALL_DIR=${GFLAGS_BR}/lib; \
+	make && make install;
+
+build_gflags:
+	${MAKE} build_cmake;
+
+build_glog: create_build_env build_gflags
+	export CPPFLAGS=-I${GFLAGS_BR}/include; \
+	export LDFLAGS=-L${GFLAGS_BR}/lib; \
+	LIBS=-lgflags; \
+	cd ${GLOG_BR}; \
+	${TAR_ROOT}/glog-master/configure --prefix=${GLOG_BR} --exec-prefix=${GLOG_BR} --datadir=${GLOG_BR} --docdir=${GLOG_BR} --oldincludedir=${GLOG_BR}; \
+	make && make install; \
+	unset LIBS CPPFLAGS LDFLAGS;
 
 #all: build_cmake build_gflags build_glog comm server client
+server:
+	export GLOG_BR=${GLOG_BR} GFLAGS_BR=${GFLAGS_BR} INCLUDE=${INCLUDE} \
+	SRC=${SRC} OBJ=${OBJ}; \
+	cd obj/; \
+	${MAKE} -f ../src/makefile server
+
+client:
+	export GLOG_BR=${GLOG_BR} GFLAGS_BR=${GFLAGS_BR} INCLUDE=${INCLUDE} \
+	SRC=${SRC} OBJ=${OBJ}; \
+	cd obj/; \
+	${MAKE} -f ../src/makefile client
+
+comm:
+	export GLOG_BR=${GLOG_BR} GFLAGS_BR=${GFLAGS_BR} INCLUDE=${INCLUDE} \
+	SRC=${SRC} OBJ=${OBJ}; \
+	cd obj/; \
+	${MAKE} -f ../src/makefile comm
 
 all: comm server client
 
-$(SERVER): $(SERVER_SOURCE) $(COMM_OUT)
-	$(CPP) $(CPPFLAGS) $(SERVER_SOURCE) -o$(SERVER) $(COMM_OUT)
-#	$(CPP) $(CPPFLAGS) -I$(MYINCLUDES) $(SERVER_SOURCE) -o$(SERVER)  $(COMM_OUT) -l$(MYLIBRARIES)
-
-$(CLIENT): $(CLIENT_SOURCE) $(COMM_OUT)
-
-	$(CPP) $(CPPFLAGS) $(CLIENT_SOURCE) -o$(CLIENT) $(COMM_OUT)
-
-COMM_INC = comm_primitives.h
-COMM_SRC = comm_primitives.c 
-COMM_OUT = commprimitives.a
-COMM_OBJ = $(COMM_SRC:.c=.o)
-comm : $(COMM_OUT)
-
-$(COMM_OBJ) : $(COMM_SOURCE)
-	$(CPP) $(CPPFLAGS) -c $(COMM_SRC)
-
-$(COMM_OUT) : $(COMM_OBJ)
-	$(AR) $(AR_OPT) $(COMM_OUT) $(COMM_OBJ)
-	rm -f $(COMM_OBJ)
+.PHONY: build_cmake build_gflags_real
 
 clean:
-	rm -f $(SERVER)
-	rm -f $(CLIENT)
-	rm -f $(COMM_OBJ) $(COMM_OUT)
-	rm -f *.h.gch
+	rm ${OBJ}/* ${ROOT}/server ${ROOT}/client;

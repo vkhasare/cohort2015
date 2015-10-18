@@ -1,7 +1,7 @@
 #include "common.h"
 #include "SLL/client_ll.h"
 
-int cfd;
+int cfd; /* Required for event handler */
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 
@@ -15,6 +15,9 @@ static int handle_join_response(const int, const comm_struct_t, ...);
 static void send_echo_req(const int);
 static int handle_echo_response(const int, const comm_struct_t, ...);
 static int handle_leave_response(const int, const comm_struct_t, ...);
+fptr client_func_handler(unsigned int);
+static void send_join_group_req(client_information_t *, char *);
+static void send_leave_group_req(client_information_t *, char *);
 
 /* <doc>
  * fptr client_func_handler(unsigned int msgType)
@@ -58,7 +61,8 @@ static
 int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 {
         uint8_t cl_iter;
-        char *cause, *group_name;
+        msg_cause enum_cause = REJECTED;
+        char *group_name;
         mcast_client_node_t *client_node = NULL;
         client_information_t *client_info = NULL;
 
@@ -69,11 +73,9 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
 
         for(cl_iter = 0; cl_iter < leave_rsp.num_groups; cl_iter++){
             group_name = leave_rsp.group_ids[cl_iter].str;
-            cause = leave_rsp.cause[cl_iter].str;
+            enum_cause = leave_rsp.cause;
 
-            msg_cause enum_cause = str_to_enum(cause);
-
-            PRINT("[Leave_Response: GRP - %s] Cause : %s.", group_name, cause);
+            PRINT("[Leave_Response: GRP - %s] Cause : %s.", group_name, enum_to_str(enum_cause));
 
             /* if cause other than ACCEPTED, ignore the response */
             if (enum_cause == ACCEPTED)
@@ -111,6 +113,8 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
     mcast_client_node_t node;
     int status;
     struct epoll_event *event;
+    msg_cause enum_cause;
+
     client_information_t *client_info = NULL;
 
     /* Extracting client_info from variadic args*/
@@ -118,14 +122,26 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
 
     join_rsp_t join_response = resp.idv.join_rsp; 
 
+    /* Pointer to epoll event structure */
     event = client_info->epoll_evt;
  
     for(iter = 0; iter < join_response.num_groups; iter++){
+        enum_cause = join_response.group_ips[iter].cause;
+
+        group_name = join_response.group_ips[iter].group_name;
+
+        if (enum_cause == REJECTED)
+        {
+            PRINT("[Join_Response: GRP - %s] Cause : %s. (Reason : Non-existent Group)", group_name, enum_to_str(enum_cause));
+            continue;
+        }
+
+        PRINT("[Join_Response: GRP - %s] Cause : %s.", group_name, enum_to_str(enum_cause));
+
         group_ip.sin_family = join_response.group_ips[iter].sin_family;
         group_ip.sin_port = join_response.group_ips[iter].sin_port;
         group_ip.sin_addr.s_addr = join_response.group_ips[iter].s_addr;
         
-        group_name = join_response.group_ips[iter].group_name;
         m_port = join_response.group_ips[iter].grp_port;
 
         /* Join the multicast group with the groupIP present in join_response msg*/
@@ -162,6 +178,73 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
         }
     }
 }
+
+/* <doc>
+ * static void send_join_group_req(client_information_t *client_info, char *group_name)
+ * This function creates Group Join Request message and sends to server. It accepts
+ * group name as input and relays message on client fd. 
+ * Request will not be relayed if client is already member of group.
+ *
+ * </doc>
+ */
+static void send_join_group_req(client_information_t *client_info, char *group_name)
+{
+
+       /* If client has already joined requested group, then no need to send join request*/
+       if (IS_GROUP_IN_CLIENT_LL(&client_info,group_name))
+       {
+          PRINT("Error: Client is already member of group %s.",group_name);
+       }
+       else
+       {
+          comm_struct_t msg;
+
+          msg.id = join_request;
+          /* Sending join request for 1 group*/
+          populate_join_req(&msg, &group_name, 1);
+          write_record(client_info->client_fd, &msg);
+
+          PRINT("[Join_Request: GRP - %s] Join Group Request sent to Server.", group_name);
+       }
+
+}
+
+/* <doc>
+ * static void send_leave_group_req(client_information_t *client_info, char *group_name)
+ * This function creates Group Leave Request message and sends to server. It accepts
+ * group name as input and relays message on client fd.
+ * Request will not be relayed if client is not member of group.
+ *
+ * </doc>
+ */
+static void send_leave_group_req(client_information_t *client_info, char *group_name)
+{
+
+       /* If client is member of requested group, then only send leave request */
+       if (IS_GROUP_IN_CLIENT_LL(&client_info, group_name))
+       {
+           comm_struct_t msg;
+
+           msg.id = leave_request;
+           /* Sending leave request for 1 group*/
+           populate_leave_req(&msg, &group_name, 1);
+           /*TODO - hardcoded for now.. needs to be done when client has its unique client id.*/
+           msg.idv.leave_req.client_id = 5;
+           write_record(client_info->client_fd, &msg);
+
+           PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", group_name);
+       }
+       else
+       {
+           /* client is not member of request group */
+           PRINT("Error: Client is not member of group %s.", group_name);
+       }
+
+}
+
+
+
+
 /*Commenting as not used currently 
 void sendPeriodicMsg(int signal)
 {
@@ -184,7 +267,7 @@ void sendPeriodicMsg(int signal)
 
     alarm(TIMEOUT_SECS);
 }
-
+*/
 
 void sendPeriodicMsg_XDR(int signal)
 {
@@ -294,7 +377,6 @@ void startKeepAlive(char * gname)
  *
  * </doc>
  */
-
 void stopKeepAlive()
 {
     int i = 0;
@@ -315,7 +397,6 @@ void stopKeepAlive()
  *
  * </doc>
  */
-
 void display_client_clis()
 {
    PRINT("show client groups                           --  displays list of groups joined by client");
@@ -326,19 +407,30 @@ void display_client_clis()
    PRINT("cls                                          --  Clears the screen");
 }
 
+/* <doc>
+ * void display_client_groups(client_information_t *client_info)
+ * Prints list of all groups which client has joined.
+ * 
+ * </doc>
+ */
 void display_client_groups(client_information_t *client_info)
 {
   display_mcast_client_node(&client_info);
 }
 
-/* Function for handling input from STDIN */
-
+/* <doc>
+ * void client_stdin_data(int fd, client_information_t *client_info)
+ * Function for handling input from STDIN. Input can be any cli
+ * command and respective handlers are then invoked.
+ *
+ * </doc>
+ */
 void client_stdin_data(int fd, client_information_t *client_info)
 {
     char read_buffer[MAXDATASIZE];
-    int cnt=0;
+    int cnt = 0;
 
-    cnt=read(fd, read_buffer, 99);
+    cnt = read(fd, read_buffer, MAXDATASIZE-1);
     read_buffer[cnt-1] = '\0';
 
     if (0 == strncmp(read_buffer,"show help",9))
@@ -359,7 +451,6 @@ void client_stdin_data(int fd, client_information_t *client_info)
     }
     else if (strncmp(read_buffer,"join group ",11) == 0)
     {
-       
        if (IS_GROUP_IN_CLIENT_LL(&client_info,read_buffer+11))
        {
           PRINT("Error: Client is already member of group %s.",read_buffer+11);
@@ -398,6 +489,11 @@ void client_stdin_data(int fd, client_information_t *client_info)
        {
           PRINT("Error: Client is not member of group %s.", read_buffer+12);
        }
+       send_join_group_req(client_info, read_buffer+11);   
+    }
+    else if (strncmp(read_buffer,"leave group ",12) == 0)
+    {
+       send_leave_group_req(client_info, read_buffer+12);
     }
     else if (0 == strcmp(read_buffer,"cls\0"))
     {
@@ -405,11 +501,25 @@ void client_stdin_data(int fd, client_information_t *client_info)
     }
     else
     {
+      /* If not a valid cli */
       if (cnt != 1 && read_buffer[0] != '\n')
         PRINT("Error: Unrecognized Command.\n");
     }
 }
+
 #ifndef TEST_CLIENT_C
+
+/* <doc>
+ * int main(int argc, char * argv[])
+ * Main function of Client. Socket connection is created and 
+ * registered with the epoll. Whenever any event comes, appropriate
+ * action is taken. Events can be of 3 types -
+ * 1. Event on client socket
+ * 2. Cli command Event
+ * 3. Event meant for client listening on multicast socket
+ * 
+ * </doc>
+ */
 int main(int argc, char * argv[])
 {
     char group_name[50];
@@ -431,6 +541,7 @@ int main(int argc, char * argv[])
 
     client_information_t *client_info = NULL;
 
+    /* Allocates client_info */
     allocate_client_info(&client_info);
 
     if (argc != 4)
@@ -447,6 +558,7 @@ int main(int argc, char * argv[])
     port = argv[2];
     strcpy(group_name,argv[3]);
 
+    /* Creating Client socket*/
     cfd = create_and_bind(addr, port, CLIENT_MODE);
 
     if (cfd == -1)
@@ -455,6 +567,7 @@ int main(int argc, char * argv[])
         exit(0);
     }
 
+    /* Socket is made non-blocking */
     status = make_socket_non_blocking(cfd);
 
     if (status == -1)
@@ -468,8 +581,10 @@ int main(int argc, char * argv[])
 
     PRINT_PROMPT("[client] ");
 
+    /* epoll socket is created */
     efd = epoll_create(MAXEVENTS);
 
+    /* Update client_info with client/epoll FD and epoll event structure */
     client_info->client_fd = cfd; 
     client_info->epoll_fd = efd;
     client_info->epoll_evt = &event;
@@ -483,6 +598,7 @@ int main(int argc, char * argv[])
     event.data.fd = cfd;
     event.events = EPOLLIN|EPOLLET;
 
+    /* Register client FD with epoll*/
     status = epoll_ctl(efd, EPOLL_CTL_ADD, cfd, &event);
 
     if ( status == -1)
@@ -494,6 +610,7 @@ int main(int argc, char * argv[])
     event.data.fd = STDIN_FILENO;
     event.events = EPOLLIN|EPOLLET;
 
+    /* Register STDIN with epoll */
     status = epoll_ctl(efd, EPOLL_CTL_ADD, STDIN_FILENO, &event);
 
     if ( status == -1)
@@ -503,10 +620,11 @@ int main(int argc, char * argv[])
     }
 
     events = calloc(MAXEVENTS, sizeof(event));
-   
+  
+    /* CLient takes program argument as group_name, creates join request
+     * and joins the multiple groups */ 
     char * gname=strtok(group_name,",");
     char * gr_list[max_groups];
-
     comm_struct_t m; int iter = 0;
 
     m.id = join_request;
@@ -518,7 +636,8 @@ int main(int argc, char * argv[])
     populate_join_req(&m, gr_list, iter);
     write_record(cfd, &m);
 
-    while (1) {
+    while (TRUE) {
+        /* Listening for epoll events*/
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
         for (index = 0; index < event_count; index++) {
@@ -530,6 +649,10 @@ int main(int argc, char * argv[])
 
                 memset(&req, 0 ,sizeof(req));
 
+                /* read_record reads data on events[index].data.fd and fills req struct.
+                 * client_func_handler then returns function to handle the req depending
+                 * upon req msg type. Once function handler name is received, it is invoked.
+                 */
                 if ((func = client_func_handler(read_record(events[index].data.fd, &req))))
                 {
                     (func)(events[index].data.fd, req, client_info);
@@ -539,6 +662,7 @@ int main(int argc, char * argv[])
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd)
             {
+                /* Invoking function to recognize the cli fired and call its appropriate handler */
                 client_stdin_data(events[index].data.fd, client_info);
 
                 PRINT_PROMPT("[client] ");
@@ -567,7 +691,8 @@ int main(int argc, char * argv[])
             }
         }
     }
-    
+
+    /* close the client socket*/    
     close(cfd);
     
     return 0;
