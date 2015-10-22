@@ -452,45 +452,7 @@ void client_stdin_data(int fd, client_information_t *client_info)
     }
     else if (strncmp(read_buffer,"join group ",11) == 0)
     {
-       if (IS_GROUP_IN_CLIENT_LL(&client_info,read_buffer+11))
-       {
-          PRINT("Error: Client is already member of group %s.",read_buffer+11);
-       }
-       else
-       {
-           comm_struct_t msg;
-           join_req_t joinReq;
-
-           char * gr_name_ptr = read_buffer+11;
-
-           joinReq = msg.idv.join_req;
-           msg.id = join_request;
-           joinReq.num_groups = 0; 
-           populate_join_req(&msg, &gr_name_ptr, 1);
-           write_record(client_info->client_fd, &msg);
-       }
-    }
-    else if (strncmp(read_buffer,"leave group ",12) == 0)
-    {
-
-       if (IS_GROUP_IN_CLIENT_LL(&client_info, read_buffer+12))
-       {
-           comm_struct_t msg;
-           char * gr_name_ptr = read_buffer+12;
-
-           msg.id = leave_request;
-           populate_leave_req(&msg, &gr_name_ptr, 1);
-           /*TODO - hardcoded for now.. needs to be done when client has its unique client id.*/
-           msg.idv.leave_req.client_id = 5;
-           write_record(client_info->client_fd, &msg);
-
-           PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", gr_name_ptr);
-       }
-       else
-       {
-          PRINT("Error: Client is not member of group %s.", read_buffer+12);
-       }
-       send_join_group_req(client_info, read_buffer+11);   
+       send_join_group_req(client_info, read_buffer+11);
     }
     else if (strncmp(read_buffer,"leave group ",12) == 0)
     {
