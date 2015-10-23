@@ -317,7 +317,6 @@ bool process_leave_req(XDR* xdrs, leave_req_t* m){
     }
 
     return (xdr_u_int(xdrs, &(m->num_groups)) &&
-            xdr_u_int(xdrs, &(m->client_id))  &&
             xdr_array(xdrs, (char **)&(m->group_ids), &(m->num_groups), max_groups,
                              (sizeof(string_t)),
                              (xdrproc_t )xdr_gname_string));

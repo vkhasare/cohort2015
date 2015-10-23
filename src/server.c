@@ -41,6 +41,14 @@ fptr server_func_handler(unsigned int msgType)
   return func_name;
 }
 
+/* <doc>
+ * static
+ * int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
+ * Server processes Group Leave Request of client and responds back to
+ * client with the appropriate cause.
+ *
+ * </doc>
+ */ 
 static
 int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
 {
@@ -49,8 +57,10 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
     char *group_name;
     msg_cause cause = REJECTED;
     bool found;
-    int clientid;
     server_information_t *server_info = NULL;
+    unsigned int clientID = 0;
+    RBT_tree *tree = NULL;
+    RBT_node *rbNode = NULL;
 
     /* Extracting server_info from variadic args*/
     EXTRACT_ARG(req, server_information_t*, server_info);
@@ -62,14 +72,39 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
     leave_rsp->num_groups = 1;
     leave_rsp->group_ids = MALLOC_IE(1);
     
-    clientid = leave_req.client_id;
     group_name = leave_req.group_ids[0].str;
 
-    PRINT("[Leave_Request: GRP - %s, CL - %d] Leave Request Received.", group_name, clientid);
+/*This will go off when udp comes, addr shud be read from pdu.*/
+    struct sockaddr_storage addr;
+    socklen_t addr_len = sizeof addr;
 
-    if (remove_client_from_mcast_group_node(&server_info, group_name, clientid))
+    char ipstr[INET6_ADDRSTRLEN];
+    int pname = getpeername(sockfd, (struct sockaddr*) &addr, &addr_len);
+/*till here*/
+
+    clientID = calc_key((struct sockaddr*) &addr);
+
+    PRINT("[Leave_Request: GRP - %s, CL - %d] Leave Request Received.", group_name, clientID);
+
+    if (remove_client_from_mcast_group_node(&server_info, group_name, clientID))
     {
+       RBT_tree* tree = NULL;
+       RBT_node *rbNode = NULL;
+
        cause = ACCEPTED;
+
+       tree = (RBT_tree*) server_info->client_list_head;
+
+       if (clientID > 0) {
+           rbNode = RBExactQuery(tree, clientID);
+           /* Add in RBT if it is a new client, else update the grp list of client */
+           if (rbNode) {
+                /*Free up group list as well*/
+               //// 
+                /*Remove node from tree group count is zero.*/
+                //RBDelete(tree, rbNode);
+           }
+       } 
     }
 
     leave_rsp->group_ids[0].str = MALLOC_STR;
@@ -77,12 +112,20 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
 
     leave_rsp->cause = cause;
 
-    PRINT("[Leave_Response: GRP - %s, CL - %d] Cause: %s.",group_name, clientid, enum_to_str(cause));
+    PRINT("[Leave_Response: GRP - %s, CL - %d] Cause: %s.",group_name, clientID, enum_to_str(cause));
 
     write_record(sockfd, &resp);
     return 0;
 }
 
+/* <doc>
+ * static
+ * int handle_join_req(const int sockfd, const comm_struct_t const req, ...)
+ * Server processes Group Join Request of client and responds back to
+ * client with the appropriate cause.
+ *
+ * </doc>
+ */
 static
 int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
     comm_struct_t resp;
@@ -90,6 +133,9 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
     char *group_name;
     msg_cause cause;
     server_information_t *server_info = NULL;
+    unsigned int clientID = 0;
+    RBT_tree *tree = NULL;
+    RBT_node *newNode = NULL;
 
     /* Extracting server_info from variadic args*/
     EXTRACT_ARG(req, server_information_t*, server_info);
@@ -112,15 +158,39 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
         for(s_iter = 0; s_iter < num_groups; s_iter++ ){
             if(strcmp(group_name, mapping[s_iter].grname) == 0){
                 //update internal structures
+
+/*This will go off when udp comes, addr shud be read from pdu.*/
                 struct sockaddr_storage addr;
                 socklen_t addr_len = sizeof addr;
                 
                 char ipstr[INET6_ADDRSTRLEN];
                 int pname = getpeername(sockfd, (struct sockaddr*) &addr, &addr_len);
+/*till here*/
 
                 cause = ACCEPTED;
 
-                UPDATE_GRP_CLIENT_LL(&server_info, group_name, (struct sockaddr*) &addr, sockfd);
+                clientID = calc_key((struct sockaddr*) &addr);
+
+                /*Add in group linked list*/
+                UPDATE_GRP_CLIENT_LL(&server_info, group_name, (struct sockaddr*) &addr, clientID);
+
+                /*Add in Client RBT*/
+                tree = (RBT_tree*) server_info->client_list_head;
+
+                if (clientID > 0) {
+                   mcast_group_node_t *group_node = get_group_node_by_name(server_info,group_name);
+
+                   newNode = RBExactQuery(tree, clientID);
+                   /* Add in RBT if it is a new client, else update the grp list of client */
+                   if (!newNode) {
+                       RBTreeInsert(tree, clientID, (struct sockaddr*) &addr, 0, FREE);
+                   } else {
+                      /* Update group_list of the client node */ 
+                   }
+                }
+
+//commenting for now
+//                RBTreePrint(tree);
 
                 /* Add ip addr as response and break to search for next group. */
                 join_rsp->group_ips[cl_iter].sin_family =
@@ -224,6 +294,17 @@ void display_group_info(server_information_t *server_info)
 }
 
 
+int IntComp(unsigned a,unsigned int b) {
+  if( a > b) return(1);
+  if( a < b) return(-1);
+  return(0);
+}
+
+void IntPrint(unsigned int a) {
+  PRINT("number - %u", a);
+}
+
+
 int main(int argc, char * argv[])
 {
     int sfd, efd, status, msfd;
@@ -233,6 +314,7 @@ int main(int argc, char * argv[])
 
     int active_clients = 0;
     server_information_t *server_info = NULL;
+    RBT_tree* tree = NULL;
 
     struct sockaddr_storage their_addr;
     socklen_t sin_size;
@@ -244,6 +326,9 @@ int main(int argc, char * argv[])
     char *message="Hello!!!";
     
     allocate_server_info(&server_info);
+
+    tree = RBTreeCreate(IntComp,NullFunction,NullFunction,IntPrint,NullFunction);
+    server_info->client_list_head = tree;
 
     num_groups = initialize_mapping("src/ip_mappings.txt", &mapping,server_info);
     

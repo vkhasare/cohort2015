@@ -229,7 +229,6 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
            /* Sending leave request for 1 group*/
            populate_leave_req(&msg, &group_name, 1);
            /*TODO - hardcoded for now.. needs to be done when client has its unique client id.*/
-           msg.idv.leave_req.client_id = 5;
            write_record(client_info->client_fd, &msg);
 
            PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", group_name);
@@ -509,7 +508,7 @@ int main(int argc, char * argv[])
 
     if (argc != 4)
     {
-      PRINT("Usage: %s <client_IP> <client_port> <group_name>\n", argv[0]);
+      PRINT("Usage: %s <server_IP> <server_port> <group_name>\n", argv[0]);
 //      exit(1);
 //      Temporary code
       argv[1] = "127.0.0.1";

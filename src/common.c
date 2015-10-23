@@ -144,6 +144,21 @@ void *get_in_addr(struct sockaddr *sa)
     }
 }
 
+/* <doc>
+ * inline int calc_key(struct sockaddr *addr)
+ * calc_key returns the key based on IP address.
+ *
+ * </doc>
+ */
+inline int
+calc_key(struct sockaddr *addr)
+{
+  if (addr && addr->sa_family == AF_INET)
+    return (((struct sockaddr_in*) addr)->sin_addr.s_addr);
+
+  return 0;
+}
+
 
 void display_server_clis()
 {
@@ -154,5 +169,4 @@ void display_server_clis()
   PRINT("send msg <group_name>              --  Sends a multicast message to the specified Group");
   PRINT("cls                                --  Clears the screen");
 }
-
 

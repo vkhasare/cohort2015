@@ -1,38 +1,5 @@
 
-#include "header.h"
-#include "sn_ll.h"
-
-typedef struct {
-  sn_list_t client_node;
-} mcast_client_t;
-
-/*Client Node*/
-typedef struct {
-  int client_fd;
-  struct sockaddr *client_addr;
-  sn_list_element_t list_element;
-} mcast_client_node_t;
-
-typedef struct {
-  sn_list_t group_node;
-} mcast_group_t;
-
-/*Group Node*/
-typedef struct {
-  char *group_name;
-  int number_of_clients;
-  struct sockaddr_in group_addr;
-  unsigned int group_port;
-  mcast_client_t *client_info;
-  sn_list_element_t list_element;
-} mcast_group_node_t;
-
-/*Server Info*/
-typedef struct {
-  mcast_group_t *server_list;
-} server_information_t;
-
-sn_list_element_t list_element;
+#include "../server_DS.h"
 
 void allocate_mcast_client_list(mcast_group_node_t **mcast_group_node)
 {
@@ -241,7 +208,7 @@ void display_mcast_client_node(mcast_group_node_t **group_node)
       inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_node->client_addr)), ipaddr, INET6_ADDRSTRLEN);
 
       sprintf(buf,
-      "\n\tClient Address: %s \t Client FD: %d",
+      "\n\tClient Address: %s \t Client FD: %u",
       ipaddr, client_node->client_fd);
 
       SIMPLE_PRINT(buf);
@@ -335,7 +302,7 @@ void display_mcast_group_node_by_name(server_information_t **server_info, char *
  * Return TRUE if successful, otherwise FALSE.
  * </doc>
  */
-bool remove_client_from_mcast_group_node(server_information_t **server_info, char *grp_name, int target_fd)
+bool remove_client_from_mcast_group_node(server_information_t **server_info, char *grp_name, unsigned int target_fd)
 {
   char buf[100];
   char groupIP[INET_ADDRSTRLEN];
@@ -393,12 +360,12 @@ void ADD_GROUP_IN_LL(server_information_t **server_info, char *group_name, struc
 }
 
 /* Invoked internally by UPDATE_GRP_CLIENT_LL*/
-void ADD_CLIENT_IN_GROUP(mcast_group_node_t **group_node, struct sockaddr *addr, int infd)
+void ADD_CLIENT_IN_GROUP(mcast_group_node_t **group_node, struct sockaddr *addr, unsigned int client_id)
 {
   mcast_client_node_t *client_node = NULL;
   client_node = allocate_mcast_client_node(group_node);
   memcpy(&(client_node->client_addr),addr,sizeof(addr));
-  client_node->client_fd = infd;
+  client_node->client_fd = client_id;
 }
 
 /* <doc>
@@ -407,12 +374,12 @@ void ADD_CLIENT_IN_GROUP(mcast_group_node_t **group_node, struct sockaddr *addr,
  * to socket address and socket FD.
  * </doc>
  */
-void UPDATE_GRP_CLIENT_LL(server_information_t **server_info, char *grp_name, struct sockaddr *addr, int infd)
+void UPDATE_GRP_CLIENT_LL(server_information_t **server_info, char *grp_name, struct sockaddr *addr, unsigned int client_id)
 {
    mcast_group_node_t *group_node = get_group_node_by_name(server_info,grp_name);
 
    if (group_node)
    {
-     ADD_CLIENT_IN_GROUP(&group_node, addr, infd);
+     ADD_CLIENT_IN_GROUP(&group_node, addr, client_id);
    }
 }

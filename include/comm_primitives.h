@@ -52,7 +52,6 @@ typedef struct join_response{
 
 typedef struct leave_request{
     unsigned int num_groups;
-    unsigned int client_id;
     string_t* group_ids;
 }leave_req_t;
 
