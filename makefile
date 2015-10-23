@@ -5,6 +5,7 @@ UTIL_BUILD_ROOT=${TAR_ROOT}/builddirs
 CMAKE_BR=${UTIL_BUILD_ROOT}/cmake
 GLOG_BR=${UTIL_BUILD_ROOT}/glog
 GFLAGS_BR=${UTIL_BUILD_ROOT}/gflags
+STRIPPED=0
 
 SRC=${ROOT}/src
 INCLUDE=${ROOT}/include
@@ -55,25 +56,42 @@ build_glog: create_build_env build_gflags
 	unset LIBS CPPFLAGS LDFLAGS;
 
 #all: build_cmake build_gflags build_glog comm server client
-server:
+server_full:
 	export GLOG_BR=${GLOG_BR} GFLAGS_BR=${GFLAGS_BR} INCLUDE=${INCLUDE} \
 	SRC=${SRC} OBJ=${OBJ}; \
-	cd obj/; \
+	cd ${OBJ}; \
 	${MAKE} -f ../src/makefile server
 
-client:
+client_full:
 	export GLOG_BR=${GLOG_BR} GFLAGS_BR=${GFLAGS_BR} INCLUDE=${INCLUDE} \
 	SRC=${SRC} OBJ=${OBJ}; \
-	cd obj/; \
+	cd ${OBJ}; \
 	${MAKE} -f ../src/makefile client
 
+server:
+ifeq (${STRIPPED},1)
+	cd ${OBJ} && \
+	export INCLUDE=${INCLUDE} SRC=${SRC} OBJ=${OBJ} && \
+	${MAKE} -f ../src/makefile server_stripped
+else
+	${MAKE} server_full
+endif
+
+client:
+ifeq (${STRIPPED},1)
+	cd ${OBJ} && \
+	export INCLUDE=${INCLUDE} SRC=${SRC} OBJ=${OBJ} && \
+	${MAKE} -f ../src/makefile client_stripped
+else
+	${MAKE} client_full
+endif
+
 comm:
-	export GLOG_BR=${GLOG_BR} GFLAGS_BR=${GFLAGS_BR} INCLUDE=${INCLUDE} \
-	SRC=${SRC} OBJ=${OBJ}; \
+	export INCLUDE=${INCLUDE} SRC=${SRC} OBJ=${OBJ}; \
 	cd obj/; \
 	${MAKE} -f ../src/makefile comm
 
-.PHONY: build_cmake build_gflags_real
+.PHONY: build_cmake build_gflags_real apps
 
 clean:
 	rm -rf ${OBJ}/* ${ROOT}/server ${ROOT}/client;

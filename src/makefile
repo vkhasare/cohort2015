@@ -1,6 +1,9 @@
 SERVER=server
 CLIENT=client
 
+SERVER_STR=server_stripped
+CLIENT_STR=client_stripped
+
 SERVER_SOURCE=${SRC}/server.c 
 CLIENT_SOURCE=${SRC}/client.c
 
@@ -36,6 +39,14 @@ $(CLIENT): logger deps
 	$(CC) $(CFLAGS) $(CLIENT_SOURCE) -I${INCLUDE}
 	$(CPP) -o../$(CLIENT) ${CLIENT}.o ${OBJ}/logg.so ${COMM_OBJ} ${DEPS_O} \
 	${LC_STR} -lpthread
+
+$(SERVER_STR): deps
+	$(CC) $(CFLAGS) $(SERVER_SOURCE) -I${INCLUDE}
+	$(CPP) -o../$(SERVER) ${SERVER}.o ${COMM_OBJ} ${DEPS_O}
+
+$(CLIENT_STR): deps
+	$(CC) $(CFLAGS) $(CLIENT_SOURCE) -I${INCLUDE}
+	$(CPP) -o../$(CLIENT) ${CLIENT}.o ${COMM_OBJ} ${DEPS_O}
 
 .PHONY: dummy_rule
 
