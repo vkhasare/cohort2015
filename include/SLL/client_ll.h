@@ -19,6 +19,7 @@ typedef struct {
 typedef struct {
   unsigned int client_fd;
   unsigned int epoll_fd;
+  struct sockaddr_in server;
   struct epoll_event *epoll_evt;
   mcast_client_t *client_list;
 } client_information_t;

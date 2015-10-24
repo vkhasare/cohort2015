@@ -11,10 +11,10 @@ struct keep_alive{
 };
 struct keep_alive active_group;
 
-static int handle_join_response(const int, const comm_struct_t, ...);
+static int handle_join_response(const int, pdu_t *pdu, ...);
 static void send_echo_req(const int);
-static int handle_echo_response(const int, const comm_struct_t, ...);
-static int handle_leave_response(const int, const comm_struct_t, ...);
+static int handle_echo_response(const int, pdu_t *pdu, ...);
+static int handle_leave_response(const int, pdu_t *pdu, ...);
 fptr client_func_handler(unsigned int);
 static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
@@ -58,7 +58,7 @@ fptr client_func_handler(unsigned int msgType)
  * </doc>
  */
 static
-int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
+int handle_leave_response(const int sockfd, pdu_t *pdu, ...)
 {
         uint8_t cl_iter;
         msg_cause enum_cause = REJECTED;
@@ -66,10 +66,11 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
         mcast_client_node_t *client_node = NULL;
         client_information_t *client_info = NULL;
 
+        comm_struct_t *resp = pdu->msg;
         /* Extracting client_info from variadic args*/
-        EXTRACT_ARG(resp, client_information_t*, client_info);
+        EXTRACT_ARG(pdu, client_information_t*, client_info);
 
-        leave_rsp_t leave_rsp = resp.idv.leave_rsp;
+        leave_rsp_t leave_rsp = resp->idv.leave_rsp;
 
         for(cl_iter = 0; cl_iter < leave_rsp.num_groups; cl_iter++){
             group_name = leave_rsp.group_ids[cl_iter].str;
@@ -104,7 +105,7 @@ int handle_leave_response(const int sockfd, const comm_struct_t const resp, ...)
  * </doc>
  */
 static
-int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
+int handle_join_response(const int sockfd, pdu_t *pdu, ...)
 {
     struct sockaddr_in group_ip;
     int iter;
@@ -115,12 +116,14 @@ int handle_join_response(const int sockfd, const comm_struct_t const resp, ...)
     struct epoll_event *event;
     msg_cause enum_cause;
 
+    comm_struct_t *resp = pdu->msg;
+
     client_information_t *client_info = NULL;
 
     /* Extracting client_info from variadic args*/
-    EXTRACT_ARG(resp, client_information_t*, client_info);
+    EXTRACT_ARG(pdu, client_information_t*, client_info);
 
-    join_rsp_t join_response = resp.idv.join_rsp; 
+    join_rsp_t join_response = resp->idv.join_rsp;
 
     /* Pointer to epoll event structure */
     event = client_info->epoll_evt;
@@ -197,16 +200,17 @@ static void send_join_group_req(client_information_t *client_info, char *group_n
        }
        else
        {
+          pdu_t pdu;
           comm_struct_t msg;
 
           msg.id = join_request;
           /* Sending join request for 1 group*/
           populate_join_req(&msg, &group_name, 1);
-          write_record(client_info->client_fd, &msg);
+          pdu.msg = &msg;
+          write_record(client_info->client_fd, &client_info->server, &pdu);
 
           PRINT("[Join_Request: GRP - %s] Join Group Request sent to Server.", group_name);
        }
-
 }
 
 /* <doc>
@@ -223,13 +227,14 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
        /* If client is member of requested group, then only send leave request */
        if (IS_GROUP_IN_CLIENT_LL(&client_info, group_name))
        {
+           pdu_t pdu;
            comm_struct_t msg;
 
            msg.id = leave_request;
            /* Sending leave request for 1 group*/
            populate_leave_req(&msg, &group_name, 1);
-           /*TODO - hardcoded for now.. needs to be done when client has its unique client id.*/
-           write_record(client_info->client_fd, &msg);
+           pdu.msg = &msg;
+           write_record(client_info->client_fd, &client_info->server, &pdu);
 
            PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", group_name);
        }
@@ -308,13 +313,14 @@ void send_echo_req(int signal){
         strcat(resp.idv.echo_req.str,msg);
     }
     PRINT("Sending periodic Request.");
-    write_record(cfd, &resp);
+//    write_record(client_info->server, cfd, &resp);
     alarm(TIMEOUT_SECS);
 }
 
 static
-int handle_echo_response(const int sockfd, const comm_struct_t const req, ...){
-    PRINT(req.idv.echo_resp.str);
+int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
+    comm_struct_t *rsp = pdu->msg;
+    PRINT(rsp->idv.echo_resp.str);
     return 0;
 }
 
@@ -498,8 +504,9 @@ int main(int argc, char * argv[])
    
     struct sockaddr_storage their_addr;
     socklen_t sin_size;
-    char remoteIP[INET6_ADDRSTRLEN];
-    char *addr,*port;
+    char ipStr[INET6_ADDRSTRLEN];
+    char *port, *serverAddr;
+    struct sockaddr myIp;
 
     client_information_t *client_info = NULL;
 
@@ -516,12 +523,16 @@ int main(int argc, char * argv[])
       argv[3] = "G1";
     }
 
-    addr = argv[1];
+    serverAddr = argv[1];
     port = argv[2];
     strcpy(group_name,argv[3]);
 
-    /* Creating Client socket*/
-    cfd = create_and_bind(addr, port, CLIENT_MODE);
+    /*Fetching eth0 IP for client*/
+    get_my_ip("eth0", &myIp);
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(myIp)), ipStr, INET6_ADDRSTRLEN);
+
+    /* Creating Client socket*/    
+    cfd = create_and_bind(ipStr, port, CLIENT_MODE);
 
     if (cfd == -1)
     {
@@ -531,6 +542,11 @@ int main(int argc, char * argv[])
 
     /* Socket is made non-blocking */
     status = make_socket_non_blocking(cfd);
+
+    /* Creating sockaddr_in struct for Server entry and keeping it in client_info */
+    client_info->server.sin_family = AF_INET;
+    client_info->server.sin_port = htons(atoi(port));
+    client_info->server.sin_addr.s_addr = inet_addr(serverAddr); 
 
     if (status == -1)
     {
@@ -595,8 +611,11 @@ int main(int argc, char * argv[])
       gr_list[iter++] = gname;
       gname=strtok(NULL,",");
     }
+
+    pdu_t pdu;
     populate_join_req(&m, gr_list, iter);
-    write_record(cfd, &m);
+    pdu.msg = &m;
+    write_record(client_info->client_fd, &client_info->server, &pdu);
 
     while (TRUE) {
         /* Listening for epoll events*/
@@ -606,18 +625,15 @@ int main(int argc, char * argv[])
             /* Code Block for receiving data on Client Socket */
             if ((cfd == events[index].data.fd) && (events[index].events & EPOLLIN))
             {
-                comm_struct_t req;
                 fptr func;
-
-                memset(&req, 0 ,sizeof(req));
 
                 /* read_record reads data on events[index].data.fd and fills req struct.
                  * client_func_handler then returns function to handle the req depending
                  * upon req msg type. Once function handler name is received, it is invoked.
                  */
-                if ((func = client_func_handler(read_record(events[index].data.fd, &req))))
+                if ((func = client_func_handler(read_record(events[index].data.fd, &pdu))))
                 {
-                    (func)(events[index].data.fd, req, client_info);
+                    (func)(events[index].data.fd, &pdu, client_info);
                 }
                 
             }

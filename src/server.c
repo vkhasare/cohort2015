@@ -6,9 +6,9 @@ extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 unsigned int num_groups = 0; // should be removed in future, when we remove mapping array and completely migrate on LL.
 
-static int handle_join_req(const int sockfd, const comm_struct_t const req, ...);
-static int handle_echo_req(const int sockfd, const comm_struct_t const req, ...);
-static int handle_leave_req(const int sockfd, const comm_struct_t const req, ...);
+static int handle_join_req(const int sockfd, pdu_t *pdu, ...);
+static int handle_echo_req(const int sockfd, pdu_t *pdu, ...);
+static int handle_leave_req(const int sockfd, pdu_t *pdu, ...);
 
 /* <doc>
  * fptr server_func_handler(unsigned int msgType)
@@ -50,8 +50,9 @@ fptr server_func_handler(unsigned int msgType)
  * </doc>
  */ 
 static
-int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
+int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 {
+    comm_struct_t *req = pdu->msg;
     comm_struct_t resp;
     uint8_t cl_iter, s_iter;
     char *group_name;
@@ -61,11 +62,12 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
     unsigned int clientID = 0;
     RBT_tree *tree = NULL;
     RBT_node *rbNode = NULL;
+    pdu_t rsp_pdu;
 
     /* Extracting server_info from variadic args*/
-    EXTRACT_ARG(req, server_information_t*, server_info);
+    EXTRACT_ARG(pdu, server_information_t*, server_info);
 
-    leave_req_t leave_req = req.idv.leave_req;
+    leave_req_t leave_req = req->idv.leave_req;
     leave_rsp_t *leave_rsp = &resp.idv.leave_rsp;
 
     resp.id = leave_response;
@@ -74,15 +76,7 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
     
     group_name = leave_req.group_ids[0].str;
 
-/*This will go off when udp comes, addr shud be read from pdu.*/
-    struct sockaddr_storage addr;
-    socklen_t addr_len = sizeof addr;
-
-    char ipstr[INET6_ADDRSTRLEN];
-    int pname = getpeername(sockfd, (struct sockaddr*) &addr, &addr_len);
-/*till here*/
-
-    clientID = calc_key((struct sockaddr*) &addr);
+    clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
     PRINT("[Leave_Request: GRP - %s, CL - %d] Leave Request Received.", group_name, clientID);
 
@@ -114,7 +108,9 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
 
     PRINT("[Leave_Response: GRP - %s, CL - %d] Cause: %s.",group_name, clientID, enum_to_str(cause));
 
-    write_record(sockfd, &resp);
+    rsp_pdu.msg = &resp;
+    write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
+
     return 0;
 }
 
@@ -127,7 +123,8 @@ int handle_leave_req(const int sockfd, const comm_struct_t const req, ...)
  * </doc>
  */
 static
-int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
+int handle_join_req(const int sockfd, pdu_t *pdu, ...){
+    comm_struct_t *req = pdu->msg;
     comm_struct_t resp;
     uint8_t cl_iter, s_iter;
     char *group_name;
@@ -136,11 +133,12 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
     unsigned int clientID = 0;
     RBT_tree *tree = NULL;
     RBT_node *newNode = NULL;
+    pdu_t rsp_pdu;
 
     /* Extracting server_info from variadic args*/
-    EXTRACT_ARG(req, server_information_t*, server_info);
+    EXTRACT_ARG(pdu, server_information_t*, server_info);
 
-    join_req_t join_req = req.idv.join_req;   
+    join_req_t join_req = req->idv.join_req;   
     join_rsp_t *join_rsp = &resp.idv.join_rsp;
 
     resp.id = join_response;
@@ -159,20 +157,12 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
             if(strcmp(group_name, mapping[s_iter].grname) == 0){
                 //update internal structures
 
-/*This will go off when udp comes, addr shud be read from pdu.*/
-                struct sockaddr_storage addr;
-                socklen_t addr_len = sizeof addr;
-                
-                char ipstr[INET6_ADDRSTRLEN];
-                int pname = getpeername(sockfd, (struct sockaddr*) &addr, &addr_len);
-/*till here*/
-
                 cause = ACCEPTED;
 
-                clientID = calc_key((struct sockaddr*) &addr);
+                clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
                 /*Add in group linked list*/
-                UPDATE_GRP_CLIENT_LL(&server_info, group_name, (struct sockaddr*) &addr, clientID);
+                UPDATE_GRP_CLIENT_LL(&server_info, group_name, (struct sockaddr*) &pdu->peer_addr, clientID);
 
                 /*Add in Client RBT*/
                 tree = (RBT_tree*) server_info->client_list_head;
@@ -183,7 +173,7 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
                    newNode = RBExactQuery(tree, clientID);
                    /* Add in RBT if it is a new client, else update the grp list of client */
                    if (!newNode) {
-                       RBTreeInsert(tree, clientID, (struct sockaddr*) &addr, 0, FREE);
+                       RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, FREE);
                    } else {
                       /* Update group_list of the client node */ 
                    }
@@ -214,12 +204,14 @@ int handle_join_req(const int sockfd, const comm_struct_t const req, ...){
         PRINT("[Join_Response: GRP - %s] Cause: %s.", group_name, enum_to_str(cause));
     }
     
-    write_record(sockfd, &resp);
+    rsp_pdu.msg = &resp;
+    write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
     return 0;
 }
 
 static
-int handle_echo_req(const int sockfd, const comm_struct_t const req, ...){
+int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
+    comm_struct_t *req = pdu->msg;
     comm_struct_t resp;
         
     resp.id = echo_response;
@@ -360,9 +352,6 @@ int main(int argc, char * argv[])
         exit(0);
     }
     
-    listen(sfd, BACKLOG);
-
-    
     //DEBUG("Started listening for connections..\n");
     PRINT("..WELCOME TO SERVER..");
     PRINT("\r   <Use \"show help\" to see all supported clis.>\n");
@@ -409,8 +398,15 @@ int main(int argc, char * argv[])
             /* Code Block for accepting new connections on Server Socket*/
             if (sfd == events[index].data.fd)
             {
-                accept_connections(sfd,efd,&event);
-                continue;
+                fptr func;
+
+                /* Allocating PDU for incoming message */
+                pdu_t pdu;
+                if ((func = server_func_handler(read_record(events[index].data.fd, &pdu))))
+                {
+                    (func)(events[index].data.fd, &pdu, server_info);
+                }
+
             }
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd) {
@@ -556,12 +552,6 @@ int main(int argc, char * argv[])
                 comm_struct_t req;
                 fptr func;
 
-                memset(&req, 0 ,sizeof(req));
-
-                if ((func = server_func_handler(read_record(events[index].data.fd, &req))))
-                {
-                    (func)(events[index].data.fd, req, server_info);
-                }
             }
         }
     }

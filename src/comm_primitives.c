@@ -1,6 +1,6 @@
 #include "comm_primitives.h"
 #include "print.h"
-
+#define MAXMSGSIZE 5000
 #if 0
 bool process_client_req();
 bool process_client_init();
@@ -212,27 +212,47 @@ bool postprocess_my_struct_stream(my_struct_t* m, XDR* xdrs, bool op_res){
     return ret_res;
 }
 
-void write_record(int sockfd, comm_struct_t* m){
-    FILE* fp = fdopen(sockfd, "wb");
-//  my_struct_t m ;
-    XDR xdrs ;
-    int res;
-    
-//  populate_my_struct(&m, temp);
+/* <doc>
+ * void write_record(struct sockaddr_in *destAddr, int sockfd, pdu_t *pdu)
+ * This function receives pdu from app, destined for a remote address.
+ * It decapsulates the pdu and sends the actual msg on wire.
+ * </doc>
+ */
+void write_record(int sockfd, struct sockaddr_in *destAddr, pdu_t *pdu){
+    XDR           xdrs ;
+    int           res;
+    char          msgbuf[MAXMSGSIZE];
+    comm_struct_t *m;
+    ssize_t msglen;
+ 
     xdrs.x_op = XDR_ENCODE;
-    xdrrec_create(&xdrs, 0, 0, (char*)fp, rdata, wdata);
 
-//  PRINT("Sending XDR local struct.");
+    /*pdu received from App. Decapsulating it.*/
+    m = pdu->msg;
 
-//  res = process_my_struct(&m, &xdrs);
+    msglen = xdr_sizeof(process_comm_struct,m);
+
+    //memset(msgbuf, 0, sizeof(msgbuf));
+
+    /* msglen will ensure only pdu of req. length goes on wire, not whole MAXMSGSIZE btyes.*/
+    xdrmem_create(&xdrs, msgbuf, (unsigned int)msglen, XDR_ENCODE);
+
     res = process_comm_struct(&xdrs, m);
-    if (!res)
-    {
+
+    if (!res) {
         PRINT("Error in sending msg.");
     }
-    postprocess_struct_stream(m, &xdrs, res);
-    xdr_destroy(&xdrs);
-    fflush(fp);
+
+    /*
+    //Only for debugging
+    int size;
+    size = xdr_getpos(&xdrs);
+    PRINT("Size of encoded data: %i\n", size);
+    xdr_destroy(&xdrs); 
+    */
+    sendto(sockfd, msgbuf, msglen, MSG_DONTWAIT,
+                     (struct sockaddr *) destAddr, sizeof(*destAddr));
+
 }
 
 bool read_my_record(int sockfd){
@@ -257,25 +277,44 @@ bool read_my_record(int sockfd){
     xdr_destroy(&xdrs);
 }
 
-int read_record(int sockfd, comm_struct_t* m){
-    FILE* fp = fdopen(sockfd, "rb");
+/* <doc>
+ * int read_record(int sockfd, pdu_t *pdu)
+ * This function receives msg from wire, destined for client.
+ * It encapsulates the msg into pdu and gives pdu to App.
+ * </doc>
+ */
+int read_record(int sockfd, pdu_t *pdu){
     XDR xdrs ;
     int res;
+    comm_struct_t m;
 
     xdrs.x_op = XDR_DECODE;
 
-    xdrrec_create(&xdrs,0,0,(char*)fp,rdata,wdata);
-    xdrrec_skiprecord(&xdrs);
+    char      msgbuf[MAXMSGSIZE];
+    ssize_t     msglen;
+    struct sockaddr_in  sin;
+    socklen_t   alen = (socklen_t)sizeof(sin);
 
-    do{
-        //count = process_comm_struct(&m , &xdrs);
-        //postprocess_struct_stream(&m , &xdrs, count);
-        res = process_comm_struct(&xdrs, m);
-        postprocess_struct_stream(m , &xdrs, res);
-    }while(!xdrrec_eof(&xdrs));
+    //memset(msgbuf, 0, sizeof(msgbuf));
+    msglen = recvfrom(sockfd, msgbuf, sizeof(msgbuf), 0,
+                     (struct sockaddr *)&sin, &alen);
+
+    char s[INET6_ADDRSTRLEN];
+
+    inet_ntop(sin.sin_family, &(((struct sockaddr_in *) &sin)->sin_addr) , s, sizeof(s));
+    //PRINT("listener: got packet from %s\n", s);
+
+    xdrmem_create(&xdrs, msgbuf, (unsigned int)msglen, XDR_DECODE);
     
+    res = process_comm_struct(&xdrs, &m);
+
+    /*encapsulation for msg. pdu will be passed to App.*/
+    pdu->msg = &m;
+    pdu->peer_addr.sa_family = ((struct sockaddr *)&sin)->sa_family;
+    strcpy(pdu->peer_addr.sa_data, ((struct sockaddr *)&sin)->sa_data);
+
     xdr_destroy(&xdrs);
-    return m->id;
+    return m.id;
 }
 
 bool xdr_echo_req(XDR* xdrs, string_t* m){

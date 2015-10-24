@@ -81,6 +81,12 @@ typedef struct common_struct{
     }idv;
 }comm_struct_t;
 
+
+typedef struct pdu {
+  struct sockaddr peer_addr;
+  comm_struct_t *msg;
+}pdu_t;
+
 void print_structs(comm_struct_t* m);
 void populate_my_struct(my_struct_t*, int);
 bool process_my_struct(my_struct_t*, XDR*);

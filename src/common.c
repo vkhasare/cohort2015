@@ -24,6 +24,30 @@ msg_cause str_to_enum(char *str)
 
 }
 
+/* <doc>
+ * char* get_my_ip(const char * device)
+ * Gives IP for a particular interface
+ *
+ * </doc>
+ */
+void get_my_ip(const char * device, struct sockaddr *addr)
+{
+    int fd;
+    struct ifreq ifr;
+
+    fd = socket (AF_INET, SOCK_DGRAM, 0);
+    ifr.ifr_addr.sa_family = AF_INET; 
+    strncpy (ifr.ifr_name, device, IFNAMSIZ-1);
+
+    ioctl (fd, SIOCGIFADDR, &ifr);
+
+    close (fd);
+    /*returning sin_addr*/
+     //((struct sockaddr_in *)&ifr.ifr_addr);
+    (*addr).sa_family = ifr.ifr_addr.sa_family;
+    strcpy((*addr).sa_data, ifr.ifr_addr.sa_data);
+}
+
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
 {
   uint32_t i;
@@ -62,9 +86,8 @@ int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
     memset(&hints, 0, sizeof(hints));
 
     hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;
-
 
     if (getaddrinfo(machine_addr, machine_port, &hints, &result) != 0)
     {
@@ -87,14 +110,16 @@ int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
            {
               continue;
            }
+           PRINT("socket id is %d",sfd);
         }
         else if (IS_CLIENT(oper_mode))
         {
-           if (connect(sfd, rp->ai_addr, rp->ai_addrlen) == -1)
+           if (bind(sfd, rp->ai_addr, rp->ai_addrlen) == -1)
            {
               continue;
            }
-        }  
+           PRINT("socket id is %d",sfd);
+        }
         break;
     }
 
@@ -150,7 +175,7 @@ void *get_in_addr(struct sockaddr *sa)
  *
  * </doc>
  */
-inline int
+inline unsigned int
 calc_key(struct sockaddr *addr)
 {
   if (addr && addr->sa_family == AF_INET)

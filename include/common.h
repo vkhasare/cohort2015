@@ -15,6 +15,8 @@
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <limits.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
 #include "comm_primitives.h"
 #include "print.h"
 
@@ -66,7 +68,7 @@ typedef struct grname_ip_mapping{
     unsigned int port_no;
 }grname_ip_mapping_t; 
   
-typedef int (*fptr)(int, comm_struct_t, ...);
+typedef int (*fptr)(int, pdu_t *, ...);
 int create_and_bind(char *machine_addr, char *machine_port, int oper_mode);
 int make_socket_non_blocking (int sfd);
 void *get_in_addr(struct sockaddr *sa);
@@ -77,4 +79,6 @@ void display_mapping(grname_ip_mapping_t * mapping, uint32_t count);
 void display_clis();
 char* enum_to_str(msg_cause cause);
 msg_cause str_to_enum(char *str);
-inline int calc_key(struct sockaddr *sa);
+inline unsigned int calc_key(struct sockaddr *sa);
+void get_my_ip(const char *, struct sockaddr *);
+
