@@ -1,5 +1,5 @@
 #include "common.h"
-#include "SLL/client_ll.h"
+#include "client_DS.h"
 
 int cfd; /* Required for event handler */
 extern unsigned int echo_req_len;
@@ -81,7 +81,7 @@ int handle_leave_response(const int sockfd, pdu_t *pdu, ...)
             /* if cause other than ACCEPTED, ignore the response */
             if (enum_cause == ACCEPTED)
             {
-                client_node = (mcast_client_node_t *) get_client_node_by_group_name(&client_info, group_name);
+                get_client_node_by_group_name(&client_info, group_name, &client_node);
 
                 /* Leave the multicast group if response cause is Accepted */
                 if (TRUE == multicast_leave(client_node->mcast_fd, client_node->group_addr)) {
@@ -91,7 +91,7 @@ int handle_leave_response(const int sockfd, pdu_t *pdu, ...)
                 }
 
                 /* Removing group association from list */
-                deallocate_mcast_client_node(client_info, client_node);
+                deallocate_client_node(client_info, client_node);
             }
 
         }
@@ -421,7 +421,7 @@ void display_client_clis()
  */
 void display_client_groups(client_information_t *client_info)
 {
-  display_mcast_client_node(&client_info);
+  display_client_node(&client_info);
 }
 
 /* <doc>

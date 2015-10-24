@@ -1,5 +1,6 @@
 #include "common.h"
-#include "SLL/server_ll.h"
+#include "server_DS.h"
+#include "RBT.h"
 
 grname_ip_mapping_t * mapping = NULL;
 extern unsigned int echo_req_len;
@@ -80,26 +81,34 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 
     PRINT("[Leave_Request: GRP - %s, CL - %d] Leave Request Received.", group_name, clientID);
 
-    if (remove_client_from_mcast_group_node(&server_info, group_name, clientID))
-    {
-       RBT_tree* tree = NULL;
-       RBT_node *rbNode = NULL;
+    tree = (RBT_tree*) server_info->client_RBT_head;
 
-       cause = ACCEPTED;
+    if (clientID > 0) {
+         rbNode = RBExactQuery(tree, clientID);
 
-       tree = (RBT_tree*) server_info->client_list_head;
+         if (rbNode) {
+              mcast_group_node_t *ll_grp_node;
+              rb_info_t *rb_info_list = (rb_info_t*) rbNode->client_grp_list;
 
-       if (clientID > 0) {
-           rbNode = RBExactQuery(tree, clientID);
-           /* Add in RBT if it is a new client, else update the grp list of client */
-           if (rbNode) {
-                /*Free up group list as well*/
-               //// 
-                /*Remove node from tree group count is zero.*/
-                //RBDelete(tree, rbNode);
-           }
-       } 
-    }
+              /*remove node from rbnode list.*/
+              if (remove_rb_grp_node(&rb_info_list,group_name, &ll_grp_node)) {
+                  cause = ACCEPTED;
+
+                  /*remove node from ll list*/
+                  remove_client_from_mcast_group_node(&server_info, ll_grp_node, clientID);
+
+                  /*Remove RBnode from tree if group count is zero.*/
+                  if (SN_LIST_LENGTH(&rb_info_list->cl_list->group_node) == 0) {
+                    RBDelete(tree, rbNode);
+                  }
+              }
+ 
+             /* Uncomment to display rb group list for client
+              *   display_rb_group_list(&rb_info_list);
+              */
+               
+         }
+}
 
     leave_rsp->group_ids[0].str = MALLOC_STR;
     strcpy(leave_rsp->group_ids[0].str,group_name);
@@ -165,22 +174,34 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
                 UPDATE_GRP_CLIENT_LL(&server_info, group_name, (struct sockaddr*) &pdu->peer_addr, clientID);
 
                 /*Add in Client RBT*/
-                tree = (RBT_tree*) server_info->client_list_head;
+                tree = (RBT_tree*) server_info->client_RBT_head;
 
                 if (clientID > 0) {
-                   mcast_group_node_t *group_node = get_group_node_by_name(server_info,group_name);
+                   mcast_group_node_t *group_node = NULL;
+
+                   get_group_node_by_name(&server_info, group_name, &group_node);
 
                    newNode = RBExactQuery(tree, clientID);
                    /* Add in RBT if it is a new client, else update the grp list of client */
                    if (!newNode) {
-                       RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, FREE);
+                       RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, FREE, group_node);
                    } else {
-                      /* Update group_list of the client node */ 
+                      /* Update group_list of the client node */
+                       rb_info_t *rb_info_list = (rb_info_t*) newNode->client_grp_list;
+                       rb_cl_grp_node_t *rb_grp_node = allocate_rb_cl_node(&rb_info_list);
+                       /* storing grp node pointer in RB group list*/
+                       rb_grp_node->grp_addr = group_node;
+
+                       /* Uncomment to display rb group list for client
+                        * display_rb_group_list(&rb_info_list);
+                        */
+                        
                    }
                 }
 
-//commenting for now
-//                RBTreePrint(tree);
+                /*Uncomment for printing RBT node keys
+                 *RBTreePrint(tree);
+                 */
 
                 /* Add ip addr as response and break to search for next group. */
                 join_rsp->group_ips[cl_iter].sin_family =
@@ -316,11 +337,13 @@ int main(int argc, char * argv[])
     //uint32_t num_groups;
     struct sockaddr_in maddr;
     char *message="Hello!!!";
-    
+   
+    /* allocating server info for LL */ 
     allocate_server_info(&server_info);
 
-    tree = RBTreeCreate(IntComp,NullFunction,NullFunction,IntPrint,NullFunction);
-    server_info->client_list_head = tree;
+    /* allocating RBT root for faster client lookup on server */
+    tree = RBTreeCreate(IntComp, NullFunction, IntPrint);
+    server_info->client_RBT_head = tree;
 
     num_groups = initialize_mapping("src/ip_mappings.txt", &mapping,server_info);
     

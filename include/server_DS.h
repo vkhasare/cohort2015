@@ -1,21 +1,5 @@
-#include "SLL/header.h"
-#include "SLL/sn_ll.h"
-#include "RBT.h"
-/*
-typedef enum {
-  BUSY = 44,
-  FREE = 45
-} avail_state;
-
-typedef struct
-{
-  int key;
-  struct sockaddr *client_addr;
-  unsigned int port;
-//  mcast_group_t *client_grp_list;
-  avail_state av_status;
-}*/
-
+#include "header.h"
+#include "sn_ll.h"
 
 typedef struct {
   sn_list_t client_node;
@@ -46,13 +30,20 @@ typedef struct {
 
 typedef struct {
   mcast_group_t *server_list;
-  RBT_tree *client_list_head;
+  void *client_RBT_head;
 } server_information_t;
 
-/*
 typedef struct {
   void *grp_addr;
   sn_list_element_t list_element;
 } rb_cl_grp_node_t;
-*/
+
+typedef struct {
+  sn_list_t group_node;
+} rb_client_t;
+
+typedef struct {
+  rb_client_t *cl_list;
+} rb_info_t;
+
 sn_list_element_t list_element;

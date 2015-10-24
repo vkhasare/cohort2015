@@ -13,7 +13,7 @@
  * LIMITATION, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
  * A PARTICULAR PURPOSE.
  */
-#include "SLL/sn_ll.h"
+#include "sn_ll.h"
 /*
  * This file contains a generic implementation of doubly-linked lists
  *

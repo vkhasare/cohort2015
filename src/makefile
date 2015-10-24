@@ -24,7 +24,7 @@ CFLAGS=-g -c
 logger:
 	$(CPP) -fPIC -shared -o logg.so ${SRC}/logg.cpp	-I${INCLUDE} ${LC_STR}
 	  
-DEPS=sn_ll.c common.c receiver.c comm_primitives.c rbt.c misc.c
+DEPS=sn_ll.c common.c receiver.c comm_primitives.c rbt.c misc.c server_ll.c client_ll.c
 DEPS_O=$(subst .c,.o,$(DEPS))
 
 deps:

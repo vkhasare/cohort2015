@@ -1,5 +1,6 @@
 #include "RBT.h"
-
+#include "server_DS.h"
+#include "misc.h"
 /*
  * <doc>
  * RBT_tree* RBTreeCreate
@@ -13,20 +14,16 @@
  * red-black tree.
  * </doc>
  */
-RBT_tree* RBTreeCreate( int (*CompFunc) (const void*,const void*),
-            void (*DestFunc) (void*),
-            void (*InfoDestFunc) (void*),
-            void (*PrintFunc) (const void*),
-            void (*PrintInfo)(void*)) {
+RBT_tree* RBTreeCreate( int (*CompFunc) (unsigned int,unsigned int),
+            void (*DestFunc) (unsigned int),
+            void (*PrintFunc) (unsigned int)) {
   RBT_tree* newTree;
   RBT_node* temp;
 
   newTree=(RBT_tree*) SafeMalloc(sizeof(RBT_tree));
-  newTree->Compare=  CompFunc;
-  newTree->DestroyKey= DestFunc;
-  newTree->PrintKey= PrintFunc;
-  newTree->PrintInfo= PrintInfo;
-  newTree->DestroyInfo= InfoDestFunc;
+  newTree->Compare =  CompFunc;
+  newTree->DestroyKey = DestFunc;
+  newTree->PrintKey = PrintFunc;
 
   /*  see the comment in the RBT_tree structure in red_black_tree.h */
   /*  for information on nil and root */
@@ -160,7 +157,7 @@ void TreeInsertHelp(RBT_tree* tree, RBT_node* z) {
  *
  * </doc>
  */
-RBT_node * RBTreeInsert(RBT_tree* tree, unsigned int key, struct sockaddr *c_addr, unsigned int port, avail_state status) {
+RBT_node * RBTreeInsert(RBT_tree* tree, unsigned int key, struct sockaddr *c_addr, unsigned int port, avail_state status, void *grp_ptr) {
   RBT_node * y;
   RBT_node * x;
   RBT_node * newNode;
@@ -171,13 +168,17 @@ RBT_node * RBTreeInsert(RBT_tree* tree, unsigned int key, struct sockaddr *c_add
   /*copying sockaddr struct*/
   x->client_addr.sa_family = c_addr->sa_family;
   strcpy(x->client_addr.sa_data, c_addr->sa_data);
-/*
-  rb_node_t *new_node = (rb_node_t *) malloc(sizeof(rb_node_t));
-//  node->grp = &group_node;
-  SN_LIST_MEMBER_INSERT_HEAD(&((*server_info)->server_list->group_node),
-                               new_node,
-                               list_element);
-*/  x->port = port;
+  rb_info_t *rb_info;
+
+  /* generation of LL for group node pointers*/
+  allocate_rb_info(&rb_info);
+  rb_cl_grp_node_t *rb_grp_node = allocate_rb_cl_node(&rb_info);
+  rb_grp_node->grp_addr = grp_ptr;
+
+  /* storing grp node pointer in RB group list*/
+  x->client_grp_list = rb_info;
+
+  x->port = port;
   x->av_status = status;
 
   TreeInsertHelp(tree,x);
@@ -286,7 +287,7 @@ RBT_node* TreePredecessor(RBT_tree* tree, RBT_node* x) {
 /* <doc>
  * void InorderTreePrint(RBT_tree* tree, RBT_node* x)
  * This function recursively prints the nodes of the tree
- * inorder using the PrintKey and PrintInfo functions.
+ * inorder using the PrintKey functions.
  *
  * </doc>
  */
@@ -312,7 +313,7 @@ void InorderTreePrint(RBT_tree* tree, RBT_node* x) {
 /* <doc>
  * void TreeDestHelper(RBT_tree* tree, RBT_node* x)
  * This function recursively destroys the nodes of the tree
- * postorder using the DestroyKey and DestroyInfo functions.
+ * postorder using the DestroyKey functions.
  *
  * </doc>
  */
@@ -343,7 +344,7 @@ void RBTreeDestroy(RBT_tree* tree) {
 /* <doc>
  * void RBTreePrint(RBT_tree* tree)
  * This function recursively prints the nodes of the tree
- * inorder using the PrintKey and PrintInfo functions.
+ * inorder using the PrintKey functions.
  *
  * </doc>
  */
@@ -449,7 +450,7 @@ void RBDeleteFixUp(RBT_tree* tree, RBT_node* x) {
 /* <doc>
  * void RBDelete(RBT_tree* tree, RBT_node* z)
  * Deletes z from tree and frees the key and info of z
- * using DestoryKey and DestoryInfo.  Then calls
+ * using DestoryKey .  Then calls
  * RBDeleteFixUp to restore red-black properties
  *
  * </doc>
