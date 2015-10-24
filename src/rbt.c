@@ -354,14 +354,14 @@ void RBTreePrint(RBT_tree* tree) {
 
 
 /* <doc>
- * RBT_node* RBExactQuery(RBT_tree* tree, unsigned int q)
+ * RBT_node* RBFindNodeByID(RBT_tree* tree, unsigned int q)
  * Returns the a node with key equal to q.  If there are
  * multiple nodes with key equal to q this function returns
  * the one highest in the tree.
  *
  * </doc>
  */  
-RBT_node* RBExactQuery(RBT_tree* tree, unsigned int q) {
+RBT_node* RBFindNodeByID(RBT_tree* tree, unsigned int q) {
   RBT_node* x=tree->root->left;
   RBT_node* nil=tree->nil;
   int compVal;

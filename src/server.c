@@ -84,7 +84,7 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
     tree = (RBT_tree*) server_info->client_RBT_head;
 
     if (clientID > 0) {
-         rbNode = RBExactQuery(tree, clientID);
+         rbNode = RBFindNodeByID(tree, clientID);
 
          if (rbNode) {
               mcast_group_node_t *ll_grp_node;
@@ -142,6 +142,7 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
     unsigned int clientID = 0;
     RBT_tree *tree = NULL;
     RBT_node *newNode = NULL;
+    mcast_group_node_t *group_node = NULL;
     pdu_t rsp_pdu;
 
     /* Extracting server_info from variadic args*/
@@ -162,58 +163,52 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
 
         PRINT("[Join_Request: GRP - %s] Join Request Received.", group_name);
 
-        for(s_iter = 0; s_iter < num_groups; s_iter++ ){
-            if(strcmp(group_name, mapping[s_iter].grname) == 0){
-                //update internal structures
+        /*search group_node in LL by group name*/
+        get_group_node_by_name(&server_info, group_name, &group_node);
 
-                cause = ACCEPTED;
+        if (group_node) {
+             cause = ACCEPTED;
 
-                clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
+             clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
-                /*Add in group linked list*/
-                UPDATE_GRP_CLIENT_LL(&server_info, group_name, (struct sockaddr*) &pdu->peer_addr, clientID);
+             /*Add in group linked list*/
+             ADD_CLIENT_IN_GROUP(&group_node,(struct sockaddr*) &pdu->peer_addr, clientID);
 
-                /*Add in Client RBT*/
-                tree = (RBT_tree*) server_info->client_RBT_head;
+             /*Add in Client RBT*/
+             tree = (RBT_tree*) server_info->client_RBT_head;
 
-                if (clientID > 0) {
-                   mcast_group_node_t *group_node = NULL;
+             if (clientID > 0) {
+                 /*search the RB node by clientID*/
+                 newNode = RBFindNodeByID(tree, clientID);
+                 /* Add in RBT if it is a new client, else update the grp list of client */
+                 if (!newNode) {
+                     newNode = RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, FREE, group_node);
+                 } else {
+                    /* Update group_list of the client node */
+                    rb_info_t *rb_info_list = (rb_info_t*) newNode->client_grp_list;
+                    rb_cl_grp_node_t *rb_grp_node = allocate_rb_cl_node(&rb_info_list);
+                    /* storing grp node pointer in RB group list*/
+                    rb_grp_node->grp_addr = group_node;
 
-                   get_group_node_by_name(&server_info, group_name, &group_node);
+                    /* Uncomment to display rb group list for client
+                     * display_rb_group_list(&rb_info_list);
+                     */                    
+                 }
+             }
 
-                   newNode = RBExactQuery(tree, clientID);
-                   /* Add in RBT if it is a new client, else update the grp list of client */
-                   if (!newNode) {
-                       RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, FREE, group_node);
-                   } else {
-                      /* Update group_list of the client node */
-                       rb_info_t *rb_info_list = (rb_info_t*) newNode->client_grp_list;
-                       rb_cl_grp_node_t *rb_grp_node = allocate_rb_cl_node(&rb_info_list);
-                       /* storing grp node pointer in RB group list*/
-                       rb_grp_node->grp_addr = group_node;
+             /*Uncomment for printing RBT node keys
+              *RBTreePrint(tree);
+              */
 
-                       /* Uncomment to display rb group list for client
-                        * display_rb_group_list(&rb_info_list);
-                        */
-                        
-                   }
-                }
-
-                /*Uncomment for printing RBT node keys
-                 *RBTreePrint(tree);
-                 */
-
-                /* Add ip addr as response and break to search for next group. */
-                join_rsp->group_ips[cl_iter].sin_family =
-                      mapping[s_iter].grp_ip.sin_family;
-                join_rsp->group_ips[cl_iter].sin_port   =
-                      mapping[s_iter].grp_ip.sin_port;
-                join_rsp->group_ips[cl_iter].s_addr     =
-                      mapping[s_iter].grp_ip.sin_addr.s_addr;
-                join_rsp->group_ips[cl_iter].grp_port   =
-                     mapping[s_iter].port_no;
-                break;
-            }
+             /* Add ip addr as response and break to search for next group. */
+             join_rsp->group_ips[cl_iter].sin_family =
+                     group_node->group_addr.sin_family;
+             join_rsp->group_ips[cl_iter].sin_port   =
+                     group_node->group_addr.sin_port;
+             join_rsp->group_ips[cl_iter].s_addr     =
+                     group_node->group_addr.sin_addr.s_addr;
+             join_rsp->group_ips[cl_iter].grp_port   =
+                    group_node->group_port;
         }
 
          /* cause is ACCEPTED if group is valid, otherwise REJECTED. */
@@ -268,39 +263,13 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
   return count;
 }
 
-
-void accept_connections(int sfd,int efd,struct epoll_event *event)
-{
-    char remoteIP[INET6_ADDRSTRLEN];
-    struct sockaddr_storage in_addr;
-    socklen_t in_len;
-    int infd, status;
-
-    in_len = sizeof(in_addr);
-
-    if ((infd = accept(sfd, (struct sockaddr *) &in_addr, &in_len)) == -1)
-    {
-       perror("\nError while accept.");
-       exit(0);
-    }
-
-    inet_ntop(in_addr.ss_family, get_in_addr((struct sockaddr*)&in_addr), remoteIP, INET6_ADDRSTRLEN);
-    PRINT("New connection came from %s and socket %d.\n",remoteIP,infd);
-
-    status = make_socket_non_blocking(infd);
-
-    if (status == -1)
-    {
-        perror("\nError while making the socket non-blocking.");
-        exit(0);
-    }
-
-    event->data.fd = infd;
-    event->events = EPOLLIN|EPOLLET;
-    status = epoll_ctl(efd, EPOLL_CTL_ADD, infd, event);
-}
-
-
+/* <doc>
+ * void display_group_info(server_information_t *server_info)
+ * Shows information for all the groups maintained
+ * on server.
+ *
+ * </doc>
+ */
 void display_group_info(server_information_t *server_info)
 {
   display_mcast_group_node(&server_info);

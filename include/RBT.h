@@ -43,6 +43,6 @@ void RBDelete(RBT_tree* , RBT_node* );
 void RBTreeDestroy(RBT_tree*);
 RBT_node* TreePredecessor(RBT_tree*,RBT_node*);
 RBT_node* TreeSuccessor(RBT_tree*,RBT_node*);
-RBT_node* RBExactQuery(RBT_tree*, unsigned int);
+RBT_node* RBFindNodeByID(RBT_tree*, unsigned int);
 void NullFunction(unsigned int);
 

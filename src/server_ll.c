@@ -59,7 +59,7 @@ void allocate_rb_info(rb_info_t **rb_info)
  */
 void display_rb_group_list(rb_info_t **rb_info)
 {
-  rb_cl_grp_node_t *group_node = NULL;
+   rb_cl_grp_node_t *group_node = NULL;
 
    group_node =     SN_LIST_MEMBER_HEAD(&((*rb_info)->cl_list->group_node),
                                         rb_cl_grp_node_t,
@@ -482,28 +482,17 @@ void ADD_GROUP_IN_LL(server_information_t **server_info, char *group_name, struc
   group_node->group_port = port;
 }
 
-/* Invoked internally by UPDATE_GRP_CLIENT_LL*/
+/* <doc>
+ * void ADD_CLIENT_IN_GROUP(mcast_group_node_t **group_node, struct sockaddr *addr, unsigned int client_id)
+ * Add the client node in group_node list. client node contains information related
+ * to socket address and socket FD.
+ *
+ * </doc>
+ */
 void ADD_CLIENT_IN_GROUP(mcast_group_node_t **group_node, struct sockaddr *addr, unsigned int client_id)
 {
   mcast_client_node_t *client_node = NULL;
   client_node = allocate_mcast_client_node(group_node);
   memcpy(&(client_node->client_addr),addr,sizeof(addr));
   client_node->client_fd = client_id;
-}
-
-/* <doc>
- * void UPDATE_GRP_CLIENT_LL(server_information_t **server_info, char *grp_name, struct sockaddr *addr, int infd)
- * Add the client node in group_node list. client node contains information related
- * to socket address and socket FD.
- * </doc>
- */
-void UPDATE_GRP_CLIENT_LL(server_information_t **server_info, char *grp_name, struct sockaddr *addr, unsigned int client_id)
-{
-   mcast_group_node_t *group_node = NULL;
-   get_group_node_by_name(server_info,grp_name,&group_node);
-
-   if (group_node)
-   {
-     ADD_CLIENT_IN_GROUP(&group_node, addr, client_id);
-   }
 }
