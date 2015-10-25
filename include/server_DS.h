@@ -29,6 +29,7 @@ typedef struct {
 /*Server Info*/
 
 typedef struct {
+  unsigned int server_fd; /*server sockfd*/
   mcast_group_t *server_list;
   void *client_RBT_head;
 } server_information_t;

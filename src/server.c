@@ -7,10 +7,13 @@ extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 unsigned int num_groups = 0; // should be removed in future, when we remove mapping array and completely migrate on LL.
 
+static int send_echo_request(const int sockfd, struct sockaddr *,char *); 
+static int handle_echo_req(const int, pdu_t *pdu, ...);
+static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_join_req(const int sockfd, pdu_t *pdu, ...);
-static int handle_echo_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_req(const int sockfd, pdu_t *pdu, ...);
-
+static void assign_task(server_information_t *, char *);
+static void moderator_selection(server_information_t *, mcast_group_node_t *, char *);
 /* <doc>
  * fptr server_func_handler(unsigned int msgType)
  * This function takes the msg type as input
@@ -33,6 +36,9 @@ fptr server_func_handler(unsigned int msgType)
         break;
     case echo_req:
         func_name = handle_echo_req;
+        break;
+    case echo_response:
+        func_name = handle_echo_response;
         break;
     default:
         PRINT("Invalid msg type of type - %d.", msgType);
@@ -182,7 +188,7 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
                  newNode = RBFindNodeByID(tree, clientID);
                  /* Add in RBT if it is a new client, else update the grp list of client */
                  if (!newNode) {
-                     newNode = RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, FREE, group_node);
+                     newNode = RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, RB_FREE, group_node);
                  } else {
                     /* Update group_list of the client node */
                     rb_info_t *rb_info_list = (rb_info_t*) newNode->client_grp_list;
@@ -225,18 +231,6 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
     return 0;
 }
 
-static
-int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
-    comm_struct_t *req = pdu->msg;
-    comm_struct_t resp;
-        
-    resp.id = echo_response;
-    resp.idv.echo_resp.str = (char *) malloc (sizeof(char) * echo_resp_len);
-    strcpy(resp.idv.echo_req.str, "EchoResponse.");
-    write_record(sockfd, &resp);
-    return 0;
-}
-
 uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping, server_information_t *server_info)
 {
     FILE *fp = NULL, *cmd_line = NULL;
@@ -275,13 +269,138 @@ void display_group_info(server_information_t *server_info)
   display_mcast_group_node(&server_info);
 }
 
+/* <doc>
+ * static
+ * int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
+ * Handles the echo request msg from peer node and
+ * responds back.
+ *
+ * </doc>
+ */
+static
+int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 
+    comm_struct_t *req = pdu->msg;
+    comm_struct_t rsp;
+    pdu_t rsp_pdu;
+    char ipaddr[INET6_ADDRSTRLEN];
+    server_information_t *server_info = NULL;
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("Received echo request from %s", ipaddr);
+
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, server_information_t*, server_info);
+    rsp.id = echo_response;
+    echo_rsp_t *echo_response = &rsp.idv.echo_resp;
+
+    /*filling echo rsp pdu*/
+    echo_response->status    = 11;
+
+    rsp_pdu.msg = &rsp;
+    write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
+
+    return 0;
+}
+
+/* <doc>
+ * static
+ * int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
+ * Handles the echo response from peer.
+ *
+ * </doc>
+ */
+static
+int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
+    char ipaddr[INET6_ADDRSTRLEN];
+    comm_struct_t *rsp = pdu->msg;
+    echo_rsp_t echo_rsp = rsp->idv.echo_resp;
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("Received echo response from %s", ipaddr);
+
+//    PRINT("client is %d", echo_rsp.status);
+
+    return 0;
+}
+
+/* <doc>
+ * static
+ * int send_echo_request(unsigned int sockfd, struct sockaddr *addr, char *grp_name)
+ * Sends echo request on mentioned sockfd to the addr passed.
+ * grp_name is filled in echo req pdu.
+ *
+ * </doc>
+ */
+static
+int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
+{
+  comm_struct_t req;
+  pdu_t pdu;
+  echo_req_t *echo_request = &req.idv.echo_req;
+
+  req.id = echo_req;
+
+  echo_request->group_name = grp_name;
+  pdu.msg = &req;
+  write_record(sockfd, addr, &pdu);
+
+  return 0;
+}
+
+/* <doc>
+ * static
+ * void moderator_selection(server_information_t *server_info, mcast_group_node_t *group_node, char *grp_name)
+ * Functionality of this is to choose moderator amongst the client nodes of a multicast group.
+ * It takes parameter as multicast group node and group name.
+ *
+ * </doc>
+ */
+static
+void moderator_selection(server_information_t *server_info, mcast_group_node_t *group_node, char *grp_name)
+{
+   mcast_client_node_t *client_node = NULL;
+
+   client_node = SN_LIST_MEMBER_HEAD(&((group_node)->client_info->client_node),
+                                     mcast_client_node_t,
+                                     list_element);
+
+   while (client_node)
+   {
+      send_echo_request(server_info->server_fd, &client_node->client_addr, grp_name);
+
+      client_node =     SN_LIST_MEMBER_NEXT(client_node,
+                                            mcast_client_node_t,
+                                            list_element);
+   }
+}
+
+/* <doc>
+ * static
+ * void assign_task(server_information_t *server_info, char *grp_name)
+ * This function takes parameter as multicast group name and type
+ * of task to be done. It then multicasts the task request.
+ *
+ * </doc>
+ */
+static
+void assign_task(server_information_t *server_info, char *grp_name)
+{
+   mcast_group_node_t *group_node = NULL;
+
+   get_group_node_by_name(&server_info, grp_name, &group_node); 
+
+   moderator_selection(server_info, group_node, grp_name);
+}
+
+/* RBT comparision function */
 int IntComp(unsigned a,unsigned int b) {
   if( a > b) return(1);
   if( a < b) return(-1);
   return(0);
 }
 
+/* RBT Printing function */
 void IntPrint(unsigned int a) {
   PRINT("number - %u", a);
 }
@@ -390,6 +509,11 @@ void server_stdin_data(int fd, server_information_t *server_info)
     else if (0 == strcmp(read_buffer,"cls\0"))
     {
         system("clear");
+    }
+    else if(strncmp(read_buffer,"task",4) == 0)
+    {
+       //hardcoded as of now
+       assign_task(server_info, "G1");
     }
     else if( strncmp(read_buffer,"send msg",8) == 0)
     {
@@ -526,6 +650,8 @@ int main(int argc, char * argv[])
         perror("\nError while adding STDIN FD to epoll event.");
         exit(0);
     }
+
+    server_info->server_fd = sfd;
 
     events = calloc(MAXEVENTS, sizeof(event));
 

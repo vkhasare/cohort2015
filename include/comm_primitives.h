@@ -39,6 +39,14 @@ typedef struct local_sockaddr_in{
     unsigned int grp_port;
 }l_saddr_in_t;
 
+typedef struct echo_req{
+    char* group_name;
+} echo_req_t;
+
+typedef struct echo_response{
+    unsigned int status;
+} echo_rsp_t;
+
 typedef struct join_request{
     unsigned int num_groups;
     string_t* group_ids; 
@@ -74,8 +82,8 @@ typedef struct common_struct{
     union{
         join_req_t join_req;
         join_rsp_t join_rsp;
-        string_t echo_req;
-        string_t echo_resp;
+        echo_req_t echo_req;
+        echo_rsp_t echo_resp;
         leave_req_t leave_req;
         leave_rsp_t leave_rsp;
     }idv;

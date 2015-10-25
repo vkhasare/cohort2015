@@ -1,8 +1,8 @@
 #include "header.h"
 
 typedef enum {
-  BUSY = 44,
-  FREE = 45
+  RB_BUSY = 44,
+  RB_FREE = 45
 } avail_state;
 
 typedef struct RBT_node {

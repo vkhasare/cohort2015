@@ -1,7 +1,6 @@
 #include "common.h"
 #include "client_DS.h"
 
-int cfd; /* Required for event handler */
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 
@@ -11,10 +10,11 @@ struct keep_alive{
 };
 struct keep_alive active_group;
 
-static int handle_join_response(const int, pdu_t *pdu, ...);
-static void send_echo_req(const int);
-static int handle_echo_response(const int, pdu_t *pdu, ...);
+static int send_echo_request(const int sockfd, struct sockaddr *,char *);
+static int handle_echo_req(const int, pdu_t *pdu, ...);
+static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_response(const int, pdu_t *pdu, ...);
+static int handle_join_response(const int, pdu_t *pdu, ...);
 fptr client_func_handler(unsigned int);
 static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
@@ -38,6 +38,9 @@ fptr client_func_handler(unsigned int msgType)
         break;
     case leave_response:
         func_name = handle_leave_response;
+        break;
+    case echo_req:
+        func_name = handle_echo_req;
         break;
     case echo_response:
         func_name = handle_echo_response;
@@ -246,82 +249,83 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
 
 }
 
-
-
-
-/*Commenting as not used currently 
-void sendPeriodicMsg(int signal)
-{
-    int numbytes;
-    char msg[] ="I am Alive";
-    char send_msg[512];
-    int i=active_group.count;
-
-    while(i>0)
-    {
-      i--;
-      PRINT(send_msg, "%s:%s\r\n",active_group.group_name[i],msg);
-     
-      PRINT("Sending periodic Request.");
-      if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
-      {
-        PRINT("Error in sending msg.");
-      }
-    }
-
-    alarm(TIMEOUT_SECS);
-}
-*/
-
-/*
-void sendPeriodicMsg_XDR(int signal)
-{
-    my_struct_t m;
-    XDR xdrs;
-    int res;
-    FILE* fp = fdopen(cfd, "wb");
-    
-    populate_my_struct(&m, 2);
-    
-    xdrs.x_op = XDR_ENCODE;
-    xdrrec_create(&xdrs, 0, 0, (char*)fp, rdata, wdata);
-
-//  PRINT("Sending XDR local struct.");
-    res = process_my_struct(&m, &xdrs);
-    if (!res)
-    {
-        PRINT("Error in sending msg.");
-    }
-    postprocess_struct_stream(&m, &xdrs, res);
-    xdr_destroy(&xdrs);
-    fflush(fp);
-
-    alarm(TIMEOUT_SECS);
-}
-*/
-static
-void send_echo_req(int signal){
-    int i=active_group.count;
-    char msg[] =" I am Alive";
-    comm_struct_t resp;
- 
-    resp.id = echo_req;
-    resp.idv.echo_req.str = (char *) malloc (sizeof(char) * echo_req_len);
-    resp.idv.echo_req.str[0]='\0';
-    while(i-- > 0){
-        strcat(resp.idv.echo_req.str, active_group.group_name[i]);
-        strcat(resp.idv.echo_req.str,msg);
-    }
-    PRINT("Sending periodic Request.");
-//    write_record(client_info->server, cfd, &resp);
-    alarm(TIMEOUT_SECS);
-}
-
+/* <doc>
+ * static
+ * int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
+ * Handles the echo response from peer.
+ *
+ * </doc>
+ */
 static
 int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
+    char ipaddr[INET6_ADDRSTRLEN];
     comm_struct_t *rsp = pdu->msg;
-    PRINT(rsp->idv.echo_resp.str);
+    echo_rsp_t echo_rsp = rsp->idv.echo_resp;
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("Received echo response from %s", ipaddr);
+
+//    PRINT("Peer is %d", echo_rsp.status);
+
     return 0;
+}
+
+/* <doc>
+ * static
+ * int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
+ * Handles the echo request msg from peer node and
+ * responds back.
+ *
+ * </doc>
+ */
+static
+int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
+
+    comm_struct_t *req = pdu->msg;
+    comm_struct_t rsp;
+    pdu_t rsp_pdu;
+    char ipaddr[INET6_ADDRSTRLEN];
+    client_information_t *client_info = NULL;
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("Received echo request from %s", ipaddr);
+
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, client_information_t*, client_info);
+    rsp.id = echo_response;
+    echo_rsp_t *echo_response = &rsp.idv.echo_resp;
+
+    /*filling echo rsp pdu*/
+    echo_response->status    = client_info->client_status;
+    
+    rsp_pdu.msg = &rsp;
+    write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
+
+    return 0;
+}
+
+/* <doc>
+ * static
+ * int send_echo_request(unsigned int sockfd, struct sockaddr *addr, char *grp_name)
+ * Sends echo request on mentioned sockfd to the addr passed.
+ * grp_name is filled in echo req pdu.
+ *
+ * </doc>
+ */
+static
+int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
+{
+  comm_struct_t req;
+  pdu_t pdu;
+  echo_req_t *echo_request = &req.idv.echo_req;
+
+  req.id = echo_req;
+
+  echo_request->group_name = grp_name;
+  pdu.msg = &req;
+  write_record(sockfd, addr, &pdu);
+
+  return 0;
 }
 
 int is_gname_already_present(char *grp_name){
@@ -361,7 +365,7 @@ void startKeepAlive(char * gname)
       if(active_group.count == 1)
       {
         struct sigaction myaction;
-        myaction.sa_handler = send_echo_req;
+//        myaction.sa_handler = send_echo_req;
         sigfillset(&myaction.sa_mask);
         myaction.sa_flags = 0;
 
@@ -463,6 +467,10 @@ void client_stdin_data(int fd, client_information_t *client_info)
     {
        send_leave_group_req(client_info, read_buffer+12);
     }
+    else if (strncmp(read_buffer,"test echo",9) == 0)
+    {
+        send_echo_request(client_info->client_fd, &client_info->server, "G2");
+    }
     else if (0 == strcmp(read_buffer,"cls\0"))
     {
        system("clear");
@@ -498,7 +506,7 @@ int main(int argc, char * argv[])
  
     int event_count, index; 
     int status;
-    int efd;
+    int cfd, efd;
     struct epoll_event event;
     struct epoll_event *events;    
    
@@ -566,6 +574,7 @@ int main(int argc, char * argv[])
     efd = epoll_create(MAXEVENTS);
 
     /* Update client_info with client/epoll FD and epoll event structure */
+    client_info->client_status = FREE;
     client_info->client_fd = cfd; 
     client_info->epoll_fd = efd;
     client_info->epoll_evt = &event;

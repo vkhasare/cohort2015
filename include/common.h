@@ -62,6 +62,19 @@ typedef enum {
  UNKNOWN  = 12
 } msg_cause;
 
+/* <doc>
+ * enum client_state
+ * determines the state of client.
+ *
+ * </doc>
+ */
+typedef enum {
+ FREE  = 55,
+ BUSY  = 56,
+ ALIVE = 57,
+ DEAD  = 58
+} client_state;
+
 typedef struct grname_ip_mapping{
     char grname[10];
     struct sockaddr_in grp_ip;

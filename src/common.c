@@ -160,7 +160,7 @@ int make_socket_non_blocking (int sfd)
 }
 
 
-void *get_in_addr(struct sockaddr *sa)
+void* get_in_addr(struct sockaddr *sa)
 {
     if (sa->sa_family == AF_INET) {
         return &(((struct sockaddr_in*) sa)->sin_addr);

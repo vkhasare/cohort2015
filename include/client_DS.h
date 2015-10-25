@@ -16,6 +16,7 @@ typedef struct {
 
 /* client info  */
 typedef struct {
+  unsigned int client_status;
   unsigned int client_fd;
   unsigned int epoll_fd;
   struct sockaddr_in server;

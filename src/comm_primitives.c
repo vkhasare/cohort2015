@@ -155,7 +155,7 @@ void print_structs(comm_struct_t* m){
             print_join_rsp(&m->idv.join_rsp);
             break;
         case echo_req:
-            print_echo_msg(m->idv.echo_req.str);
+//           print_echo_msg(m->idv.echo_req.str);
             break;
         case echo_response:
 //          print_echo_msg(m->idv.echo_resp.str);
@@ -317,18 +317,20 @@ int read_record(int sockfd, pdu_t *pdu){
     return m.id;
 }
 
-bool xdr_echo_req(XDR* xdrs, string_t* m){
+bool xdr_echo_req(XDR* xdrs, echo_req_t* m){
     if(xdrs->x_op == XDR_DECODE){
-        m->str = NULL;
+        m->group_name = NULL;
     }
-    return (xdr_string(xdrs, &(m->str), echo_req_len));
+
+    return (xdr_string(xdrs, &(m->group_name), max_gname_len));
 }
 
-bool xdr_echo_resp(XDR* xdrs, string_t* m){
+bool xdr_echo_resp(XDR* xdrs, echo_rsp_t* m){
     if(xdrs->x_op == XDR_DECODE){
-        m->str = NULL;
+        m->status = 0;
     }
-    return (xdr_string(xdrs, &(m->str), echo_resp_len));
+
+    return ((xdr_u_int(xdrs, &(m->status))));
 }
 
 bool xdr_gname_string(XDR* xdrs, string_t* m){
