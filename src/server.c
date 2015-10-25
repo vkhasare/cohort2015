@@ -305,7 +305,7 @@ int main(int argc, char * argv[])
     int group_msg[1000] = {0};
     //uint32_t num_groups;
     struct sockaddr_in maddr;
-    char *message="Hello!!!";
+    char *message="Hello!!!",ip_addr[16];
    
     /* allocating server info for LL */ 
     allocate_server_info(&server_info);
@@ -319,9 +319,10 @@ int main(int argc, char * argv[])
     if (argc != 3)
     {
       printf("Usage: %s <server_IP> <server_port>\n", argv[0]);
-//      exit(1);
-//      Temporary code
-      argv[1] = "127.0.0.1";
+      struct sockaddr myIp;
+      argv[1] = &ip_addr;
+      get_my_ip("eth0", &myIp);
+      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(myIp)), argv[1], INET6_ADDRSTRLEN);
       argv[2] = "3490";
     }
 

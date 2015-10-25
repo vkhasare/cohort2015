@@ -513,19 +513,8 @@ int main(int argc, char * argv[])
     /* Allocates client_info */
     allocate_client_info(&client_info);
 
-    if (argc != 4)
-    {
-      PRINT("Usage: %s <server_IP> <server_port> <group_name>\n", argv[0]);
-//      exit(1);
-//      Temporary code
-      argv[1] = "127.0.0.1";
-      argv[2] = "3490";
-      argv[3] = "G1";
-    }
-
-    serverAddr = argv[1];
-    port = argv[2];
-    strcpy(group_name,argv[3]);
+    /* Binding to any random user space port for client.*/
+    port = htons(0); 
 
     /*Fetching eth0 IP for client*/
     get_my_ip("eth0", &myIp);
@@ -542,6 +531,20 @@ int main(int argc, char * argv[])
 
     /* Socket is made non-blocking */
     status = make_socket_non_blocking(cfd);
+
+
+    if (argc != 4)
+    {
+      PRINT("Usage: %s <server_IP> <server_port> <group_name>\n", argv[0]);
+      /* server_ip not provided. Attempting talk with server on same machine
+       * with default port. */
+      argv[1] = ipStr;
+      argv[2] = "3490";
+      argv[3] = "G1";
+    }
+    serverAddr = argv[1];
+    port = argv[2];
+    strcpy(group_name,argv[3]);
 
     /* Creating sockaddr_in struct for Server entry and keeping it in client_info */
     client_info->server.sin_family = AF_INET;

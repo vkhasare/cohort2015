@@ -68,7 +68,7 @@ client_full:
 	cd ${OBJ}; \
 	${MAKE} -f ../src/makefile client
 
-server: create_build_env
+server: comm
 ifeq (${STRIPPED},1)
 	cd ${OBJ} && \
 	export INCLUDE=${INCLUDE} SRC=${SRC} OBJ=${OBJ} && \
@@ -77,7 +77,7 @@ else
 	${MAKE} server_full
 endif
 
-client: create_build_env
+client: comm
 ifeq (${STRIPPED},1)
 	cd ${OBJ} && \
 	export INCLUDE=${INCLUDE} SRC=${SRC} OBJ=${OBJ} && \

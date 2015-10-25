@@ -45,7 +45,7 @@ void get_my_ip(const char * device, struct sockaddr *addr)
     /*returning sin_addr*/
      //((struct sockaddr_in *)&ifr.ifr_addr);
     (*addr).sa_family = ifr.ifr_addr.sa_family;
-    strcpy((*addr).sa_data, ifr.ifr_addr.sa_data);
+    memcpy((*addr).sa_data, ifr.ifr_addr.sa_data,sizeof((*addr).sa_data));
 }
 
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
