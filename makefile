@@ -15,7 +15,7 @@ OBJ=${ROOT}/obj
 #	tar -xvf ${TAR_ROOT}/gflags-2.1.2.tar -C GFLAGS_BR; 
 #	tar -xvf ${TAR_ROOT}/glog-master.tar -C GLOG_BR; 
 
-apps: comm server client 
+apps: comm server client
 all: utils apps
 utils: build_gflags build_glog
 
@@ -68,7 +68,7 @@ client_full:
 	cd ${OBJ}; \
 	${MAKE} -f ../src/makefile client
 
-server:
+server: create_build_env
 ifeq (${STRIPPED},1)
 	cd ${OBJ} && \
 	export INCLUDE=${INCLUDE} SRC=${SRC} OBJ=${OBJ} && \
@@ -77,7 +77,7 @@ else
 	${MAKE} server_full
 endif
 
-client:
+client: create_build_env
 ifeq (${STRIPPED},1)
 	cd ${OBJ} && \
 	export INCLUDE=${INCLUDE} SRC=${SRC} OBJ=${OBJ} && \
@@ -86,12 +86,12 @@ else
 	${MAKE} client_full
 endif
 
-comm:
+comm: create_build_env
 	export INCLUDE=${INCLUDE} SRC=${SRC} OBJ=${OBJ}; \
 	cd obj/; \
 	${MAKE} -f ../src/makefile comm
 
-.PHONY: build_cmake build_gflags_real apps
+.PHONY: build_cmake build_gflags_real
 
 clean:
 	rm -rf ${OBJ}/* ${ROOT}/server ${ROOT}/client;
