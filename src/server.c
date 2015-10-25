@@ -286,10 +286,160 @@ void IntPrint(unsigned int a) {
   PRINT("number - %u", a);
 }
 
+/* <doc>
+ * void server_stdin_data(int fd, server_information_t *server_info)
+ * Function for handling input from STDIN. Input can be any cli
+ * command and respective handlers are then invoked.
+ *
+ * </doc>
+ */
+void server_stdin_data(int fd, server_information_t *server_info)
+{
+    char read_buffer[100];
+    char read_buffer_copy[100];
+    char *ptr;
+    char *message="Hello!!!",ip_addr[16];
+    
+    int cnt=0, i = 0, msfd;
+    int group_msg[1000] = {0};
+    //uint32_t num_groups;
+    
+    struct sockaddr_in maddr;
+    
+    cnt=read(fd, read_buffer, 99);
+
+    //If input buffer is empty return. Ideally this should not happen.
+    if (cnt <= 0) return;
+
+    read_buffer[cnt-1] = '\0';
+    if (0 == strncmp(read_buffer,"show help",9))
+    {
+        display_server_clis();
+    }
+    else if(strncmp(read_buffer,"enable msg group",16) == 0)
+    {
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        while(i < 3)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        if (!ptr)
+        {
+            PRINT("Error: Unrecognized Command.\n");
+            return;
+        }
+        for(i = 0;i < num_groups; i++)
+        {
+            if(strcmp(ptr,mapping[i].grname) == 0)
+            {
+                group_msg[i] = 1;
+            }
+        }
+    }
+    else if(strncmp(read_buffer,"no msg group",12) == 0)
+    {
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        while(i < 3)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        if (!ptr)
+        {
+            PRINT("Error: Unrecognized Command.\n");
+            return;
+        }
+        for(i = 0;i < num_groups; i++)
+        {
+            if(strcmp(ptr,mapping[i].grname) == 0)
+                group_msg[i] = 0;
+        }
+    }
+    else if (0 == strcmp(read_buffer,"show groups"))
+    {
+        if(mapping)
+            display_mapping(mapping,num_groups);
+    }
+    else if (0 == strncmp(read_buffer,"show group info",15))
+    {
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        while(i < 3)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        if (!ptr)
+        {
+            PRINT("Error: Unrecognized Command.\n");
+            return;
+        }
+        if(strncmp(ptr,"all",3) == 0)
+        {
+            if(mapping)
+                display_group_info(server_info);
+        }
+        else
+        {
+            display_mcast_group_node_by_name(&server_info, ptr);
+        }
+    }
+    else if (0 == strcmp(read_buffer,"cls\0"))
+    {
+        system("clear");
+    }
+    else if( strncmp(read_buffer,"send msg",8) == 0)
+    {
+        char remoteIP[INET_ADDRSTRLEN];
+        unsigned int port;
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        while(i < 2)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        for(i = 0;i < num_groups; i++)
+        {
+            if(strcmp(mapping[i].grname,ptr) == 0)
+            {
+                inet_ntop(AF_INET, &(mapping[i].grp_ip), remoteIP, INET_ADDRSTRLEN);
+                port = mapping[i].port_no;
+            }
+        }
+        if ((msfd=socket(AF_INET,SOCK_DGRAM,0)) < 0) 
+        {
+            PRINT("Error .. ");
+            exit(1);
+        }
+        memset(&maddr,0,sizeof(maddr));
+        maddr.sin_family=AF_INET;
+        maddr.sin_addr.s_addr=inet_addr(remoteIP);
+        maddr.sin_port=htons(port);
+
+        if (sendto(msfd,message,strlen(message),0,(struct sockaddr *) &maddr,sizeof(maddr)) < 0) 
+        {
+            PRINT("could not send multicast msg");
+            exit(1);
+        }
+        else
+        {
+            PRINT("Sent msg %s to group %s",message,ptr);
+        }
+    }
+    else
+    {
+        if (cnt != 1 && read_buffer[0] != '\n')
+            PRINT("Error: Unrecognized Command.\n");
+    }
+}
 
 int main(int argc, char * argv[])
 {
-    int sfd, efd, status, msfd;
+    int sfd, efd, status;
     int event_count, index;
     struct epoll_event event;
     struct epoll_event *events;
@@ -301,12 +451,8 @@ int main(int argc, char * argv[])
     struct sockaddr_storage their_addr;
     socklen_t sin_size;
     char *addr,*port;
-    char *ptr;
-    int group_msg[1000] = {0};
-    //uint32_t num_groups;
-    struct sockaddr_in maddr;
-    char *message="Hello!!!",ip_addr[16];
-   
+    char ip_addr[16];
+
     /* allocating server info for LL */ 
     allocate_server_info(&server_info);
 
@@ -315,28 +461,28 @@ int main(int argc, char * argv[])
     server_info->client_RBT_head = tree;
 
     num_groups = initialize_mapping("src/ip_mappings.txt", &mapping,server_info);
-    
+
     if (argc != 3)
     {
-      printf("Usage: %s <server_IP> <server_port>\n", argv[0]);
-      struct sockaddr myIp;
-      argv[1] = &ip_addr;
-      get_my_ip("eth0", &myIp);
-      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(myIp)), argv[1], INET6_ADDRSTRLEN);
-      argv[2] = "3490";
+        printf("Usage: %s <server_IP> <server_port>\n", argv[0]);
+        struct sockaddr myIp;
+        argv[1] = &ip_addr;
+        get_my_ip("eth0", &myIp);
+        inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(myIp)), argv[1], INET6_ADDRSTRLEN);
+        argv[2] = "3490";
     }
 
     addr = argv[1];
     port = argv[2];
 
     sfd = create_and_bind(addr, port, SERVER_MODE);
-    
+
     if (sfd == -1)
     {
         perror("\nError while creating and binding the socket.");
         exit(0);
     }
-    
+
     status = make_socket_non_blocking(sfd);
 
     if (status == -1)
@@ -344,13 +490,13 @@ int main(int argc, char * argv[])
         perror("\nError while making the socket non-blocking.");
         exit(0);
     }
-    
+
     //DEBUG("Started listening for connections..\n");
     PRINT("..WELCOME TO SERVER..");
     PRINT("\r   <Use \"show help\" to see all supported clis.>\n");
 
     PRINT_PROMPT("[server] ");
- 
+
     efd = epoll_create(MAXEVENTS);
 
     if (efd == -1)
@@ -358,7 +504,7 @@ int main(int argc, char * argv[])
         perror("\nError while creating the epoll.");
         exit(0);
     }
-    
+
     event.data.fd = sfd;
     event.events = EPOLLIN|EPOLLET;
 
@@ -383,11 +529,12 @@ int main(int argc, char * argv[])
 
     events = calloc(MAXEVENTS, sizeof(event));
 
-    while (1) {
-
+    while (1) 
+    {
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
-        for (index = 0; index < event_count; index++) {
+        for (index = 0; index < event_count; index++) 
+        {
             /* Code Block for accepting new connections on Server Socket*/
             if (sfd == events[index].data.fd)
             {
@@ -402,140 +549,10 @@ int main(int argc, char * argv[])
 
             }
             /* Code Block for handling input from STDIN */
-            else if (STDIN_FILENO == events[index].data.fd) {
-                char read_buffer[100];
-                char read_buffer_copy[100];
-                char *ptr;
-                int cnt=0, i = 0;
-                cnt=read(events[index].data.fd, read_buffer, 99);
-
-                if (cnt > 0)
-                {
-                  read_buffer[cnt-1] = '\0';
-                  if (0 == strncmp(read_buffer,"show help",9))
-                  {
-                    display_server_clis();
-                  }
-                  else if(strncmp(read_buffer,"enable msg group",16) == 0)
-                  {
-                    strcpy(read_buffer_copy,read_buffer);
-                    ptr = strtok(read_buffer_copy," ");
-                    while(i < 3)
-                    {
-                      ptr = strtok(NULL," ");
-                      i++;
-                    }
-                    if (!ptr)
-                    {
-                        PRINT("Error: Unrecognized Command.\n");
-                        continue;
-                    }
-                    for(i = 0;i < num_groups; i++)
-                    {
-                      if(strcmp(ptr,mapping[i].grname) == 0)
-                      {
-                        group_msg[i] = 1;
-                      }
-                    }
-                  }
-                  else if(strncmp(read_buffer,"no msg group",12) == 0)
-                  {
-                    strcpy(read_buffer_copy,read_buffer);
-                    ptr = strtok(read_buffer_copy," ");
-                    while(i < 3)
-                    {
-                      ptr = strtok(NULL," ");
-                      i++;
-                    }
-                    if (!ptr)
-                    {
-                        PRINT("Error: Unrecognized Command.\n");
-                        continue;
-                    }
-                    for(i = 0;i < num_groups; i++)
-                    {
-                      if(strcmp(ptr,mapping[i].grname) == 0)
-                        group_msg[i] = 0;
-                    }
-                  }
-                  else if (0 == strcmp(read_buffer,"show groups\0"))
-                  {
-                    if(mapping)
-                      display_mapping(mapping,num_groups);
-                  }
-                  else if (0 == strncmp(read_buffer,"show group info",15))
-                  {
-                     strcpy(read_buffer_copy,read_buffer);
-                     ptr = strtok(read_buffer_copy," ");
-                     while(i < 3)
-                     {
-                       ptr = strtok(NULL," ");
-                       i++;
-                     }
-                     if (!ptr)
-                     {
-                        PRINT("Error: Unrecognized Command.\n");
-                        continue;
-                     }
-                     if(strncmp(ptr,"all",3) == 0)
-                     {
-                       if(mapping)
-                         display_group_info(server_info);
-                     }
-                     else
-                     {
-                        display_mcast_group_node_by_name(&server_info, ptr);
-                     }
-                  }
-                  else if (0 == strcmp(read_buffer,"cls\0"))
-                  {
-                    system("clear");
-                  }
-                  else if( strncmp(read_buffer,"send msg",8) == 0)
-                  {
-                     char remoteIP[INET_ADDRSTRLEN];
-                     unsigned int port;
-                     strcpy(read_buffer_copy,read_buffer);
-                     ptr = strtok(read_buffer_copy," ");
-                     while(i < 2)
-                     {
-                       ptr = strtok(NULL," ");
-                       i++;
-                     }
-                     for(i = 0;i < num_groups; i++)
-                     {
-                       if(strcmp(mapping[i].grname,ptr) == 0)
-                       {
-                         inet_ntop(AF_INET, &(mapping[i].grp_ip), remoteIP, INET_ADDRSTRLEN);
-                         port = mapping[i].port_no;
-                       }
-                     }
-                     if ((msfd=socket(AF_INET,SOCK_DGRAM,0)) < 0) 
-                     {
-                        PRINT("Error .. ");
-                        exit(1);
-                     }
-                     memset(&maddr,0,sizeof(maddr));
-                     maddr.sin_family=AF_INET;
-                     maddr.sin_addr.s_addr=inet_addr(remoteIP);
-                     maddr.sin_port=htons(port);
-
-                     if (sendto(msfd,message,strlen(message),0,(struct sockaddr *) &maddr,sizeof(maddr)) < 0) 
-                     {
-                       PRINT("could not send multicast msg");
-                       exit(1);
-                     }
-                     else
-                     {
-                       PRINT("Sent msg %s to group %s",message,ptr);
-                     }
-                   }
-                  else
-                  {
-                    if (cnt != 1 && read_buffer[0] != '\n')
-                       PRINT("Error: Unrecognized Command.\n");
-                  }
-                }
+            else if (STDIN_FILENO == events[index].data.fd) 
+            {
+                /* Invoking function to recognize the cli fired and call its appropriate handler */
+                server_stdin_data(events[index].data.fd, server_info);
 
                 PRINT_PROMPT("[server] ");
             }

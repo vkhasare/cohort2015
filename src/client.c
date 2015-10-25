@@ -536,7 +536,7 @@ int main(int argc, char * argv[])
     if (argc != 4)
     {
       PRINT("Usage: %s <server_IP> <server_port> <group_name>\n", argv[0]);
-      /* server_ip not provided. Attempting talk with server on same machine
+      /* server_IP/server_port not provided. Attempting talk with server on same machine
        * with default port. */
       argv[1] = ipStr;
       argv[2] = "3490";
