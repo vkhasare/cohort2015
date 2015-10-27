@@ -59,8 +59,7 @@ fptr server_func_handler(unsigned int msgType)
 static
 int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 {
-    comm_struct_t *req = pdu->msg;
-    comm_struct_t resp;
+    comm_struct_t *req = &pdu->msg;
     uint8_t cl_iter, s_iter;
     char *group_name;
     msg_cause cause = REJECTED;
@@ -70,14 +69,15 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
     RBT_tree *tree = NULL;
     RBT_node *rbNode = NULL;
     pdu_t rsp_pdu;
+    comm_struct_t *resp = &rsp_pdu.msg;
 
     /* Extracting server_info from variadic args*/
     EXTRACT_ARG(pdu, server_information_t*, server_info);
 
     leave_req_t leave_req = req->idv.leave_req;
-    leave_rsp_t *leave_rsp = &resp.idv.leave_rsp;
+    leave_rsp_t *leave_rsp = &resp->idv.leave_rsp;
 
-    resp.id = leave_response;
+    resp->id = leave_response;
     leave_rsp->num_groups = 1;
     leave_rsp->group_ids = MALLOC_IE(1);
     
@@ -123,7 +123,6 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 
     PRINT("[Leave_Response: GRP - %s, CL - %d] Cause: %s.",group_name, clientID, enum_to_str(cause));
 
-    rsp_pdu.msg = &resp;
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
     return 0;
@@ -139,8 +138,7 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
  */
 static
 int handle_join_req(const int sockfd, pdu_t *pdu, ...){
-    comm_struct_t *req = pdu->msg;
-    comm_struct_t resp;
+    comm_struct_t *req = &(pdu->msg);
     uint8_t cl_iter, s_iter;
     char *group_name;
     msg_cause cause;
@@ -150,14 +148,15 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
     RBT_node *newNode = NULL;
     mcast_group_node_t *group_node = NULL;
     pdu_t rsp_pdu;
+    comm_struct_t *resp = &(rsp_pdu.msg);
 
     /* Extracting server_info from variadic args*/
     EXTRACT_ARG(pdu, server_information_t*, server_info);
 
     join_req_t join_req = req->idv.join_req;   
-    join_rsp_t *join_rsp = &resp.idv.join_rsp;
+    join_rsp_t *join_rsp = &(resp->idv.join_rsp);
 
-    resp.id = join_response;
+    resp->id = join_response;
     join_rsp->num_groups = join_req.num_groups;
     /* Initializing is must for xdr msg. */
     join_rsp->group_ips = (l_saddr_in_t *) calloc (join_req.num_groups, sizeof(l_saddr_in_t));
@@ -226,7 +225,6 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
         PRINT("[Join_Response: GRP - %s] Cause: %s.", group_name, enum_to_str(cause));
     }
     
-    rsp_pdu.msg = &resp;
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
     return 0;
 }
@@ -280,9 +278,9 @@ void display_group_info(server_information_t *server_info)
 static
 int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 
-    comm_struct_t *req = pdu->msg;
-    comm_struct_t rsp;
+    comm_struct_t *req = &(pdu->msg);
     pdu_t rsp_pdu;
+    comm_struct_t *rsp = &(rsp_pdu.msg);
     char ipaddr[INET6_ADDRSTRLEN];
     server_information_t *server_info = NULL;
 
@@ -291,13 +289,12 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, server_information_t*, server_info);
-    rsp.id = echo_response;
-    echo_rsp_t *echo_response = &rsp.idv.echo_resp;
+    rsp->id = echo_response;
+    echo_rsp_t *echo_response = &(rsp->idv.echo_resp);
 
     /*filling echo rsp pdu*/
     echo_response->status    = 11;
 
-    rsp_pdu.msg = &rsp;
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
     return 0;
@@ -313,7 +310,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 static
 int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
     char ipaddr[INET6_ADDRSTRLEN];
-    comm_struct_t *rsp = pdu->msg;
+    comm_struct_t *rsp = &(pdu->msg);
     echo_rsp_t echo_rsp = rsp->idv.echo_resp;
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
@@ -335,14 +332,13 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
 static
 int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
 {
-  comm_struct_t req;
   pdu_t pdu;
-  echo_req_t *echo_request = &req.idv.echo_req;
+  comm_struct_t *req = &(pdu.msg);
+  echo_req_t *echo_request = &(req->idv.echo_req);
 
-  req.id = echo_req;
+  req->id = echo_req;
 
   echo_request->group_name = grp_name;
-  pdu.msg = &req;
   write_record(sockfd, addr, &pdu);
 
   return 0;
@@ -595,7 +591,6 @@ int main(int argc, char * argv[])
         inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(myIp)), argv[1], INET6_ADDRSTRLEN);
         argv[2] = "3490";
     }
-
     addr = argv[1];
     port = argv[2];
 

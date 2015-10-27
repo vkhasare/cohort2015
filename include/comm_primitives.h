@@ -23,7 +23,8 @@ typedef enum struct_id{
     echo_req        = 36,
     echo_response   = 37,
     leave_request   = 38,
-    leave_response  = 39
+    leave_response  = 39,
+    TASK_RESPONSE
 }e_struct_id_t; 
 
 typedef struct string{
@@ -77,6 +78,26 @@ typedef struct my_struct{
     int *c;
 }my_struct_t;
 
+typedef enum response_type{
+   TYPE_CHAR,
+   TYPE_INT,
+   TYPE_LONG
+}rsp_type_t;
+
+typedef struct result{
+   unsigned int size;
+   int * value;
+}result_t;
+
+typedef struct task_response{
+   string_t group_id;
+//   unsigned int task_id;
+   rsp_type_t type;
+   unsigned int num_clients;
+   unsigned int * client_ids;
+   result_t ** result;
+}task_rsp_t;
+
 typedef struct common_struct{
     e_struct_id_t id;
     union{
@@ -86,13 +107,15 @@ typedef struct common_struct{
         echo_rsp_t echo_resp;
         leave_req_t leave_req;
         leave_rsp_t leave_rsp;
+        task_rsp_t task_rsp;
     }idv;
 }comm_struct_t;
 
 
-typedef struct pdu {
+
+typedef struct pdu{
   struct sockaddr peer_addr;
-  comm_struct_t *msg;
+  comm_struct_t msg;
 }pdu_t;
 
 void print_structs(comm_struct_t* m);
@@ -100,4 +123,7 @@ void populate_my_struct(my_struct_t*, int);
 bool process_my_struct(my_struct_t*, XDR*);
 int rdata ();
 int wdata ();
+
+
+    
 #endif

@@ -15,9 +15,11 @@ static int handle_echo_req(const int, pdu_t *pdu, ...);
 static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_response(const int, pdu_t *pdu, ...);
 static int handle_join_response(const int, pdu_t *pdu, ...);
+static int handle_task_response(const int, pdu_t *pdu, ...);
 fptr client_func_handler(unsigned int);
 static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
+static void send_task_results(client_information_t *, rsp_type_t, result_t *,unsigned int);
 
 /* <doc>
  * fptr client_func_handler(unsigned int msgType)
@@ -45,6 +47,9 @@ fptr client_func_handler(unsigned int msgType)
     case echo_response:
         func_name = handle_echo_response;
         break;
+    case TASK_RESPONSE:
+        func_name = handle_task_response;
+        break;
     default:
         PRINT("Invalid msg type of type - %d.", msgType);
         func_name = NULL;
@@ -69,7 +74,7 @@ int handle_leave_response(const int sockfd, pdu_t *pdu, ...)
         mcast_client_node_t *client_node = NULL;
         client_information_t *client_info = NULL;
 
-        comm_struct_t *resp = pdu->msg;
+        comm_struct_t *resp = &(pdu->msg);
         /* Extracting client_info from variadic args*/
         EXTRACT_ARG(pdu, client_information_t*, client_info);
 
@@ -119,7 +124,7 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
     struct epoll_event *event;
     msg_cause enum_cause;
 
-    comm_struct_t *resp = pdu->msg;
+    comm_struct_t *resp = &(pdu->msg);
 
     client_information_t *client_info = NULL;
 
@@ -204,12 +209,11 @@ static void send_join_group_req(client_information_t *client_info, char *group_n
        else
        {
           pdu_t pdu;
-          comm_struct_t msg;
+          comm_struct_t *msg=&(pdu.msg);
 
-          msg.id = join_request;
+          msg->id = join_request;
           /* Sending join request for 1 group*/
-          populate_join_req(&msg, &group_name, 1);
-          pdu.msg = &msg;
+          populate_join_req(msg, &group_name, 1);
           write_record(client_info->client_fd, &client_info->server, &pdu);
 
           PRINT("[Join_Request: GRP - %s] Join Group Request sent to Server.", group_name);
@@ -231,12 +235,11 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
        if (IS_GROUP_IN_CLIENT_LL(&client_info, group_name))
        {
            pdu_t pdu;
-           comm_struct_t msg;
+           comm_struct_t *msg=&(pdu.msg);
 
-           msg.id = leave_request;
+           msg->id = leave_request;
            /* Sending leave request for 1 group*/
-           populate_leave_req(&msg, &group_name, 1);
-           pdu.msg = &msg;
+           populate_leave_req(msg, &group_name, 1);
            write_record(client_info->client_fd, &client_info->server, &pdu);
 
            PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", group_name);
@@ -259,8 +262,8 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
 static
 int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
     char ipaddr[INET6_ADDRSTRLEN];
-    comm_struct_t *rsp = pdu->msg;
-    echo_rsp_t echo_rsp = rsp->idv.echo_resp;
+    comm_struct_t *rsp = &(pdu->msg);
+    echo_rsp_t *echo_rsp = &(rsp->idv.echo_resp);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
     PRINT("Received echo response from %s", ipaddr);
@@ -281,9 +284,9 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
 static
 int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 
-    comm_struct_t *req = pdu->msg;
-    comm_struct_t rsp;
+    comm_struct_t *req = &(pdu->msg);
     pdu_t rsp_pdu;
+    comm_struct_t *rsp = &(rsp_pdu.msg);
     char ipaddr[INET6_ADDRSTRLEN];
     client_information_t *client_info = NULL;
 
@@ -292,13 +295,12 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
-    rsp.id = echo_response;
-    echo_rsp_t *echo_response = &rsp.idv.echo_resp;
+    rsp->id = echo_response;
+    echo_rsp_t *echo_response = &(rsp->idv.echo_resp);
 
     /*filling echo rsp pdu*/
     echo_response->status    = client_info->client_status;
     
-    rsp_pdu.msg = &rsp;
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
     return 0;
@@ -315,14 +317,13 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 static
 int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
 {
-  comm_struct_t req;
   pdu_t pdu;
-  echo_req_t *echo_request = &req.idv.echo_req;
+  comm_struct_t *req= &(pdu.msg);
+  echo_req_t *echo_request = &(req->idv.echo_req);
 
-  req.id = echo_req;
+  req->id = echo_req;
 
   echo_request->group_name = grp_name;
-  pdu.msg = &req;
   write_record(sockfd, addr, &pdu);
 
   return 0;
@@ -615,9 +616,9 @@ int main(int argc, char * argv[])
      * and joins the multiple groups */ 
     char * gname=strtok(group_name,",");
     char * gr_list[max_groups];
-    comm_struct_t m; int iter = 0;
+    int iter = 0;
 
-    m.id = join_request;
+    //m.id = join_request;
 
     while(gname!=NULL){ 
       gr_list[iter++] = gname;
@@ -625,8 +626,7 @@ int main(int argc, char * argv[])
     }
 
     pdu_t pdu;
-    populate_join_req(&m, gr_list, iter);
-    pdu.msg = &m;
+    populate_join_req(&(pdu.msg), gr_list, iter);
     write_record(client_info->client_fd, &client_info->server, &pdu);
 
     while (TRUE) {
@@ -688,3 +688,109 @@ int main(int argc, char * argv[])
     return 0;
 }
 #endif
+
+
+/* <doc>
+ * static void send_task_results(client_information_t *client_info, rsp_type_t, result_t *)
+ * This function creates Group Task Response message and sends to moderator. It accepts
+ * results as input and relays message on client fd.
+ * Request will not be relayed if client is not member of group.
+ *
+ * </doc>
+ */
+static void send_task_results(client_information_t *client_info, rsp_type_t rtype, result_t *result, unsigned int my_id)
+{
+
+           pdu_t pdu;
+
+//           msg.id = leave_request;
+           /* Sending leave request for 1 group*/
+           populate_task_rsp(&(pdu.msg), rtype ,result, my_id);
+           write_record(client_info->client_fd, &client_info->server, &pdu);
+
+          // PRINT("[Task_Response: GRP - %s] Task Response sent to Moderator. ", group_name);
+}
+
+#define MAX_CLIENT 10
+comm_struct_t * populate_moderator_task_rsp( rsp_type_t r_type, result_t *resp, unsigned int client_id ){
+    comm_struct_t* m = malloc(sizeof(comm_struct_t));
+    memset(&(m->idv),0,sizeof(task_rsp_t));
+    m->id=TASK_RESPONSE;
+    m->idv.task_rsp.type = r_type;
+    m->idv.task_rsp.result = (result_t **)malloc(sizeof(result_t*)*MAX_CLIENT);
+    m->idv.task_rsp.client_ids = (unsigned int *)malloc(sizeof(unsigned int *)*MAX_CLIENT);
+    update_task_rsp(m,r_type,resp, client_id);
+    return m;
+}
+
+unsigned long int conv(char ipadr[])
+{
+    unsigned long int num=0,val;
+    char *tok,*ptr;
+    tok=strtok(ipadr,".");
+    while( tok != NULL)
+    {
+        val=strtoul(tok,&ptr,0);
+        num=(num << 8) + val;
+        tok=strtok(NULL,".");
+    }
+    return(num);
+}
+
+/* <doc>
+ * int handle_task_response(const int sockfd, const comm_struct_t const resp, ...)
+ * Join Group Response Handler. Reads the join response PDU, and fetches the
+ * IP for required multicast group. Joins the multicast group.
+ *
+ * </doc>
+ */
+#define TOTAL_COUNT 9
+static
+int handle_task_response(const int sockfd, pdu_t *pdu, ...)
+{
+ 
+    struct sockaddr_in group_ip;
+    int iter;
+    char* group_name;
+    unsigned int m_port;
+    mcast_client_node_t node;
+    int status;
+//    struct epoll_event *event;
+//    msg_cause enum_cause;
+
+    comm_struct_t *resp = &(pdu->msg);
+
+    client_information_t *moderator_info = NULL;
+
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, client_information_t*, moderator_info);
+
+    task_rsp_t * task_response = &resp->idv.task_rsp;
+    
+    unsigned int peer_id = 5445;//pdu->peer_addr.sin_addr.s_addr;
+
+    /* Pointer to epoll event structure */
+//    event = client_info->epoll_evt;
+ 
+    if(moderator_info->moderator_resp_msg == NULL){
+      moderator_info->moderator_resp_msg = populate_moderator_task_rsp(task_response->type, task_response->result, peer_id);
+    } else{
+      update_task_rsp(moderator_info->moderator_resp_msg, task_response->type, task_response->result, peer_id);
+    } 
+    comm_struct_t * message = moderator_info->moderator_resp_msg;
+
+    if(message->idv.task_rsp.num_clients == TOTAL_COUNT){
+      //send moderator message
+    }  
+}
+
+
+
+
+
+
+
+
+ 
+
+

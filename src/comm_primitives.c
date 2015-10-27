@@ -81,6 +81,7 @@ void populate_my_struct(my_struct_t* m, int some_rand){
 }
 
 void populate_join_req(comm_struct_t* m, char** grnames, int num_groups){
+    m->id=join_request;
     int iter;
     m->idv.join_req.num_groups = num_groups; 
 //    m->idv.join_req.group_ids = (string_t*) malloc (sizeof(string_t) * num_groups);
@@ -228,7 +229,7 @@ void write_record(int sockfd, struct sockaddr_in *destAddr, pdu_t *pdu){
     xdrs.x_op = XDR_ENCODE;
 
     /*pdu received from App. Decapsulating it.*/
-    m = pdu->msg;
+    m = &(pdu->msg);
 
     msglen = xdr_sizeof(process_comm_struct,m);
 
@@ -237,7 +238,7 @@ void write_record(int sockfd, struct sockaddr_in *destAddr, pdu_t *pdu){
     /* msglen will ensure only pdu of req. length goes on wire, not whole MAXMSGSIZE btyes.*/
     xdrmem_create(&xdrs, msgbuf, (unsigned int)msglen, XDR_ENCODE);
 
-    res = process_comm_struct(&xdrs, m);
+    res = process_comm_struct(&xdrs, &(pdu->msg));
 
     if (!res) {
         PRINT("Error in sending msg.");
@@ -286,8 +287,7 @@ bool read_my_record(int sockfd){
 int read_record(int sockfd, pdu_t *pdu){
     XDR xdrs ;
     int res;
-    comm_struct_t m;
-
+    
     xdrs.x_op = XDR_DECODE;
 
     char      msgbuf[MAXMSGSIZE];
@@ -306,15 +306,14 @@ int read_record(int sockfd, pdu_t *pdu){
 
     xdrmem_create(&xdrs, msgbuf, (unsigned int)msglen, XDR_DECODE);
     
-    res = process_comm_struct(&xdrs, &m);
+    res = process_comm_struct(&xdrs,&(pdu->msg));
 
     /*encapsulation for msg. pdu will be passed to App.*/
-    pdu->msg = &m;
     pdu->peer_addr.sa_family = ((struct sockaddr *)&sin)->sa_family;
     strcpy(pdu->peer_addr.sa_data, ((struct sockaddr *)&sin)->sa_data);
 
     xdr_destroy(&xdrs);
-    return m.id;
+    return pdu->msg.id;
 }
 
 bool xdr_echo_req(XDR* xdrs, echo_req_t* m){
@@ -444,6 +443,7 @@ bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
         {echo_response, (xdrproc_t)xdr_echo_resp},
         {leave_request, (xdrproc_t)process_leave_req},
         {leave_response, (xdrproc_t)process_leave_resp},
+        {TASK_RESPONSE, (xdrproc_t)process_leave_resp},
         { __dontcare__, NULL }
     };
     int enum_res = xdr_enum(xdrs, (enum_t *)(&(m->id)));
@@ -451,4 +451,36 @@ bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
 
     return enum_res && union_res;
 }
+inline unsigned int get_size(rsp_type_t type){
+/*
+  switch(type){
+    case TYPE_CHAR: return sizeof(char);
+    case TYPE_INT: return sizeof(int);
+    case TYPE_LONG: return sizeof(long);
+}*/ 
+  return sizeof(int);
+}
+void update_task_rsp(comm_struct_t* m, rsp_type_t r_type, result_t *resp, unsigned int client_id ){
+    int iter;
+    result_t * temp = malloc(sizeof(result_t));
+    temp->size=resp->size;
+    temp->value=malloc(get_size(r_type)*resp->size);
+    for(iter = 0; iter < resp->size; iter++){
+       temp->value[iter]=resp->value[iter];
+    }
+    unsigned int * num_clients = &(m->idv.task_rsp.num_clients);
+    m->idv.task_rsp.result[*num_clients] = temp;
+    m->idv.task_rsp.client_ids[*num_clients] = client_id; 
+    *num_clients++;
+}
+void populate_task_rsp(comm_struct_t* m, rsp_type_t r_type, result_t *resp, unsigned int client_id ){
+    memset(&(m->idv),0,sizeof(task_rsp_t));
+    m->id=TASK_RESPONSE;
+    m->idv.task_rsp.type = r_type;
+    m->idv.task_rsp.result = (result_t **)malloc(sizeof(result_t*)); 
+    m->idv.task_rsp.client_ids = (unsigned int *)malloc(sizeof(unsigned int *)); 
+    update_task_rsp(m,r_type,resp, client_id);
+}
+
+
 

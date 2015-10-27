@@ -22,6 +22,7 @@ typedef struct {
   struct sockaddr_in server;
   struct epoll_event *epoll_evt;
   mcast_client_t *client_list;
+  struct common_struct * moderator_resp_msg;
 } client_information_t;
 
 sn_list_element_t list_element;
