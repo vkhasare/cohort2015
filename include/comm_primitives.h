@@ -24,6 +24,7 @@ typedef enum struct_id{
     echo_response   = 37,
     leave_request   = 38,
     leave_response  = 39,
+    moderator_notify_req = 40,
     TASK_RESPONSE
 }e_struct_id_t; 
 
@@ -46,6 +47,7 @@ typedef struct echo_req{
 
 typedef struct echo_response{
     unsigned int status;
+    char* group_name;
 } echo_rsp_t;
 
 typedef struct join_request{
@@ -69,6 +71,12 @@ typedef struct leave_response{
     string_t* group_ids;
     unsigned int cause;
 }leave_rsp_t;
+
+typedef struct moderator_notify_req {
+    unsigned int moderator_id;
+    unsigned int moderator_port;
+    char* group_name;
+}moderator_notify_req_t;
 
 typedef struct my_struct{
     int a;
@@ -107,6 +115,7 @@ typedef struct common_struct{
         echo_rsp_t echo_resp;
         leave_req_t leave_req;
         leave_rsp_t leave_rsp;
+        moderator_notify_req_t moderator_notify_req;
         task_rsp_t task_rsp;
     }idv;
 }comm_struct_t;

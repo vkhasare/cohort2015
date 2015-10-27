@@ -11,7 +11,7 @@ typedef struct RBT_node {
   unsigned int port;
   void *client_grp_list;
   avail_state av_status;  
-
+  uint8_t is_moderator:1;
   int red; /* if red=0 then the node is black */
   struct RBT_node* left;
   struct RBT_node* right;

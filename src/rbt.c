@@ -180,6 +180,8 @@ RBT_node * RBTreeInsert(RBT_tree* tree, unsigned int key, struct sockaddr *c_add
 
   x->port = port;
   x->av_status = status;
+  /*client will be free initially*/
+  x->is_moderator = FALSE;
 
   TreeInsertHelp(tree,x);
   newNode=x;

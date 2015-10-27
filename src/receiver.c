@@ -11,72 +11,29 @@
 
 #define MATCH_NAME(name1, name2)  (strncmp(name1, name2,2)==0)
 
-struct sockaddr_in localSock;
-struct ip_mreq group;
-int datalen;
-char databuf[1024];
+//struct sockaddr_in localSock;
+//struct ip_mreq group;
+//int datalen;
+//char databuf[1024];
 
-/*
-bool send_join_response(int infd, grname_ip_mapping_t * map);
-
-bool join_group(int infd, char * group_name, grname_ip_mapping_t * mapping, int num_groups){
-   int index=0;
-   for(index=0;index<num_groups;index++){
-     if(MATCH_NAME(group_name, mapping[index].grname))
-     {
-        if(send_join_response(infd,(mapping+index) ))
-        {
-          return 1;
-        }
-        break;
-     }
-    }
- return 0;
-}
-
-bool send_join_response(int infd, grname_ip_mapping_t* map){
-    int numbytes;
-    char display_string[100];
-    char send_msg[512];
-    char remoteIP[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(map->grp_ip), remoteIP, INET_ADDRSTRLEN);
-
-    sprintf(send_msg,"JOIN RESPONSE:%s,%s", map->grname, remoteIP);
-    if ((numbytes = send(infd,send_msg,(strlen(send_msg) + 1),0)) < 0)
-    {
-        PRINT("Error in sending join rsp.");
-        return false;
-    }
-    return true; 
-}
-
-
-
-bool join_msg(int cfd, char * group_name)
-{
-    int numbytes;
-    char display_string[100];
-    char msg[] ="JOIN";
-    char send_msg[512];
-    sprintf(send_msg,"JOIN:%s",group_name);
-    //sprintf(display_string,"Sending Join message for group %s\n",group_name );
-    //PRINT(display_string);
-
-    if ((numbytes = send(cfd,send_msg,(strlen(send_msg) + 1),0)) < 0)
-    {
-        PRINT("Error in sending join  msg.");
-        return false;
-    }
-    return true;
-}
-*/
+/* <doc>
+ * int multicast_join(struct sockaddr_in group_ip, unsigned int port)
+ * Client joins the multicast group by giving the system call to kernel.
+ * This function takes parameter as
+ *  - multicast group address
+ *  - multicast group port
+ *
+ * </doc>
+ */
 int multicast_join(struct sockaddr_in group_ip, unsigned int port)
 {
   int status=0;
   int sd;
-  char group_ip_address[INET_ADDRSTRLEN];
+  char group_ip_address[INET6_ADDRSTRLEN];
+  struct sockaddr_in localSock;
+  struct ip_mreq group;
 
-  inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
+  inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(group_ip)), group_ip_address, INET6_ADDRSTRLEN);
 
   /* Create a datagram socket on which to receive. */
   sd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -86,8 +43,9 @@ int multicast_join(struct sockaddr_in group_ip, unsigned int port)
     exit(1);
   }
  
-  /* Enable SO_REUSEADDR to allow multiple instances of this */
-  /* application to receive copies of the multicast datagrams. */
+  /* Enable SO_REUSEADDR to allow multiple instances of this
+   * application to receive copies of the multicast datagrams.
+   */
   {
     int reuse = 1;
     status =setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(reuse));
@@ -98,8 +56,9 @@ int multicast_join(struct sockaddr_in group_ip, unsigned int port)
     }
   }
  
-/* Bind to the proper port number with the IP address */
-/* specified as INADDR_ANY. */
+  /* Bind to the proper port number with the IP address
+   * specified as INADDR_ANY.
+   */
   memset((char *) &localSock, 0, sizeof(localSock));
   localSock.sin_family = AF_INET;
   localSock.sin_port = htons(port);
@@ -112,10 +71,11 @@ int multicast_join(struct sockaddr_in group_ip, unsigned int port)
     exit(1);
   }
  
-/* Join the multicast group 226.1.1.1 on the local 203.106.93.94 */
-/* interface. Note that this IP_ADD_MEMBERSHIP option must be */
-/* called for each local interface over which the multicast */
-/* datagrams are to be received. */
+  /* Join the multicast group 226.1.1.1 on the local 203.106.93.94
+   * interface. Note that this IP_ADD_MEMBERSHIP option must be
+   * called for each local interface over which the multicast
+   * datagrams are to be received.
+   */
   group.imr_multiaddr.s_addr = inet_addr(group_ip_address);
   group.imr_interface.s_addr = INADDR_ANY;
 
@@ -126,23 +86,35 @@ int multicast_join(struct sockaddr_in group_ip, unsigned int port)
     close(sd);
     exit(1);
   }
- 
-    status=make_socket_non_blocking(sd);
-    if (status == -1)
-    {
-        perror("\nError while making the socket non-blocking.");
-        exit(0);
-    }
 
-    return sd;
+    /* PRINT("listening on %s",group_ip_address); */
+
+   status=make_socket_non_blocking(sd);
+   if (status == -1)
+   {
+       perror("\nError while making the socket non-blocking.");
+       exit(0);
+   }
+
+   return sd;
 }
 
+/* <doc>
+ * bool multicast_leave(int mcast_fd, struct sockaddr_in group_ip)
+ * Client leaves the multicast group address. This function takes
+ * parameter as
+ *  - multicast group address
+ *  - Multicast FD on which client is bound
+ *
+ * </doc>
+ */
 bool multicast_leave(int mcast_fd, struct sockaddr_in group_ip)
 {
   struct ip_mreq group;
-  char group_ip_address[INET_ADDRSTRLEN];
+  char group_ip_address[INET6_ADDRSTRLEN];
 
-  inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
+  //inet_ntop(AF_INET, &(group_ip), group_ip_address, INET_ADDRSTRLEN);
+  inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(group_ip)), group_ip_address, INET6_ADDRSTRLEN);
 
   group.imr_multiaddr.s_addr = inet_addr(group_ip_address);
   group.imr_interface.s_addr = INADDR_ANY;

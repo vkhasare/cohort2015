@@ -176,8 +176,10 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
 
              clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
-             /*Add in group linked list*/
-             ADD_CLIENT_IN_GROUP(&group_node,(struct sockaddr*) &pdu->peer_addr, clientID);
+             /*Purge the client if already existing in the group list*/
+             remove_client_from_mcast_group_node(&server_info, group_node, clientID);
+             /*Add client in group link list*/
+             ADD_CLIENT_IN_GROUP(&group_node, (struct sockaddr*) &pdu->peer_addr, clientID);
 
              /*Add in Client RBT*/
              tree = (RBT_tree*) server_info->client_RBT_head;
@@ -207,11 +209,11 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
 
              /* Add ip addr as response and break to search for next group. */
              join_rsp->group_ips[cl_iter].sin_family =
-                     group_node->group_addr.sin_family;
+                     group_node->grp_mcast_addr.sin_family;
              join_rsp->group_ips[cl_iter].sin_port   =
-                     group_node->group_addr.sin_port;
+                     group_node->grp_mcast_addr.sin_port;
              join_rsp->group_ips[cl_iter].s_addr     =
-                     group_node->group_addr.sin_addr.s_addr;
+                     group_node->grp_mcast_addr.sin_addr.s_addr;
              join_rsp->group_ips[cl_iter].grp_port   =
                     group_node->group_port;
         }
@@ -246,7 +248,10 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
     fp = fopen(filename, "r");
     for(i = 0; i < count; i++){
         fscanf(fp, "%s %s %s", (*mapping)[i].grname, ip_str,port);
-        inet_pton(AF_INET, ip_str, &((*mapping)[i].grp_ip));
+        /* Storing group IP in sockaddr_in struct */
+        (*mapping)[i].grp_ip.sin_family = AF_INET;
+        (*mapping)[i].grp_ip.sin_port = htons(atoi(port));
+        (*mapping)[i].grp_ip.sin_addr.s_addr = inet_addr(ip_str);
         (*mapping)[i].port_no = atoi(port);
         ADD_GROUP_IN_LL(&server_info,(*mapping)[i].grname,(*mapping)[i].grp_ip,(*mapping)[i].port_no);
     }
@@ -264,7 +269,7 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
  */
 void display_group_info(server_information_t *server_info)
 {
-  display_mcast_group_node(&server_info);
+  display_mcast_group_node(&server_info, SHOW_ALL);
 }
 
 /* <doc>
@@ -283,22 +288,89 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     comm_struct_t *rsp = &(rsp_pdu.msg);
     char ipaddr[INET6_ADDRSTRLEN];
     server_information_t *server_info = NULL;
-
-    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("Received echo request from %s", ipaddr);
+    echo_req_t echo_req = req->idv.echo_req;
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, server_information_t*, server_info);
+
     rsp->id = echo_response;
     echo_rsp_t *echo_response = &(rsp->idv.echo_resp);
 
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
+
     /*filling echo rsp pdu*/
     echo_response->status    = 11;
+    echo_response->group_name = echo_req.group_name;
 
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
+
     return 0;
 }
+
+/* <doc
+ * void mcast_send_chk_alive_msg(server_information_t *server_info, void *fsm_msg)
+ * This functions makes the client moderator on server and multicasts this information
+ * to the group (all clients of that multicast group)
+ *
+ * </doc>
+ */
+void mcast_send_chk_alive_msg(server_information_t *server_info,
+                              void *fsm_msg)
+{
+  char ipaddr[INET6_ADDRSTRLEN];
+  mcast_client_node_t *client_node = NULL;
+  fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+
+  /* fetch the group node pointer from fsm_data */
+  mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
+
+  /* Changing the fsm state as moderator has been selected */
+  group_node->fsm_state = MODERATOR_SELECTED;
+
+  pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+
+  /*Marking client node as Moderator*/
+  unsigned int clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
+  RBT_tree *tree = (RBT_tree*) server_info->client_RBT_head;
+
+  if (clientID > 0) {
+      /*Mark client as Busy in LL and RBTree*/
+      RBT_node *rbNode = RBFindNodeByID(tree, clientID);
+      /*Mark RBT node as moderator and busy*/
+      rbNode->av_status = RB_BUSY;
+      rbNode->is_moderator = TRUE;
+      /*In group node LL, store pointer for moderator client node and also mark client in LL as busy.*/
+      search_client_in_group_node(group_node, clientID, &client_node);
+      group_node->moderator_client = client_node;
+      client_node->av_status = CLBUSY;
+
+      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+      PRINT("-------------[NOTIFICATION] Client %s has been selected as MODERATOR for group %s  ---------------", ipaddr, group_node->group_name);
+  }
+
+  /*Create the moderator notification request and inform the multicast group about the Group Moderator*/
+  pdu_t notify_pdu;
+  comm_struct_t *req = &(notify_pdu.msg);
+  moderator_notify_req_t *mod_notify_req = &(req->idv.moderator_notify_req);
+
+  struct sockaddr_in *addr_in = (struct sockaddr_in *) &pdu->peer_addr;
+
+  req->id = moderator_notify_req;
+  mod_notify_req->moderator_id = clientID;
+  mod_notify_req->moderator_port = addr_in->sin_port;
+  mod_notify_req->group_name = group_node->group_name;
+
+  /*Send to multicast group*/
+  write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &notify_pdu);
+
+  PRINT("[Moderator_Notify_Req: GRP - %s] Moderator Notify Request sent to group %s.", mod_notify_req->group_name , mod_notify_req->group_name);
+//  group_node->fsm_state = MOD_NOTIFICATION_PENDING;
+}
+
 
 /* <doc>
  * static
@@ -310,13 +382,27 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 static
 int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
     char ipaddr[INET6_ADDRSTRLEN];
+    server_information_t *server_info = NULL;
     comm_struct_t *rsp = &(pdu->msg);
     echo_rsp_t echo_rsp = rsp->idv.echo_resp;
+    fsm_data_t fsm_msg;
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("Received echo response from %s", ipaddr);
+    PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp.group_name, ipaddr);
 
-//    PRINT("client is %d", echo_rsp.status);
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, server_information_t*, server_info);
+
+    /*Check the fsm of group node and act accordingly.*/
+    mcast_group_node_t *group_node = NULL;
+    get_group_node_by_name(&server_info, echo_rsp.group_name, &group_node);
+
+    fsm_msg.fsm_state = group_node->fsm_state;
+    fsm_msg.grp_node_ptr = group_node;
+    fsm_msg.pdu = pdu;
+
+    /* Run the server fsm*/
+    server_info->fsm(server_info, ECHO_RSP_RCVD_EVENT, &fsm_msg);
 
     return 0;
 }
@@ -333,13 +419,18 @@ static
 int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
 {
   pdu_t pdu;
+  char ipaddr[INET6_ADDRSTRLEN];
   comm_struct_t *req = &(pdu.msg);
   echo_req_t *echo_request = &(req->idv.echo_req);
 
   req->id = echo_req;
 
+  /*Create the echo request pdu*/
   echo_request->group_name = grp_name;
   write_record(sockfd, addr, &pdu);
+
+  inet_ntop(AF_INET, get_in_addr(addr), ipaddr, INET6_ADDRSTRLEN);
+  PRINT("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
 
   return 0;
 }
@@ -357,10 +448,15 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
 {
    mcast_client_node_t *client_node = NULL;
 
+   /*Group is in moderator selection pending state*/
+   group_node->fsm_state = MODERATOR_SELECTION_PENDING;
+
    client_node = SN_LIST_MEMBER_HEAD(&((group_node)->client_info->client_node),
                                      mcast_client_node_t,
                                      list_element);
 
+   /* Send the echo req to clients of group for moderator selection. The one who
+    * who replies first will be selected as moderator.*/
    while (client_node)
    {
       send_echo_request(server_info->server_fd, &client_node->client_addr, grp_name);
@@ -384,8 +480,10 @@ void assign_task(server_information_t *server_info, char *grp_name)
 {
    mcast_group_node_t *group_node = NULL;
 
+   /*fetch the group information whose clients are supposed to work on task*/
    get_group_node_by_name(&server_info, grp_name, &group_node); 
 
+   /*Select the moderator for the multicast group*/
    moderator_selection(server_info, group_node, grp_name);
 }
 
@@ -475,8 +573,7 @@ void server_stdin_data(int fd, server_information_t *server_info)
     }
     else if (0 == strcmp(read_buffer,"show groups"))
     {
-        if(mapping)
-            display_mapping(mapping,num_groups);
+        display_mcast_group_node(&server_info, SHOW_GROUP_ONLY);
     }
     else if (0 == strncmp(read_buffer,"show group info",15))
     {
@@ -513,6 +610,7 @@ void server_stdin_data(int fd, server_information_t *server_info)
     }
     else if( strncmp(read_buffer,"send msg",8) == 0)
     {
+/* THIS CODE SHOULD BE REMOVED
         char remoteIP[INET_ADDRSTRLEN];
         unsigned int port;
         strcpy(read_buffer_copy,read_buffer);
@@ -549,6 +647,7 @@ void server_stdin_data(int fd, server_information_t *server_info)
         {
             PRINT("Sent msg %s to group %s",message,ptr);
         }
+*/
     }
     else
     {
@@ -579,6 +678,9 @@ int main(int argc, char * argv[])
     /* allocating RBT root for faster client lookup on server */
     tree = RBTreeCreate(IntComp, NullFunction, IntPrint);
     server_info->client_RBT_head = tree;
+
+    /* Registering the fsm handler */
+    server_info->fsm = server_callline_fsm;
 
     num_groups = initialize_mapping("src/ip_mappings.txt", &mapping,server_info);
 
@@ -678,12 +780,14 @@ int main(int argc, char * argv[])
                 PRINT_PROMPT("[server] ");
             }
             /* Code Block for handling events on connection sockets  */
+/*
             else
             {
                 comm_struct_t req;
                 fptr func;
 
             }
+*/
         }
     }
     return 0;

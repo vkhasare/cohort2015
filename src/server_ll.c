@@ -97,6 +97,38 @@ void deallocate_rb_cl_node(rb_info_t **rb_info, rb_cl_grp_node_t *node)
  *
  * </doc>
  */
+bool search_rb_grp_node(rb_info_t **rb_info, char *grpname, rb_cl_grp_node_t **rb_grp_node)
+{
+   rb_cl_grp_node_t *group_node = NULL;
+
+   group_node =     SN_LIST_MEMBER_HEAD(&((*rb_info)->cl_list->group_node),
+                                        rb_cl_grp_node_t,
+                                        list_element);
+
+   while (group_node)
+   {
+     mcast_group_node_t *node = ((mcast_group_node_t *)group_node->grp_addr);
+
+     /* PRINT("group-name = %s",(node)->group_name); */
+     if (!strcmp((node)->group_name, grpname)) {
+         *rb_grp_node = group_node;
+         return TRUE;
+     }
+
+     group_node =     SN_LIST_MEMBER_NEXT(group_node,
+                                          rb_cl_grp_node_t,
+                                          list_element);
+   }
+  return FALSE;
+}
+
+/* <doc>
+ * void remove_rb_grp_node(rb_info_t **rb_info, char *grpname)
+ * searches the group node for a client against its grpname
+ * and removes it.
+ *
+ * </doc>
+ */
 bool remove_rb_grp_node(rb_info_t **rb_info, char *grpname, mcast_group_node_t **ll_grp_node)
 {
    rb_cl_grp_node_t *group_node = NULL;
@@ -236,7 +268,7 @@ mcast_group_node_t *allocate_mcast_group_node(server_information_t **server_info
    new_group_node->client_info = NULL;
    new_group_node->number_of_clients = 0;
    new_group_node->group_port = INT_MAX;
-   
+   new_group_node->fsm_state = STATE_NONE; 
    SN_LIST_MEMBER_INSERT_HEAD(&((*server_info)->server_list->group_node),
                              new_group_node,
                              list_element);
@@ -333,7 +365,7 @@ void display_mcast_client_node(mcast_group_node_t **group_node)
 
       sprintf(buf,
       "\n\tClient Address: %s \t Client FD: %u",
-      ipaddr, client_node->client_fd);
+      ipaddr, client_node->client_id);
 
       SIMPLE_PRINT(buf);
 
@@ -350,7 +382,7 @@ void display_mcast_client_node(mcast_group_node_t **group_node)
  *
  * </doc>
  */
-void display_mcast_group_node(server_information_t **server_info)
+void display_mcast_group_node(server_information_t **server_info, display_show_type_t show_type)
 {
   mcast_group_node_t *group_node = NULL;
   char buf[100];
@@ -363,16 +395,15 @@ void display_mcast_group_node(server_information_t **server_info)
 
    while (group_node)
    {
-
-     inet_ntop(AF_INET, &(group_node->group_addr), groupIP, INET_ADDRSTRLEN);
-
+     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(group_node->grp_mcast_addr)), groupIP, INET6_ADDRSTRLEN);
      sprintf(buf,
      "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d",
      group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);
 
      SIMPLE_PRINT(buf);
 
-     if (group_node->client_info)
+     if ((show_type == SHOW_ALL) &&
+         (group_node->client_info))
      {
        display_mcast_client_node(&group_node);
      }
@@ -399,7 +430,7 @@ void display_mcast_group_node_by_name(server_information_t **server_info, char *
 
    if (group_node)
    {
-      inet_ntop(AF_INET, &(group_node->group_addr), groupIP, INET_ADDRSTRLEN);
+      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(group_node->grp_mcast_addr)), groupIP, INET6_ADDRSTRLEN);
 
       sprintf(buf,
       "\n\n\rGroup Name: %s \t Group IP: %s   Group Port: %d   Client Count: %d",
@@ -420,14 +451,42 @@ void display_mcast_group_node_by_name(server_information_t **server_info, char *
 }
 
 
+bool search_client_in_group_node(mcast_group_node_t *group_node, unsigned int target_id, mcast_client_node_t **clnt_node)
+{
+  char buf[100];
+  char groupIP[INET_ADDRSTRLEN];
+
+      if (group_node->client_info)
+      {
+           mcast_client_node_t *client_node = NULL, *temp_node = NULL;
+
+           client_node = SN_LIST_MEMBER_HEAD(&(group_node->client_info->client_node),
+                                              mcast_client_node_t,
+                                              list_element);
+
+            while(client_node)
+            {
+               if (client_node->client_id == target_id)
+               {
+                    *clnt_node = client_node;
+                    return TRUE;
+               }
+                 client_node = SN_LIST_MEMBER_NEXT(client_node,
+                                                  mcast_client_node_t,
+                                                  list_element);
+            }
+      }
+  return FALSE;
+}
+
 /* <doc>
- * bool remove_client_from_mcast_group_node(server_information_t **server_info, char *grp_name, int target_fd)
+ * bool remove_client_from_mcast_group_node(server_information_t **server_info, char *grp_name, int target_id)
  * This functions removes a client from group node. It first searches for the group node and 
  * removes the request client from list.
  * Return TRUE if successful, otherwise FALSE.
  * </doc>
  */
-bool remove_client_from_mcast_group_node(server_information_t **server_info, mcast_group_node_t *group_node, unsigned int target_fd)
+bool remove_client_from_mcast_group_node(server_information_t **server_info, mcast_group_node_t *group_node, unsigned int target_id)
 {
   char buf[100];
   char groupIP[INET_ADDRSTRLEN];
@@ -444,7 +503,7 @@ bool remove_client_from_mcast_group_node(server_information_t **server_info, mca
 
             while(client_node)
             {
-               if (client_node->client_fd == target_fd)
+               if (client_node->client_id == target_id)
                {
                     deallocate_mcast_client_node(group_node, client_node);
 
@@ -478,8 +537,9 @@ void ADD_GROUP_IN_LL(server_information_t **server_info, char *group_name, struc
   group_node = allocate_mcast_group_node(server_info);
 
   group_node->group_name = group_name;
-  group_node->group_addr = group_addrIP;
+  group_node->grp_mcast_addr = group_addrIP;
   group_node->group_port = port;
+  group_node->moderator_client = NULL;
 }
 
 /* <doc>
@@ -493,6 +553,8 @@ void ADD_CLIENT_IN_GROUP(mcast_group_node_t **group_node, struct sockaddr *addr,
 {
   mcast_client_node_t *client_node = NULL;
   client_node = allocate_mcast_client_node(group_node);
-  memcpy(&(client_node->client_addr),addr,sizeof(addr));
-  client_node->client_fd = client_id;
+  memcpy(&(client_node->client_addr),addr,sizeof(*addr));
+  client_node->client_id = client_id;
+  /*client will be free initially*/
+  client_node->av_status = CLFREE;
 }

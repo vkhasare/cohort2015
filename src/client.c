@@ -15,6 +15,7 @@ static int handle_echo_req(const int, pdu_t *pdu, ...);
 static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_response(const int, pdu_t *pdu, ...);
 static int handle_join_response(const int, pdu_t *pdu, ...);
+static int handle_mod_notification(const int, pdu_t *pdu, ...);
 static int handle_task_response(const int, pdu_t *pdu, ...);
 fptr client_func_handler(unsigned int);
 static void send_join_group_req(client_information_t *, char *);
@@ -50,12 +51,63 @@ fptr client_func_handler(unsigned int msgType)
     case TASK_RESPONSE:
         func_name = handle_task_response;
         break;
+    case moderator_notify_req:
+        func_name = handle_mod_notification;
+        break;
     default:
         PRINT("Invalid msg type of type - %d.", msgType);
         func_name = NULL;
   }
 
   return func_name;
+}
+
+/* <doc>
+ * static
+ * int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
+ * This functions receives message from Server, regarding the
+ * information of moderator. It then informs its presence to moderator.
+ *
+ * </doc>
+ */
+static
+int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
+{
+    client_information_t *client_info = NULL;
+    struct sockaddr_in mod;
+    char ipaddr[INET6_ADDRSTRLEN];
+
+    comm_struct_t *rsp = &(pdu->msg);
+    moderator_notify_req_t mod_notify_req = rsp->idv.moderator_notify_req;
+
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, client_information_t*, client_info);
+
+    /*Storing moderator IP in client info*/
+    mod.sin_family = AF_INET;
+    mod.sin_port = mod_notify_req.moderator_port;
+    mod.sin_addr.s_addr = mod_notify_req.moderator_id;
+
+    memcpy(&client_info->moderator, (struct sockaddr *) &mod, sizeof(client_info->moderator));
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(mod)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Moderator_Notify_Req: GRP - %s] Moderator IP is %s", mod_notify_req.group_name, ipaddr);
+
+    /*After moderator information, inform moderator about the self presence by sending echo request msg.*/
+    if (client_info->client_id != mod_notify_req.moderator_id) {
+       send_echo_request(client_info->client_fd, &client_info->moderator, mod_notify_req.group_name);
+    } else {
+       /*IT IS THE MODERATOR BLOCK.. UPDATE MODERATOR DATA STRUCTURES*/
+       PRINT("THIS CLIENT IS SELECTED AS MODERATOR FOR GROUP %s", mod_notify_req.group_name);
+       /*Allocate the moderator info*/
+       allocate_moderator_info(&client_info);
+       /*mark client node as moderator*/
+       client_info->is_moderator = TRUE;
+
+       /**Register the moderator fsm handler and set the fsm state*/
+       client_info->moderator_info->fsm = moderator_callline_fsm;
+       client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_PENDING;
+    }
 }
 
 /* <doc>
@@ -71,7 +123,7 @@ int handle_leave_response(const int sockfd, pdu_t *pdu, ...)
         uint8_t cl_iter;
         msg_cause enum_cause = REJECTED;
         char *group_name;
-        mcast_client_node_t *client_node = NULL;
+        client_grp_node_t *client_grp_node = NULL;
         client_information_t *client_info = NULL;
 
         comm_struct_t *resp = &(pdu->msg);
@@ -89,17 +141,17 @@ int handle_leave_response(const int sockfd, pdu_t *pdu, ...)
             /* if cause other than ACCEPTED, ignore the response */
             if (enum_cause == ACCEPTED)
             {
-                get_client_node_by_group_name(&client_info, group_name, &client_node);
+                get_client_grp_node_by_group_name(&client_info, group_name, &client_grp_node);
 
                 /* Leave the multicast group if response cause is Accepted */
-                if (TRUE == multicast_leave(client_node->mcast_fd, client_node->group_addr)) {
+                if (TRUE == multicast_leave(client_grp_node->mcast_fd, client_grp_node->group_addr)) {
                     PRINT("Client has left multicast group %s.", group_name);
                 } else {
                     PRINT("[Error] Error in leaving multicast group %s.", group_name);
                 }
 
                 /* Removing group association from list */
-                deallocate_client_node(client_info, client_node);
+                deallocate_client_grp_node(client_info, client_grp_node);
             }
 
         }
@@ -119,7 +171,7 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
     int iter;
     char* group_name;
     unsigned int m_port;
-    mcast_client_node_t node;
+    client_grp_node_t node;
     int status;
     struct epoll_event *event;
     msg_cause enum_cause;
@@ -137,8 +189,8 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
     event = client_info->epoll_evt;
  
     for(iter = 0; iter < join_response.num_groups; iter++){
+        /*Reading the join response pdu*/
         enum_cause = join_response.group_ips[iter].cause;
-
         group_name = join_response.group_ips[iter].group_name;
 
         if (enum_cause == REJECTED)
@@ -147,12 +199,14 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
             continue;
         }
 
+        /*If join response has case as ACCEPTED*/
         PRINT("[Join_Response: GRP - %s] Cause : %s.", group_name, enum_to_str(enum_cause));
 
         group_ip.sin_family = join_response.group_ips[iter].sin_family;
         group_ip.sin_port = join_response.group_ips[iter].sin_port;
         group_ip.sin_addr.s_addr = join_response.group_ips[iter].s_addr;
-        
+        memset(&group_ip.sin_zero,0,sizeof(group_ip.sin_zero));
+
         m_port = join_response.group_ips[iter].grp_port;
 
         /* Join the multicast group with the groupIP present in join_response msg*/
@@ -253,6 +307,34 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
 }
 
 /* <doc>
+ * void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_info,
+ *                                                  void *fsm_msg)
+ * When moderator has not sent moderator notification response to server and 
+ * receives echo req from its peer clients, then it should store the information
+ * about all the clients.
+ *
+ * </doc>
+ */
+void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_info,
+                                                 void *fsm_msg)
+{
+  fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+  pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+  comm_struct_t *req = &(pdu->msg);
+  echo_req_t echo_req = req->idv.echo_req;
+
+  strcpy(client_info->moderator_info->group_name, echo_req.group_name);
+
+  /*allocate the moderator client node*/
+  mod_client_node_t *mod_node = (mod_client_node_t *) allocate_clnt_moderator_node(&client_info->moderator_info);
+
+  mod_node->peer_client_id = calc_key(&pdu->peer_addr); 
+  mod_node->peer_client_addr.sa_family = pdu->peer_addr.sa_family;
+  strcpy(mod_node->peer_client_addr.sa_data, pdu->peer_addr.sa_data);
+
+}
+
+/* <doc>
  * static
  * int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
  * Handles the echo response from peer.
@@ -266,9 +348,7 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
     echo_rsp_t *echo_rsp = &(rsp->idv.echo_resp);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("Received echo response from %s", ipaddr);
-
-//    PRINT("Peer is %d", echo_rsp.status);
+    PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
 
     return 0;
 }
@@ -289,19 +369,35 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     comm_struct_t *rsp = &(rsp_pdu.msg);
     char ipaddr[INET6_ADDRSTRLEN];
     client_information_t *client_info = NULL;
+    echo_req_t echo_req = req->idv.echo_req;
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("Received echo request from %s", ipaddr);
+    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
+
     rsp->id = echo_response;
     echo_rsp_t *echo_response = &(rsp->idv.echo_resp);
 
     /*filling echo rsp pdu*/
     echo_response->status    = client_info->client_status;
+    echo_response->group_name = echo_req.group_name;
     
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
+
+    /*If moderator, then run the moderator fsm*/
+    if (client_info->moderator_info) {
+        fsm_data_t fsm_msg;
+        fsm_msg.fsm_state = client_info->moderator_info->fsm_state;
+        fsm_msg.pdu = pdu;
+
+        /*run the fsm*/
+        client_info->moderator_info->fsm(client_info, MOD_ECHO_REQ_RCVD_EVENT, &fsm_msg);
+    }
 
     return 0;
 }
@@ -318,13 +414,18 @@ static
 int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
 {
   pdu_t pdu;
+  char ipaddr[INET6_ADDRSTRLEN];
   comm_struct_t *req= &(pdu.msg);
   echo_req_t *echo_request = &(req->idv.echo_req);
 
   req->id = echo_req;
 
+  /*Creating the echo request pdu*/
   echo_request->group_name = grp_name;
   write_record(sockfd, addr, &pdu);
+
+  inet_ntop(AF_INET, get_in_addr(addr), ipaddr, INET6_ADDRSTRLEN);
+  PRINT("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
 
   return 0;
 }
@@ -416,6 +517,9 @@ void display_client_clis()
    PRINT("join group <name>                            --  Joins a new group");
    PRINT("leave group <name>                           --  Leaves a group");
    PRINT("cls                                          --  Clears the screen");
+   PRINT("show pending clients                         --  Moderator CLI. Shows list of working clients");
+   PRINT("show done clients                            --  Moderator CLI. Shows list of done clients");
+   PRINT("test echo                                    --  Echo debug CLI");
 }
 
 /* <doc>
@@ -426,7 +530,7 @@ void display_client_clis()
  */
 void display_client_groups(client_information_t *client_info)
 {
-  display_client_node(&client_info);
+  display_client_grp_node(&client_info);
 }
 
 /* <doc>
@@ -471,6 +575,14 @@ void client_stdin_data(int fd, client_information_t *client_info)
     else if (strncmp(read_buffer,"test echo",9) == 0)
     {
         send_echo_request(client_info->client_fd, &client_info->server, "G2");
+    }
+    else if(strncmp(read_buffer,"show pending clients",19) == 0)
+    {
+        display_moderator_pending_list(&client_info, SHOW_MOD_PENDING_CLIENTS);
+    }
+    else if(strncmp(read_buffer,"show done clients",13) == 0)
+    {
+        display_moderator_pending_list(&client_info, SHOW_MOD_DONE_CLIENTS);
     }
     else if (0 == strcmp(read_buffer,"cls\0"))
     {
@@ -529,6 +641,8 @@ int main(int argc, char * argv[])
     get_my_ip("eth0", &myIp);
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(myIp)), ipStr, INET6_ADDRSTRLEN);
 
+    client_info->client_id = calc_key(&myIp);
+
     /* Creating Client socket*/    
     cfd = create_and_bind(ipStr, port, CLIENT_MODE);
 
@@ -566,7 +680,7 @@ int main(int argc, char * argv[])
         exit(0);
     }
 
-    PRINT("..WELCOME TO CLIENT..");
+    PRINT("..WELCOME TO CLIENT (%s)..", ipStr);
     PRINT("\r   <Use \"show help\" to see all supported clis.>\n");
 
     PRINT_PROMPT("[client] ");
@@ -660,24 +774,31 @@ int main(int argc, char * argv[])
             /* Data for multicast grp */
             else
             {
-              mcast_client_node_t *client_node = NULL;
+                fptr func;
+                if ((func = client_func_handler(read_record(events[index].data.fd, &pdu))))
+                {
+                    (func)(events[index].data.fd, &pdu, client_info);
+                }
+/*
+              client_grp_node_t *client_grp_node = NULL;
               char message[512];
 
-              client_node =     SN_LIST_MEMBER_HEAD(&((client_info)->client_list->client_node),                                                              
-                                                   mcast_client_node_t,            
+              client_grp_node =     SN_LIST_MEMBER_HEAD(&((client_info)->client_grp_list->client_grp_node),                                                              
+                                                   client_grp_node_t,            
                                                    list_element);
-              while (client_node)
+              while (client_grp_node)
               {
-                if(client_node->mcast_fd == events[index].data.fd)
+                if(client_grp_node->mcast_fd == events[index].data.fd)
                 {
                   read(events[index].data.fd, message, sizeof(message));
-                  PRINT("This Message is intended for Group %s: %s",client_node->group_name, message);
+                  PRINT("This Message is intended for Group %s: %s",client_grp_node->group_name, message);
                   PRINT_PROMPT("[client] ");
                 }
-                client_node =     SN_LIST_MEMBER_NEXT(client_node,                      
-                                                      mcast_client_node_t,         
+                client_grp_node =     SN_LIST_MEMBER_NEXT(client_grp_node,                      
+                                                      client_grp_node_t,         
                                                       list_element);
               }
+*/
             }
         }
     }
@@ -753,7 +874,7 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
     int iter;
     char* group_name;
     unsigned int m_port;
-    mcast_client_node_t node;
+    client_grp_node_t node;
     int status;
 //    struct epoll_event *event;
 //    msg_cause enum_cause;

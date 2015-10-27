@@ -4,8 +4,8 @@ CLIENT=client
 SERVER_STR=server_stripped
 CLIENT_STR=client_stripped
 
-SERVER_SOURCE=${SRC}/server.c 
-CLIENT_SOURCE=${SRC}/client.c
+SERVER_SOURCE=server.c server_ll.c server_fsm.c rbt.c misc.c 
+CLIENT_SOURCE=client.c client_ll.c moderator_fsm.c
 
 L_INCLUDE=-I${GFLAGS_BR}/include \
 						 -I${GLOG_BR}/include
@@ -24,29 +24,30 @@ CFLAGS=-g -c
 logger:
 	$(CPP) -fPIC -shared -o logg.so ${SRC}/logg.cpp	-I${INCLUDE} ${LC_STR}
 	  
-DEPS=sn_ll.c common.c receiver.c comm_primitives.c rbt.c misc.c server_ll.c client_ll.c
+DEPS=sn_ll.c common.c receiver.c comm_primitives.c
 DEPS_O=$(subst .c,.o,$(DEPS))
+
+S_DEPS_O=$(subst .c,.o,$(SERVER_SOURCE))
+C_DEPS_O=$(subst .c,.o,$(CLIENT_SOURCE))
 
 deps:
 	$(foreach var,$(DEPS),${CC} ${CFLAGS} ${SRC}/$(var) -I${INCLUDE};)
+	$(foreach var,$(SERVER_SOURCE),${CC} ${CFLAGS} ${SRC}/$(var) -I${INCLUDE};)
+	$(foreach var,$(CLIENT_SOURCE),${CC} ${CFLAGS} ${SRC}/$(var) -I${INCLUDE};)
 
 $(SERVER): logger deps
-	$(CC) $(CFLAGS) $(SERVER_SOURCE) -I${INCLUDE}
-	$(CPP) -o../$(SERVER) ${SERVER}.o ${OBJ}/logg.so ${COMM_OBJ} ${DEPS_O} \
+	$(CPP) -o../$(SERVER) ${OBJ}/logg.so ${COMM_OBJ} ${DEPS_O} ${S_DEPS_O} \
 	${LC_STR} -lpthread
 
 $(CLIENT): logger deps
-	$(CC) $(CFLAGS) $(CLIENT_SOURCE) -I${INCLUDE}
-	$(CPP) -o../$(CLIENT) ${CLIENT}.o ${OBJ}/logg.so ${COMM_OBJ} ${DEPS_O} \
+	$(CPP) -o../$(CLIENT) ${OBJ}/logg.so ${COMM_OBJ} ${DEPS_O} ${C_DEPS_O} \
 	${LC_STR} -lpthread
 
 $(SERVER_STR): deps
-	$(CC) $(CFLAGS) $(SERVER_SOURCE) -I${INCLUDE}
-	$(CPP) -o../$(SERVER) ${SERVER}.o ${COMM_OBJ} ${DEPS_O}
+	$(CPP) -o../$(SERVER) ${COMM_OBJ} ${DEPS_O} ${S_DEPS_O}
 
 $(CLIENT_STR): deps
-	$(CC) $(CFLAGS) $(CLIENT_SOURCE) -I${INCLUDE}
-	$(CPP) -o../$(CLIENT) ${CLIENT}.o ${COMM_OBJ} ${DEPS_O}
+	$(CPP) -o../$(CLIENT) ${COMM_OBJ} ${DEPS_O} ${C_DEPS_O}
 
 .PHONY: dummy_rule
 

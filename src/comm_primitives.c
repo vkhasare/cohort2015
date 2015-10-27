@@ -248,9 +248,9 @@ void write_record(int sockfd, struct sockaddr_in *destAddr, pdu_t *pdu){
     //Only for debugging
     int size;
     size = xdr_getpos(&xdrs);
-    PRINT("Size of encoded data: %i\n", size);
-    xdr_destroy(&xdrs); 
+    PRINT("Size of encoded data: %i\n", size); 
     */
+    xdr_destroy(&xdrs);
     sendto(sockfd, msgbuf, msglen, MSG_DONTWAIT,
                      (struct sockaddr *) destAddr, sizeof(*destAddr));
 
@@ -316,6 +316,20 @@ int read_record(int sockfd, pdu_t *pdu){
     return pdu->msg.id;
 }
 
+bool process_moderator_notify_req(XDR* xdrs, moderator_notify_req_t* m){
+
+    if(xdrs->x_op == XDR_DECODE){
+//        m->moderator_id = 0;
+        m->group_name = NULL;
+    }
+
+    int uint_res1 = (xdr_u_int(xdrs, &(m->moderator_id)));
+    int uint_res2 = (xdr_u_int(xdrs, &(m->moderator_port)));
+    int str_res =  xdr_string(xdrs, &(m->group_name), max_gname_len);
+
+    return (uint_res1 && uint_res2 && str_res);
+}
+
 bool xdr_echo_req(XDR* xdrs, echo_req_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->group_name = NULL;
@@ -327,9 +341,13 @@ bool xdr_echo_req(XDR* xdrs, echo_req_t* m){
 bool xdr_echo_resp(XDR* xdrs, echo_rsp_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->status = 0;
+        m->group_name = NULL;
     }
 
-    return ((xdr_u_int(xdrs, &(m->status))));
+    int uint_res = xdr_u_int(xdrs, &(m->status));
+    int str_res =  xdr_string(xdrs, &(m->group_name), max_gname_len);
+
+    return uint_res && str_res;
 }
 
 bool xdr_gname_string(XDR* xdrs, string_t* m){
@@ -443,6 +461,7 @@ bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
         {echo_response, (xdrproc_t)xdr_echo_resp},
         {leave_request, (xdrproc_t)process_leave_req},
         {leave_response, (xdrproc_t)process_leave_resp},
+        {moderator_notify_req, (xdrproc_t)process_moderator_notify_req},
         {TASK_RESPONSE, (xdrproc_t)process_leave_resp},
         { __dontcare__, NULL }
     };

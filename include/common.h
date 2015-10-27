@@ -22,8 +22,6 @@
 
 //#define port "3490"
 #define TIMEOUT_SECS 5
-#define CLIENT_MODE 101
-#define SERVER_MODE 202
 #define BACKLOG 30000
 #define MAXEVENTS 30000
 #define MAXDATASIZE 100
@@ -47,6 +45,18 @@ extern const unsigned int max_gname_len; //includes nul termination
   varName = va_arg (arguments, type);           \
   va_end (arguments);                           \
 }
+
+/* <doc>
+ * enum_mode_t
+ * Consists of 
+ * - CLIENT_MODE
+ * - SERVER_MODE
+ * </doc>
+ */
+typedef enum {
+  CLIENT_MODE = 101,
+  SERVER_MODE = 102
+} enum_mode_t;
 
 /* <doc>
  * enum msg_cause

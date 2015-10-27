@@ -48,6 +48,9 @@ void get_my_ip(const char * device, struct sockaddr *addr)
     memcpy((*addr).sa_data, ifr.ifr_addr.sa_data,sizeof((*addr).sa_data));
 }
 
+/*
+ <This is an obsolete function. Use display_mcast_group_node.>
+ 
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
 {
   uint32_t i;
@@ -59,6 +62,7 @@ void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
     PRINT("Group name: %s \t\tIP addr: %s \t\tPort Number: %d", mapping[i].grname,remoteIP, mapping[i].port_no);
   }
 }
+*/
 
 int IS_SERVER(int oper)
 {
@@ -110,7 +114,6 @@ int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
            {
               continue;
            }
-           PRINT("socket id is %d",sfd);
         }
         else if (IS_CLIENT(oper_mode))
         {
@@ -118,7 +121,6 @@ int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
            {
               continue;
            }
-           PRINT("socket id is %d",sfd);
         }
         break;
     }
@@ -183,7 +185,6 @@ calc_key(struct sockaddr *addr)
 
   return 0;
 }
-
 
 void display_server_clis()
 {
