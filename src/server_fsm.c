@@ -37,9 +37,9 @@ void server_fsm_mod_selected (server_information_t *server_info,
                                void *fsm_msg)
 {
    switch (event) {
-   case SEND_KEEPALIVE_EVENT:
-          mcast_send_chk_alive_msg(server_info,
-                                   fsm_msg);
+   case MOD_NOTIFY_RSP_RCVD_EVENT:
+          mcast_start_task_distribution(server_info,
+                                        fsm_msg);
           break;
    default:
           /*ignore case*/

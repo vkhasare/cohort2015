@@ -128,7 +128,7 @@ mod_client_node_t *allocate_clnt_moderator_node(moderator_information_t **modera
 {
    mod_client_node_t *mod_node = NULL;
 
-   mod_node = malloc(sizeof(mod_client_node_t));
+   mod_node = (mod_client_node_t *) malloc(sizeof(mod_client_node_t));
 
    mod_node->peer_client_id = 0;
    mod_node->heartbeats_missed = 0;

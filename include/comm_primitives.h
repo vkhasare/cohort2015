@@ -5,9 +5,14 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#define MALLOC_IE(count)                            \
+#define MALLOC_STR_IE(count)                        \
  ({                                                 \
    (string_t*) malloc (sizeof(string_t) * count);   \
+ })
+
+#define MALLOC_UARRAY_IE(count)                       \
+ ({                                                 \
+   (uarray_t*) malloc (sizeof(uarray_t) * count);   \
  })
 
 #define MALLOC_STR                                  \
@@ -25,12 +30,17 @@ typedef enum struct_id{
     leave_request   = 38,
     leave_response  = 39,
     moderator_notify_req = 40,
+    moderator_notify_rsp = 41,
     TASK_RESPONSE
 }e_struct_id_t; 
 
 typedef struct string{
     char* str;
 }string_t;
+
+typedef struct uarray{
+    unsigned int* val;
+}uarray_t;
 
 typedef struct local_sockaddr_in{
     short sin_family;
@@ -75,8 +85,16 @@ typedef struct leave_response{
 typedef struct moderator_notify_req {
     unsigned int moderator_id;
     unsigned int moderator_port;
+    int num_of_clients_in_grp;
     char* group_name;
 }moderator_notify_req_t;
+
+typedef struct moderator_notify_rsp {
+    char* group_name;
+    unsigned int moderator_id;
+    int client_id_count;
+    unsigned int* client_ids;
+}moderator_notify_rsp_t;
 
 typedef struct my_struct{
     int a;
@@ -116,6 +134,7 @@ typedef struct common_struct{
         leave_req_t leave_req;
         leave_rsp_t leave_rsp;
         moderator_notify_req_t moderator_notify_req;
+        moderator_notify_rsp_t moderator_notify_rsp;
         task_rsp_t task_rsp;
     }idv;
 }comm_struct_t;

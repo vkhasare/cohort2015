@@ -76,6 +76,7 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
     client_information_t *client_info = NULL;
     struct sockaddr_in mod;
     char ipaddr[INET6_ADDRSTRLEN];
+    moderator_information_t *mod_info = NULL;
 
     comm_struct_t *rsp = &(pdu->msg);
     moderator_notify_req_t mod_notify_req = rsp->idv.moderator_notify_req;
@@ -104,9 +105,37 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
        /*mark client node as moderator*/
        client_info->is_moderator = TRUE;
 
+       mod_info = (client_info)->moderator_info;
+
+       strcpy(mod_info->group_name, mod_notify_req.group_name);
+       /*Number of clients in group, to be monitored by moderator*/
+       mod_info->client_count_in_group = mod_notify_req.num_of_clients_in_grp;
+
        /**Register the moderator fsm handler and set the fsm state*/
-       client_info->moderator_info->fsm = moderator_callline_fsm;
-       client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_PENDING;
+       mod_info->fsm = moderator_callline_fsm;
+       mod_info->fsm_state = MODERATOR_NOTIFY_RSP_PENDING;
+
+       /*allocate the client node for pending list, to add the moderator node into it.*/
+       mod_client_node_t *mod_node = (mod_client_node_t *) allocate_clnt_moderator_node(&client_info->moderator_info);
+
+       struct sockaddr moderatorIP;
+       get_my_ip("eth0", &moderatorIP);
+
+       mod_node->peer_client_id = client_info->client_id;
+       mod_node->peer_client_addr.sa_family = moderatorIP.sa_family;
+       strcpy(mod_node->peer_client_addr.sa_data, moderatorIP.sa_data);
+
+       /*If only 1 client in the group, then send moderator notify response for moderator right away.*/
+       if (1 == mod_info->client_count_in_group) {
+          send_moderator_notify_response(client_info);
+       } else {
+          /* Start the timer on Moderator to get echo requests from all its peer clients
+           * 
+           *
+           *
+           * On Time out or receiving all 
+           */
+       }
     }
 }
 
@@ -263,11 +292,11 @@ static void send_join_group_req(client_information_t *client_info, char *group_n
        else
        {
           pdu_t pdu;
-          comm_struct_t *msg=&(pdu.msg);
+          comm_struct_t *req = &(pdu.msg);
 
-          msg->id = join_request;
+          req->id = join_request;
           /* Sending join request for 1 group*/
-          populate_join_req(msg, &group_name, 1);
+          populate_join_req(req, &group_name, 1);
           write_record(client_info->client_fd, &client_info->server, &pdu);
 
           PRINT("[Join_Request: GRP - %s] Join Group Request sent to Server.", group_name);
@@ -289,11 +318,11 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
        if (IS_GROUP_IN_CLIENT_LL(&client_info, group_name))
        {
            pdu_t pdu;
-           comm_struct_t *msg=&(pdu.msg);
+           comm_struct_t *req = &(pdu.msg);
 
-           msg->id = leave_request;
+           req->id = leave_request;
            /* Sending leave request for 1 group*/
-           populate_leave_req(msg, &group_name, 1);
+           populate_leave_req(req, &group_name, 1);
            write_record(client_info->client_fd, &client_info->server, &pdu);
 
            PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", group_name);
@@ -303,6 +332,59 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
            /* client is not member of request group */
            PRINT("Error: Client is not member of group %s.", group_name);
        }
+
+}
+
+/* <doc>
+ * void send_moderator_notify_response(client_information_t *client_info)
+ * After fetching all information about the clients in the group,
+ * send the the information about active group clients to server.
+ *
+ * </doc>
+ */
+void send_moderator_notify_response(client_information_t *client_info)
+{
+    pdu_t pdu;
+    moderator_information_t *mod_info = (client_info)->moderator_info;
+    comm_struct_t *rsp = &(pdu.msg);
+    char ipaddr[INET6_ADDRSTRLEN];
+    int iter = 0;
+
+    rsp->id = moderator_notify_rsp;
+    moderator_notify_rsp_t *moderator_notify_rsp = &(rsp->idv.moderator_notify_rsp);
+
+    /*Filling group name and moderator id*/
+    moderator_notify_rsp->group_name = mod_info->group_name;
+    moderator_notify_rsp->moderator_id = client_info->client_id;    
+
+    moderator_notify_rsp->client_id_count = mod_info->client_count_in_group;
+
+    /*allocate memory for client IDs*/
+    moderator_notify_rsp->client_ids = MALLOC_UARRAY_IE(mod_info->client_count_in_group);
+
+    moderator_notify_rsp->client_ids[iter] = (unsigned int *) malloc(sizeof(unsigned int) * mod_info->client_count_in_group);
+
+    mod_client_node_t *mod_node = NULL;
+
+    mod_node =     SN_LIST_MEMBER_HEAD(&(mod_info->pending_client_list->client_grp_node),
+                                         mod_client_node_t,
+                                         list_element);
+
+    while (mod_node)
+    {
+      /*Fill client ID of all the peer clients*/
+      moderator_notify_rsp->client_ids[iter] = mod_node->peer_client_id;
+
+      mod_node   =   SN_LIST_MEMBER_NEXT(mod_node,
+                                         mod_client_node_t,
+                                         list_element);
+      iter++;
+    }
+
+    write_record(client_info->client_fd, &client_info->server, &pdu);
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_info->server)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Moderator_Notify_Rsp: GRP - %s] Moderator Notify Response sent to server %s", moderator_notify_rsp->group_name, ipaddr);
 
 }
 
@@ -322,17 +404,27 @@ void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_in
   pdu_t *pdu = (pdu_t *) fsm_data->pdu;
   comm_struct_t *req = &(pdu->msg);
   echo_req_t echo_req = req->idv.echo_req;
+  static int client_echo_req_rcvd = 0;
 
-  strcpy(client_info->moderator_info->group_name, echo_req.group_name);
+  /*Increment the counter as request from client is received*/
+  client_echo_req_rcvd = client_echo_req_rcvd + 1;
 
-  /*allocate the moderator client node*/
+  /*allocate the moderator client node and store the information about the group active clients*/
   mod_client_node_t *mod_node = (mod_client_node_t *) allocate_clnt_moderator_node(&client_info->moderator_info);
 
   mod_node->peer_client_id = calc_key(&pdu->peer_addr); 
   mod_node->peer_client_addr.sa_family = pdu->peer_addr.sa_family;
   strcpy(mod_node->peer_client_addr.sa_data, pdu->peer_addr.sa_data);
 
+  /* Send notification response to server if all the clients have responded with echo req or TIMEOUT happened
+   * This is the case where all clients have responded.*/
+  if (client_echo_req_rcvd == (client_info->moderator_info->client_count_in_group) - 1) {
+     send_moderator_notify_response(client_info);
+     client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_SENT; 
+  }
 }
+
+
 
 /* <doc>
  * static
@@ -415,7 +507,7 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
 {
   pdu_t pdu;
   char ipaddr[INET6_ADDRSTRLEN];
-  comm_struct_t *req= &(pdu.msg);
+  comm_struct_t *req = &(pdu.msg);
   echo_req_t *echo_request = &(req->idv.echo_req);
 
   req->id = echo_req;

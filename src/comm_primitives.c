@@ -10,11 +10,13 @@ bool process_client_leave();
 #endif
 
 const unsigned int max_groups = 1000;
+const unsigned int max_client_in_group = 255;
 const unsigned int max_gname_len = 25; //includes nul termination
 const unsigned int echo_req_len = 256; //includes nul termination
 const unsigned int echo_resp_len = 21; //includes nul termination
 
 bool process_comm_struct(XDR* xdrs, comm_struct_t* m);
+bool xdr_process_uarray(XDR* xdrs, uarray_t* m);
 
 int rdata (char* fp, char* buf, int n)
 {
@@ -85,7 +87,7 @@ void populate_join_req(comm_struct_t* m, char** grnames, int num_groups){
     int iter;
     m->idv.join_req.num_groups = num_groups; 
 //    m->idv.join_req.group_ids = (string_t*) malloc (sizeof(string_t) * num_groups);
-    m->idv.join_req.group_ids = MALLOC_IE(num_groups);
+    m->idv.join_req.group_ids = MALLOC_STR_IE(num_groups);
     for(iter = 0; iter < num_groups; iter++){
 #define MALLOC_STRING(x)    m->idv.join_req.group_ids[(x)].str = MALLOC_STR
         MALLOC_STRING(iter);
@@ -101,7 +103,7 @@ void populate_join_req(comm_struct_t* m, char** grnames, int num_groups){
 void populate_leave_req(comm_struct_t* m, char** grnames, int num_groups){
     int iter;
     m->idv.leave_req.num_groups = num_groups;
-    m->idv.leave_req.group_ids = MALLOC_IE(num_groups);
+    m->idv.leave_req.group_ids = MALLOC_STR_IE(num_groups);
 
     for(iter = 0; iter < num_groups; iter++){
 #define MALLOC_STRING(x)    m->idv.leave_req.group_ids[(x)].str = MALLOC_STR
@@ -117,7 +119,7 @@ void populate_leave_req(comm_struct_t* m, char** grnames, int num_groups){
 void populate_leave_rsp(comm_struct_t* m, char** grnames, unsigned int cause, int num_groups){
     int iter;
     m->idv.leave_rsp.num_groups = num_groups;
-    m->idv.leave_rsp.group_ids = MALLOC_IE(num_groups);
+    m->idv.leave_rsp.group_ids = MALLOC_STR_IE(num_groups);
     m->idv.leave_rsp.cause = cause;
 
     for(iter = 0; iter < num_groups; iter++){
@@ -319,15 +321,34 @@ int read_record(int sockfd, pdu_t *pdu){
 bool process_moderator_notify_req(XDR* xdrs, moderator_notify_req_t* m){
 
     if(xdrs->x_op == XDR_DECODE){
-//        m->moderator_id = 0;
         m->group_name = NULL;
     }
 
     int uint_res1 = (xdr_u_int(xdrs, &(m->moderator_id)));
     int uint_res2 = (xdr_u_int(xdrs, &(m->moderator_port)));
+    int uint_res3 = (xdr_int(xdrs, &(m->num_of_clients_in_grp)));
     int str_res =  xdr_string(xdrs, &(m->group_name), max_gname_len);
 
-    return (uint_res1 && uint_res2 && str_res);
+    return (uint_res1 && uint_res2 && uint_res3 && str_res);
+}
+
+bool process_moderator_notify_rsp(XDR* xdrs, moderator_notify_rsp_t* m){
+    if(xdrs->x_op == XDR_DECODE){
+        m->group_name = NULL;
+        m->client_ids = NULL;
+    }
+
+    int str_res     = xdr_string(xdrs, &(m->group_name), max_gname_len);
+    int uint_res1   = (xdr_u_int(xdrs, &(m->moderator_id)));
+    int uint_res2   = (xdr_u_int(xdrs, &(m->client_id_count)));
+    int uarray_res2 = xdr_array(xdrs, (char **)&(m->client_ids), &(m->client_id_count), max_client_in_group,
+                             (sizeof(unsigned int)),
+                             (xdrproc_t )xdr_u_int);
+
+/*    int uarray_res2 = xdr_array(xdrs, (unsigned int**)&(m->client_ids), &(m->client_id_count), max_client_in_group,
+                      sizeof(int),(xdrproc_t )xdr_int);
+*/
+    return (uint_res1 && uint_res2 && uarray_res2 && str_res);
 }
 
 bool xdr_echo_req(XDR* xdrs, echo_req_t* m){
@@ -348,6 +369,13 @@ bool xdr_echo_resp(XDR* xdrs, echo_rsp_t* m){
     int str_res =  xdr_string(xdrs, &(m->group_name), max_gname_len);
 
     return uint_res && str_res;
+}
+
+bool xdr_process_uarray(XDR* xdrs, uarray_t* m){
+    if(xdrs->x_op == XDR_DECODE){
+        m->val = 0;
+    }
+    return xdr_u_int(xdrs, &(m->val));
 }
 
 bool xdr_gname_string(XDR* xdrs, string_t* m){
@@ -462,6 +490,7 @@ bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
         {leave_request, (xdrproc_t)process_leave_req},
         {leave_response, (xdrproc_t)process_leave_resp},
         {moderator_notify_req, (xdrproc_t)process_moderator_notify_req},
+        {moderator_notify_rsp, (xdrproc_t)process_moderator_notify_rsp},
         {TASK_RESPONSE, (xdrproc_t)process_leave_resp},
         { __dontcare__, NULL }
     };

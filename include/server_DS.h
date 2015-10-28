@@ -11,7 +11,8 @@ typedef enum{
 /*Enum of FSM states on Server*/
 typedef enum{
   MODERATOR_SELECTION_PENDING = 1,
-  MODERATOR_SELECTED          = 2,
+  MODERATOR_SELECTED,
+  GROUP_TASK_IN_PROGRESS,
   STATE_NONE,
   STATE_MAX
 }server_state_t;
@@ -19,7 +20,8 @@ typedef enum{
 /*Enum of FSM events on Server*/
 typedef enum{
   ECHO_RSP_RCVD_EVENT = 1,
-  SEND_KEEPALIVE_EVENT ,
+  SEND_KEEPALIVE_EVENT,
+  MOD_NOTIFY_RSP_RCVD_EVENT,
   EVENT_NONE,
   EVENT_MAX
 }server_event_t;
@@ -97,6 +99,9 @@ bool server_callline_fsm(server_information_t *server_info,
 
 void mcast_send_chk_alive_msg(server_information_t *server_info,
                              void *fsm_msg);
+
+void mcast_start_task_distribution(server_information_t *server_info,
+                                   void *fsm_msg);
 
 /*fsm data structure*/
 typedef struct

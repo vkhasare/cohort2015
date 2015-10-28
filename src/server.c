@@ -12,6 +12,7 @@ static int handle_echo_req(const int, pdu_t *pdu, ...);
 static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_join_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_req(const int sockfd, pdu_t *pdu, ...);
+static int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...);
 static void assign_task(server_information_t *, char *);
 static void moderator_selection(server_information_t *, mcast_group_node_t *, char *);
 /* <doc>
@@ -39,6 +40,9 @@ fptr server_func_handler(unsigned int msgType)
         break;
     case echo_response:
         func_name = handle_echo_response;
+        break;
+    case moderator_notify_rsp:
+        func_name = handle_moderator_notify_response;
         break;
     default:
         PRINT("Invalid msg type of type - %d.", msgType);
@@ -79,7 +83,7 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 
     resp->id = leave_response;
     leave_rsp->num_groups = 1;
-    leave_rsp->group_ids = MALLOC_IE(1);
+    leave_rsp->group_ids = MALLOC_STR_IE(1);
     
     group_name = leave_req.group_ids[0].str;
 
@@ -311,6 +315,87 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     return 0;
 }
 
+/* <doc>
+ * void mcast_start_task_distribution(server_information_t *server_info,
+ *                                    void *fsm_msg)
+ * Function to send task request to the multicast group. It takes 
+ * input as list of active client IDs (obtained in moderator notify
+ * response) and the task type.
+ *
+ * </doc>
+ */
+void mcast_start_task_distribution(server_information_t *server_info,
+                                   void *fsm_msg)
+{
+  char ipaddr[INET6_ADDRSTRLEN];
+  fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+
+  /* fetch the group node pointer from fsm_data */
+  mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
+
+  /* Changing the fsm state as task has been started */
+  group_node->fsm_state = GROUP_TASK_IN_PROGRESS;
+
+  pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+
+}
+
+/* <doc>
+ * static
+ * int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...)
+ * This is the handler function for moderator notify response. It
+ * updates its data structures for all group client related information.
+ * </doc>
+ */
+static
+int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...)
+{
+    pdu_t rsp_pdu;
+    comm_struct_t *rsp = &(pdu->msg);
+    char ipaddr[INET6_ADDRSTRLEN];
+    server_information_t *server_info = NULL;
+    RBT_tree *tree = NULL;
+    RBT_node *rbNode = NULL;
+    unsigned int clientID;
+    fsm_data_t fsm_msg;
+
+    moderator_notify_rsp_t *moderator_notify_rsp = &(rsp->idv.moderator_notify_rsp);
+
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, server_information_t*, server_info);
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Moderator_Notify_Rsp: GRP - %s] Moderator Notify Response received from %s", moderator_notify_rsp->group_name, ipaddr);
+
+    /* Search for client moderator node by moderator ID in RBTree. Through RBnode, traverse the rb group list
+     * to identify the LL group node.
+     * Traversing this way is faster than searching the group node in LL. */
+    clientID = moderator_notify_rsp->moderator_id;
+
+    tree = (RBT_tree*) server_info->client_RBT_head;
+
+    if (clientID > 0) {
+         /*Lookup in RBTree for moderator*/
+         rbNode = RBFindNodeByID(tree, clientID);
+
+         if (rbNode) {
+             rb_cl_grp_node_t *rb_grp_node;
+             rb_info_t *rb_info_list = (rb_info_t*) rbNode->client_grp_list;
+
+             /*Search for group node in group list of RBnode*/
+             if (search_rb_grp_node(&rb_info_list, moderator_notify_rsp->group_name, &rb_grp_node)) {
+                  mcast_group_node_t *ll_grp_node = ((mcast_group_node_t *)rb_grp_node->grp_addr);
+                  fsm_msg.fsm_state = ll_grp_node->fsm_state;
+                  fsm_msg.grp_node_ptr = (void *) ll_grp_node;
+                  fsm_msg.pdu = pdu;
+
+                  /*Run the server fsm*/
+                  server_info->fsm(server_info, MOD_NOTIFY_RSP_RCVD_EVENT, &fsm_msg);
+               }
+         }
+    }
+}
+
 /* <doc
  * void mcast_send_chk_alive_msg(server_information_t *server_info, void *fsm_msg)
  * This functions makes the client moderator on server and multicasts this information
@@ -363,12 +448,12 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
   mod_notify_req->moderator_id = clientID;
   mod_notify_req->moderator_port = addr_in->sin_port;
   mod_notify_req->group_name = group_node->group_name;
+  mod_notify_req->num_of_clients_in_grp = group_node->number_of_clients;
 
   /*Send to multicast group*/
   write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &notify_pdu);
 
   PRINT("[Moderator_Notify_Req: GRP - %s] Moderator Notify Request sent to group %s.", mod_notify_req->group_name , mod_notify_req->group_name);
-//  group_node->fsm_state = MOD_NOTIFICATION_PENDING;
 }
 
 
@@ -450,6 +535,12 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
 
    /*Group is in moderator selection pending state*/
    group_node->fsm_state = MODERATOR_SELECTION_PENDING;
+
+   if (group_node->client_info == NULL)
+   {
+      PRINT("No clients present in the group.");
+      return;
+   }
 
    client_node = SN_LIST_MEMBER_HEAD(&((group_node)->client_info->client_node),
                                      mcast_client_node_t,

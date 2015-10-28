@@ -42,6 +42,7 @@ typedef struct {
   client_grp_t *pending_client_list;              /*List of clients who are working on task and currently being checked for keepalive*/
   client_grp_t *done_client_list;                 /*List of clients who have completed the task*/
   moderator_state_t fsm_state;                    /*Moderator FSM state*/
+  int client_count_in_group;                      /*Number of clients in the multicast group*/
   bool (* fsm)(struct client_information_t *client_info, moderator_event_t event, void *fsm_msg);    /*Moderator FSM function pointer*/
 } moderator_information_t;
   
