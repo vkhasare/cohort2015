@@ -550,7 +550,10 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
     * who replies first will be selected as moderator.*/
    while (client_node)
    {
-      send_echo_request(server_info->server_fd, &client_node->client_addr, grp_name);
+      /*Send echo to only free clients for moderator selection*/
+      if (client_node->av_status = CLFREE) {
+        send_echo_request(server_info->server_fd, &client_node->client_addr, grp_name);
+      }
 
       client_node =     SN_LIST_MEMBER_NEXT(client_node,
                                             mcast_client_node_t,
