@@ -21,9 +21,9 @@ static int handle_task_response(const int, pdu_t *pdu, ...);
 fptr client_func_handler(unsigned int);
 static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
-static void send_task_results(client_information_t *, rsp_type_t, result_t *,unsigned int);
 static int handle_perform_task_req(const int, pdu_t *pdu, ...);
 void* find_prime_numbers(void *args);
+static void send_task_results_to_moderator(client_information_t *, rsp_type_t, result_t *,unsigned int);
 
 /* <doc>
  * fptr client_func_handler(unsigned int msgType)
@@ -115,7 +115,7 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
 
        strcpy(mod_info->group_name, mod_notify_req.group_name);
        /*Number of clients in group, to be monitored by moderator*/
-       mod_info->client_count_in_group = mod_notify_req.num_of_clients_in_grp;
+       mod_info->active_client_count = mod_notify_req.num_of_clients_in_grp;
 
        /**Register the moderator fsm handler and set the fsm state*/
        mod_info->fsm = moderator_callline_fsm;
@@ -132,7 +132,7 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
        strcpy(mod_node->peer_client_addr.sa_data, moderatorIP.sa_data);
 
        /*If only 1 client in the group, then send moderator notify response for moderator right away.*/
-       if (1 == mod_info->client_count_in_group) {
+       if (1 == mod_info->active_client_count) {
           send_moderator_notify_response(client_info);
        } else {
           /* Start the timer on Moderator to get echo requests from all its peer clients
@@ -363,12 +363,12 @@ void send_moderator_notify_response(client_information_t *client_info)
     moderator_notify_rsp->group_name = mod_info->group_name;
     moderator_notify_rsp->moderator_id = client_info->client_id;    
 
-    moderator_notify_rsp->client_id_count = mod_info->client_count_in_group;
+    moderator_notify_rsp->client_id_count = mod_info->active_client_count;
 
     /*allocate memory for client IDs*/
-    moderator_notify_rsp->client_ids = MALLOC_UARRAY_IE(mod_info->client_count_in_group);
+    moderator_notify_rsp->client_ids = MALLOC_UARRAY_IE(mod_info->active_client_count);
 
-    moderator_notify_rsp->client_ids[iter] = (unsigned int *) malloc(sizeof(unsigned int) * mod_info->client_count_in_group);
+    moderator_notify_rsp->client_ids[iter] = (unsigned int *) malloc(sizeof(unsigned int) * mod_info->active_client_count);
 
     mod_client_node_t *mod_node = NULL;
 
@@ -424,7 +424,7 @@ void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_in
 
   /* Send notification response to server if all the clients have responded with echo req or TIMEOUT happened
    * This is the case where all clients have responded.*/
-  if (client_echo_req_rcvd == (client_info->moderator_info->client_count_in_group) - 1) {
+  if (client_echo_req_rcvd == (client_info->moderator_info->active_client_count) - 1) {
      send_moderator_notify_response(client_info);
      client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_SENT; 
   }
@@ -908,38 +908,38 @@ int main(int argc, char * argv[])
 }
 #endif
 
-
 /* <doc>
- * static void send_task_results(client_information_t *client_info, rsp_type_t, result_t *)
+ * static void send_task_results_to_moderator(client_information_t *client_info, rsp_type_t, result_t *)
  * This function creates Group Task Response message and sends to moderator. It accepts
  * results as input and relays message on client fd.
  * Request will not be relayed if client is not member of group.
  *
  * </doc>
  */
-static void send_task_results(client_information_t *client_info, rsp_type_t rtype, result_t *result, unsigned int my_id)
+static void send_task_results_to_moderator(client_information_t *client_info, rsp_type_t rtype, result_t *result, unsigned int my_id)
 {
 
-           pdu_t pdu;
-
-//           msg.id = leave_request;
-           /* Sending leave request for 1 group*/
-           populate_task_rsp(&(pdu.msg), rtype ,result, my_id);
-           write_record(client_info->client_fd, &client_info->server, &pdu);
-
-          // PRINT("[Task_Response: GRP - %s] Task Response sent to Moderator. ", group_name);
+     pdu_t pdu;
+     /* Sending task response for 1 group*/
+     populate_task_rsp(&(pdu.msg), rtype ,result, my_id);
+     write_record(client_info->client_fd, &(client_info->moderator) , &pdu);
+     // PRINT("[Task_Response: GRP - %s] Task Response sent to Moderator. ", group_name);
 }
 
 #define MAX_CLIENT 10
-comm_struct_t * populate_moderator_task_rsp( rsp_type_t r_type, result_t *resp, unsigned int client_id ){
-    comm_struct_t* m = malloc(sizeof(comm_struct_t));
+void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsigned int client_id ){
+    pdu_t *rsp_pdu= malloc(sizeof(pdu_t)); 
+    comm_struct_t* m = &(rsp_pdu->msg);
     memset(&(m->idv),0,sizeof(task_rsp_t));
     m->id=TASK_RESPONSE;
-    m->idv.task_rsp.type = r_type;
-    m->idv.task_rsp.result = (result_t **)malloc(sizeof(result_t*)*MAX_CLIENT);
-    m->idv.task_rsp.client_ids = (unsigned int *)malloc(sizeof(unsigned int *)*MAX_CLIENT);
-    update_task_rsp(m,r_type,resp, client_id);
-    return m;
+    task_rsp_t * task_rsp = &(m->idv.task_rsp);
+    task_rsp->type = resp->type;
+    task_rsp->group_name = malloc(sizeof(char)*strlen(resp->group_name));
+    strcpy(task_rsp->group_name, resp->group_name); 
+    task_rsp->result = (result_t **)malloc(sizeof(result_t*)*num_clients);
+    task_rsp->client_ids = (unsigned int *)malloc(sizeof(unsigned int *)*num_clients);
+    update_task_rsp(m, task_rsp->type, resp->result, client_id);
+    return rsp_pdu;
 }
 
 unsigned long int conv(char ipadr[])
@@ -974,33 +974,33 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
     unsigned int m_port;
     client_grp_node_t node;
     int status;
-//    struct epoll_event *event;
-//    msg_cause enum_cause;
 
     comm_struct_t *resp = &(pdu->msg);
 
-    client_information_t *moderator_info = NULL;
+    client_information_t *client_info = NULL;
 
     /* Extracting client_info from variadic args*/
-    EXTRACT_ARG(pdu, client_information_t*, moderator_info);
+    EXTRACT_ARG(pdu, client_information_t*, client_info);
 
     task_rsp_t * task_response = &resp->idv.task_rsp;
+    moderator_information_t * moderator_info = client_info->moderator_info;
+    if(moderator_info != NULL && MATCH_STRING(moderator_info->group_name, task_response->group_name)){ 
+    unsigned int peer_id = calc_key(&(pdu->peer_addr));
     
-    unsigned int peer_id = 5445;//pdu->peer_addr.sin_addr.s_addr;
-
-    /* Pointer to epoll event structure */
-//    event = client_info->epoll_evt;
- 
-    if(moderator_info->moderator_resp_msg == NULL){
-      moderator_info->moderator_resp_msg = populate_moderator_task_rsp(task_response->type, task_response->result, peer_id);
+     
+    if(moderator_info->moderator_resp_msg != NULL){
+      update_task_rsp(((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
     } else{
-      update_task_rsp(moderator_info->moderator_resp_msg, task_response->type, task_response->result, peer_id);
-    } 
-    comm_struct_t * message = moderator_info->moderator_resp_msg;
-
-    if(message->idv.task_rsp.num_clients == TOTAL_COUNT){
-      //send moderator message
-    }  
+      moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
+    }
+//    move_moderator_node_pending_to_done_list(
+    pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
+    if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count){
+      write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
+    }
+    } else{
+      PRINT("Error case : Moderator received a wrong input");
+    }
 }
 
 /* <doc>

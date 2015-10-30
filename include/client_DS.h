@@ -44,8 +44,10 @@ typedef struct {
   client_grp_t *pending_client_list;              /*List of clients who are working on task and currently being checked for keepalive*/
   client_grp_t *done_client_list;                 /*List of clients who have completed the task*/
   moderator_state_t fsm_state;                    /*Moderator FSM state*/
-  int client_count_in_group;                      /*Number of clients in the multicast group*/
+  uint8_t task_id;                                /*Task Identifier */
+  uint8_t active_client_count;                      /*Number of active clients in the multicast group*/
   bool (* fsm)(struct client_information_t *client_info, moderator_event_t event, void *fsm_msg);    /*Moderator FSM function pointer*/
+  void * moderator_resp_msg;
 } moderator_information_t;
   
 /* client group node - This node comprises of multicast group information, of which client is member of.*/
@@ -69,7 +71,6 @@ typedef struct {
   struct sockaddr moderator;                        /*Address of moderator*/
   struct epoll_event *epoll_evt;                    /*Pointer to epoll event structure, to register the new FD's*/
   client_grp_t *client_grp_list;                    /*List of client group nodes, each node will have info. abt the joined group.*/
-  struct common_struct * moderator_resp_msg;
 } client_information_t;
   
 sn_list_element_t list_element;

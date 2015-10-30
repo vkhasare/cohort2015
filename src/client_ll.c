@@ -105,15 +105,15 @@ void deallocate_moderator_list(client_information_t **client_info)
  *
  * </doc>
  */
-void move_moderator_node_pending_to_done_list(moderator_information_t **moderator_info, mod_client_node_t *mod_node)
+void move_moderator_node_pending_to_done_list(moderator_information_t *moderator_info, mod_client_node_t *mod_node)
 {
    /*Insert in done list*/
-   SN_LIST_MEMBER_INSERT_HEAD(&((*moderator_info)->done_client_list->client_grp_node),
+   SN_LIST_MEMBER_INSERT_HEAD(&((moderator_info)->done_client_list->client_grp_node),
                               mod_node,
                               list_element);
 
    /*Remove from pending list*/
-   SN_LIST_MEMBER_REMOVE(&((*moderator_info)->pending_client_list->client_grp_node),
+   SN_LIST_MEMBER_REMOVE(&((moderator_info)->pending_client_list->client_grp_node),
                          mod_node,
                          list_element);  
 }

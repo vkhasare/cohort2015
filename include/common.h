@@ -46,6 +46,8 @@ extern const unsigned int max_gname_len; //includes nul termination
   va_end (arguments);                           \
 }
 
+#define MATCH_STRING(str1,str2) strcmp(str1,str2)==0
+
 /* <doc>
  * enum_mode_t
  * Consists of 
