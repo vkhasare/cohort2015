@@ -116,7 +116,7 @@ typedef struct result{
 }result_t;
 
 typedef struct task_response{
-   string_t group_id;
+   char* group_name;
 //   unsigned int task_id;
    rsp_type_t type;
    unsigned int num_clients;

@@ -491,7 +491,7 @@ bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
         {leave_response, (xdrproc_t)process_leave_resp},
         {moderator_notify_req, (xdrproc_t)process_moderator_notify_req},
         {moderator_notify_rsp, (xdrproc_t)process_moderator_notify_rsp},
-        {TASK_RESPONSE, (xdrproc_t)process_leave_resp},
+        {TASK_RESPONSE, (xdrproc_t)process_task_resp},
         { __dontcare__, NULL }
     };
     int enum_res = xdr_enum(xdrs, (enum_t *)(&(m->id)));
