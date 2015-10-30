@@ -123,13 +123,17 @@ typedef struct result{
    int * value;
 }result_t;
 
+typedef struct result_p{
+   result_t * result;
+}p_result_t;
+
 typedef struct task_response{
    char* group_name;
 //   unsigned int task_id;
    rsp_type_t type;
    unsigned int num_clients;
    unsigned int * client_ids;
-   result_t ** result;
+   p_result_t * result;
 }task_rsp_t;
 
 typedef struct common_struct{

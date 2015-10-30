@@ -926,7 +926,7 @@ static void send_task_results_to_moderator(client_information_t *client_info, rs
      // PRINT("[Task_Response: GRP - %s] Task Response sent to Moderator. ", group_name);
 }
 
-#define MAX_CLIENT 10
+/*#define MAX_CLIENT 10
 void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsigned int client_id ){
     pdu_t *rsp_pdu= malloc(sizeof(pdu_t)); 
     comm_struct_t* m = &(rsp_pdu->msg);
@@ -940,7 +940,7 @@ void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsig
     task_rsp->client_ids = (unsigned int *)malloc(sizeof(unsigned int *)*num_clients);
     update_task_rsp(m, task_rsp->type, resp->result, client_id);
     return rsp_pdu;
-}
+}*/
 
 unsigned long int conv(char ipadr[])
 {
