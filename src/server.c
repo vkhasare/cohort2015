@@ -315,6 +315,31 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     return 0;
 }
 
+unsigned int get_task_count(const char* filename,unsigned int** task_set)
+{
+    FILE *fp = NULL, *cmd_line = NULL;
+    uint32_t count, i;
+    char element[16], cmd[256];
+    
+    strcpy(cmd, "wc -l ");
+    strcat(cmd, filename);
+    cmd_line = popen (cmd, "r");
+    fscanf(cmd_line, "%i", &count);
+    pclose(cmd_line);
+
+    *task_set = (unsigned int *) malloc(sizeof(unsigned int) * count);
+    
+    fp = fopen(filename, "r");
+    for(i = 0; i < count; i++){
+        fscanf(fp, "%s", element);
+        (* task_set)[i] =strtoul(element,NULL,10);
+    }
+    fclose(fp);
+
+  return count;
+}
+
+
 /* <doc>
  * void mcast_start_task_distribution(server_information_t *server_info,
  *                                    void *fsm_msg)
@@ -328,7 +353,12 @@ void mcast_start_task_distribution(server_information_t *server_info,
                                    void *fsm_msg)
 {
   char ipaddr[INET6_ADDRSTRLEN];
+  //unsigned int task_set[50] = {1, 5, 8, 7, 6, 20, 39, 46, 57, 63, 78, 81, 93, 13};
+  int count = 0;
+  comm_struct_t req;
   fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+  pdu_t rsp_pdu;
+  unsigned int* task_set,task_count;
 
   /* fetch the group node pointer from fsm_data */
   mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
@@ -338,6 +368,32 @@ void mcast_start_task_distribution(server_information_t *server_info,
 
   pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
+  task_count = get_task_count("src/task_set.txt", &task_set);
+  
+  req.id = perform_task_req;
+  if (pdu->msg.idv.moderator_notify_rsp.client_id_count)
+  {
+      req.idv.perform_task_req.client_id_count = pdu->msg.idv.moderator_notify_rsp.client_id_count;
+      req.idv.perform_task_req.client_ids = (unsigned int *) malloc(sizeof(unsigned int) * pdu->msg.idv.moderator_notify_rsp.client_id_count);
+    }
+
+    for(count = 0; count < pdu->msg.idv.moderator_notify_rsp.client_id_count; count++)
+    {
+      req.idv.perform_task_req.client_ids[count] = pdu->msg.idv.moderator_notify_rsp.client_ids[count];
+    }
+
+    req.idv.perform_task_req.task_count = task_count;
+    req.idv.perform_task_req.task_set = (unsigned int *) malloc(sizeof(unsigned int) * task_count);
+
+    for(count = 0; count < task_count; count++)
+    {
+      req.idv.perform_task_req.task_set[count] = task_set[count];
+    }
+
+    rsp_pdu.msg = req;
+    write_record(server_info->server_fd,&(group_node->grp_mcast_addr), &rsp_pdu);
+    PRINT("[Task Assigned]");
+    return 0;
 }
 
 /* <doc>

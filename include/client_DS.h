@@ -1,6 +1,8 @@
 #include "header.h"
 #include "sn_ll.h"
   
+#define MAX_TASK_COUNT 100000
+
 /*Enum for pending list and done list of moderator*/
 typedef enum{
   SHOW_MOD_PENDING_CLIENTS = 1,
@@ -86,3 +88,9 @@ bool moderator_callline_fsm(client_information_t *client_info,
 void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_info,
                                                  void *fsm_msg);
 
+typedef struct {
+  unsigned int data_count;
+  unsigned int data[MAX_TASK_COUNT];
+  unsigned int result_count;
+  unsigned int result[MAX_TASK_COUNT];
+} thread_args;

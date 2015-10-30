@@ -1,6 +1,6 @@
 #include "comm_primitives.h"
 #include "print.h"
-#define MAXMSGSIZE 5000
+#define MAXMSGSIZE 100000
 #if 0
 bool process_client_req();
 bool process_client_init();
@@ -11,6 +11,7 @@ bool process_client_leave();
 
 const unsigned int max_groups = 1000;
 const unsigned int max_client_in_group = 255;
+const unsigned int max_task_count = 100000;
 const unsigned int max_gname_len = 25; //includes nul termination
 const unsigned int echo_req_len = 256; //includes nul termination
 const unsigned int echo_resp_len = 21; //includes nul termination
@@ -478,6 +479,22 @@ bool process_client_leave(my_struct_t* m, XDR* xdrs){
     return false;
 }
 
+bool process_perform_task_req(XDR* xdrs, perform_task_req_t* m){
+    if(xdrs->x_op == XDR_DECODE){
+        m->client_ids = NULL;
+        m->task_set = NULL;
+    }
+
+    return (xdr_u_int(xdrs, &(m->client_id_count)) &&
+            xdr_array(xdrs, (char**)&(m->client_ids), &(m->client_id_count), max_client_in_group,
+                             (sizeof(unsigned int)),
+                             (xdrproc_t )xdr_u_int) &&
+            xdr_u_int(xdrs, &(m->task_count)) &&
+            xdr_array(xdrs, (char**)&(m->task_set), &(m->task_count), max_task_count,
+                             (sizeof(unsigned int)),
+                             (xdrproc_t )xdr_u_int));
+}
+
 bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
     struct xdr_discrim comm_discrim[] = {
         {join_request,    (xdrproc_t)process_join_req},
@@ -492,6 +509,7 @@ bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
         {moderator_notify_req, (xdrproc_t)process_moderator_notify_req},
         {moderator_notify_rsp, (xdrproc_t)process_moderator_notify_rsp},
         {TASK_RESPONSE, (xdrproc_t)process_leave_resp},
+        {perform_task_req, (xdrproc_t)process_perform_task_req},
         { __dontcare__, NULL }
     };
     int enum_res = xdr_enum(xdrs, (enum_t *)(&(m->id)));
@@ -529,6 +547,3 @@ void populate_task_rsp(comm_struct_t* m, rsp_type_t r_type, result_t *resp, unsi
     m->idv.task_rsp.client_ids = (unsigned int *)malloc(sizeof(unsigned int *)); 
     update_task_rsp(m,r_type,resp, client_id);
 }
-
-
-

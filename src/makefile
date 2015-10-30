@@ -47,7 +47,7 @@ $(SERVER_STR): deps
 	$(CPP) -o../$(SERVER) ${COMM_OBJ} ${DEPS_O} ${S_DEPS_O}
 
 $(CLIENT_STR): deps
-	$(CPP) -o../$(CLIENT) ${COMM_OBJ} ${DEPS_O} ${C_DEPS_O}
+	$(CPP) -o../$(CLIENT) ${COMM_OBJ} ${DEPS_O} ${C_DEPS_O} -lpthread
 
 .PHONY: dummy_rule
 

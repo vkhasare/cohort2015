@@ -1,5 +1,6 @@
 #include "common.h"
 #include "client_DS.h"
+#include <pthread.h>
 
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
@@ -21,6 +22,8 @@ fptr client_func_handler(unsigned int);
 static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
 static void send_task_results(client_information_t *, rsp_type_t, result_t *,unsigned int);
+static int handle_perform_task_req(const int, pdu_t *pdu, ...);
+void* find_prime_numbers(void *args);
 
 /* <doc>
  * fptr client_func_handler(unsigned int msgType)
@@ -53,6 +56,9 @@ fptr client_func_handler(unsigned int msgType)
         break;
     case moderator_notify_req:
         func_name = handle_mod_notification;
+        break;
+    case perform_task_req:
+        func_name = handle_perform_task_req;
         break;
     default:
         PRINT("Invalid msg type of type - %d.", msgType);
@@ -997,13 +1003,99 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
     }  
 }
 
+/* <doc>
+ * void* find_prime_numbers(void *args)
+ * Read's the sub set of data and prints prime numbers
+ *
+ * </doc>
+ */
+void* find_prime_numbers(void *args)
+{
+  unsigned int i,j,flag;
 
+  thread_args *t_args = (thread_args *)args;
 
+  for(i = 0; i < t_args->data_count; i++)
+  {
+    flag = 0;
+    for (j = 2; j < t_args->data[i]; j++)
+    {
+      if ((t_args->data[i] % j) == 0)
+      {
+        flag = 1;
+        break;
+      }
+    }
+    if(!flag)
+    {
+      t_args->result[i] = t_args->data[i];
+      PRINT("Prime number %d",t_args->result[i]);
+      t_args->result_count++;
+    }
+  }
+  if(t_args->result_count == 0)
+    PRINT("No prime numbers found..");
 
+  return NULL;
+}
 
+/* <doc>
+ * static
+ * int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
+ * Perform task Request Handler. Reads the PDU and spawns a thread to perform the task
+ *
+ * </doc>
+ */
+static
+int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
+{
+    comm_struct_t *req = &(pdu->msg);
+    struct sockaddr myIp;
+    int count = 0, i = 0, result;
+    unsigned int client_task_set[MAX_TASK_COUNT] = {0}, clientID;
+    unsigned int start_index = 0, stop_index = 0, client_task_count = 0;
+    pthread_t thread;
 
+    get_my_ip("eth0", &myIp);
+    clientID = calc_key(&myIp);
+    
+    perform_task_req_t perform_task = req->idv.perform_task_req;
+    thread_args *args = malloc(sizeof(thread_args));
+    
+    PRINT("[Task Set Received]");
+    
+    for(count = 0; count < perform_task.client_id_count; count++)
+    {
+      if(clientID == perform_task.client_ids[count])
+      {
+        /* assumption client_id_count < num of task count */
+        start_index = ((perform_task.task_count/perform_task.client_id_count) * count);
+        client_task_count = (perform_task.task_count/perform_task.client_id_count);
 
+        if((count +1) == perform_task.client_id_count) /* l ast clint */
+        {
+          stop_index = perform_task.task_count - 1;
+          client_task_count = stop_index - start_index + 1;
+        }
+        else
+          stop_index = start_index + client_task_count;
 
- 
+        while(i != client_task_count)
+        {
+            client_task_set[i] = perform_task.task_set[(start_index + i)];
+            args->data[i] = client_task_set[i];
+            i++;
+        }
 
+        args->data_count = client_task_count;
+
+        result = pthread_create(&thread, NULL, find_prime_numbers ,args);
+        if(result)
+        {
+          PRINT("Could not create thread to perform task");
+        }
+        pthread_join(thread,NULL);
+      }
+   }
+}
 
