@@ -98,6 +98,8 @@ typedef struct moderator_notify_rsp {
 }moderator_notify_rsp_t;
 
 typedef struct perform_task_req {
+    char *group_name;
+    unsigned int task_id;
     unsigned int client_id_count;
     unsigned int* client_ids; 
     unsigned int task_count;

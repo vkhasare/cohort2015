@@ -899,26 +899,6 @@ int main(int argc, char * argv[])
                 {
                     (func)(events[index].data.fd, &pdu, client_info);
                 }
-/*
-              client_grp_node_t *client_grp_node = NULL;
-              char message[512];
-
-              client_grp_node =     SN_LIST_MEMBER_HEAD(&((client_info)->client_grp_list->client_grp_node),                                                              
-                                                   client_grp_node_t,            
-                                                   list_element);
-              while (client_grp_node)
-              {
-                if(client_grp_node->mcast_fd == events[index].data.fd)
-                {
-                  read(events[index].data.fd, message, sizeof(message));
-                  PRINT("This Message is intended for Group %s: %s",client_grp_node->group_name, message);
-                  PRINT_PROMPT("[client] ");
-                }
-                client_grp_node =     SN_LIST_MEMBER_NEXT(client_grp_node,                      
-                                                      client_grp_node_t,         
-                                                      list_element);
-              }
-*/
             }
         }
     }
@@ -938,14 +918,15 @@ int main(int argc, char * argv[])
  *
  * </doc>
  */
-static void send_task_results_to_moderator(client_information_t *client_info, char* group_name, unsigned int task_id,  rsp_type_t rtype, result_t *result, unsigned int my_id)
+static
+void send_task_results_to_moderator(client_information_t *client_info, char* group_name, unsigned int task_id,  rsp_type_t rtype, result_t *result, unsigned int my_id)
 {
 
      pdu_t pdu;
      /* Sending task response for 1 group*/
      populate_task_rsp(&(pdu.msg),task_id, group_name, rtype ,result, my_id);
      write_record(client_info->client_fd, &(client_info->moderator) , &pdu);
-     // PRINT("[Task_Response: GRP - %s] Task Response sent to Moderator. ", group_name);
+     PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Req sent to Moderator. ", group_name);
 }
 
 /*#define MAX_CLIENT 10
@@ -1018,7 +999,8 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
 //    move_moderator_node_pending_to_done_list(
     pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
     if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count){
-      write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
+        write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
+        PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
     }
     } else{
       PRINT("Error case : Moderator received a wrong input");
@@ -1105,21 +1087,20 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     int count = 0, i = 0, result;
     unsigned int client_task_set[MAX_TASK_COUNT] = {0}, clientID;
     unsigned int start_index = 0, stop_index = 0, client_task_count = 0;
+    client_information_t * client_info;
     pthread_t thread;
 
-    get_my_ip("eth0", &myIp);
-    clientID = calc_key(&myIp);
-    
     perform_task_req_t perform_task = req->idv.perform_task_req;
     thread_args *args = malloc(sizeof(thread_args));
-    client_information_t * client_info; 
-    PRINT("[Task Set Received]");
+ 
+    PRINT("[Task_Request: GRP - %s] Task Request Received for group %s.", perform_task.group_name, perform_task.group_name);
+
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
 
     for(count = 0; count < perform_task.client_id_count; count++)
     {
-      if(clientID == perform_task.client_ids[count]) /*This client needs to perform the task */
+      if(client_info->client_id == perform_task.client_ids[count]) /*This client needs to perform the task */
       {
         /* assumption client_id_count < num of task count 
          * start_index : the index of the original task set from where this clients starts performing task
