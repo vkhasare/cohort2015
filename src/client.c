@@ -999,7 +999,7 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
         
         get_client_from_moderator_pending_list(client_info, peer_id, &mod_node);
         if (mod_node) {
-          move_moderator_node_pending_to_done_list(client_info, &mod_node);
+          move_moderator_node_pending_to_done_list(client_info, mod_node);
         }
 
         pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
