@@ -162,6 +162,7 @@ void allocate_moderator_info(client_information_t **client_info)
 {
    moderator_information_t *mod_info = (moderator_information_t *) malloc(sizeof(moderator_information_t));
    mod_info->fsm_state = STATE_NONE;
+   mod_info->moderator_resp_msg = NULL;
    (*client_info)->moderator_info = mod_info;
    allocate_moderator_list(&(*client_info)->moderator_info);
 }
