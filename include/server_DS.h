@@ -106,14 +106,11 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
 void mcast_start_task_distribution(server_information_t *server_info,
                                    void *fsm_msg);
 
-<<<<<<< HEAD
 void mcast_handle_task_response(server_information_t *server_info,
                                    void *fsm_msg);
-=======
 void server_echo_req_task_in_progress_state(server_information_t *server_info,
                                             void *fsm_msg);
 
->>>>>>> 9ef19691b2fa04943dd377fcb9d7694a6e3aea8b
 /*fsm data structure*/
 typedef struct
 {

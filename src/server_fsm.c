@@ -55,21 +55,6 @@ void server_fsm_mod_selected (server_information_t *server_info,
 
    }
 }
-void server_fsm_task_in_progress (server_information_t *server_info,
-                               server_event_t event,
-                               void *fsm_msg)
-{
-   switch (event) {
-   case MOD_TASK_RSP_RCVD_EVENT:
-          mcast_handle_task_response(server_info,
-                                        fsm_msg);
-          break;
-   default:
-          /*ignore case*/
-          break;
-
-   }
-}
 
 /* <doc>
  * void server_fsm_task_in_progress(server_information_t *server_info,
@@ -88,6 +73,10 @@ void server_fsm_task_in_progress(server_information_t *server_info,
    case ECHO_RSP_RCVD_EVENT:
           server_echo_req_task_in_progress_state(server_info,
                                                  fsm_msg);
+          break;
+   case MOD_TASK_RSP_RCVD_EVENT:
+          mcast_handle_task_response(server_info,
+                                        fsm_msg);
           break;
    default:
           /*ignore case*/
