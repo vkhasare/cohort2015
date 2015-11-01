@@ -58,6 +58,7 @@ void moderator_fsm_task_rsp_pending_state(client_information_t *client_info,
  *                         void *fsm_msg)
  * Main FSM Handler of Moderator
  *
+ * </doc>
  */
 bool moderator_main_fsm(client_information_t *client_info,
                         moderator_event_t event,

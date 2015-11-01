@@ -10,8 +10,7 @@ import sys
 import os, glob
 import re
 
-#List of all files which need to be read for documentation purpose.
-D_Files = ["client.c", "common.h", "client_ll.h", "print.h"]
+#Destination file where documentation will be written.
 docFile = "code-documentation"
 
 """
@@ -25,23 +24,33 @@ def find_file(file_name):
         if file_name in files:
               return os.path.join(root, file_name)
 
+
 """
 main function
 """
 def main(argv):
-    global D_Files
     global docFile
     printMode = False
 
     docPtr = open(docFile, 'w+')
 
+    #All files starting with .c or .h
+    c_files = [f for f in os.listdir("src/") if f.endswith('.c')]
+    h_files = [f for f in os.listdir("include/") if f.endswith('.h')]
+
+    all_files = c_files + h_files
+
     # Scanning all the files to be documented
-    for fileName in D_Files:
+    for fileIndex in range(len(all_files)):
+
+        fileName = all_files[fileIndex]
+
         relfileName = find_file(fileName)
+
         lines = open(relfileName).read().splitlines()
 
+        headerMode = True
         header = "------------------ File : %s ------------------\n\n" % fileName
-        docPtr.write(header)
 
         for index in range(len(lines)):
             #if <doc> is hit, then start recording
@@ -54,6 +63,10 @@ def main(argv):
                 docPtr.write("\n")
 
             if printMode:
+                #Write header only if there is atleast 1 doc tag
+                if headerMode:
+                    docPtr.write(header)
+                    headerMode = False 
                 docPtr.write(lines[index])
                 docPtr.write("\n")
 
