@@ -13,6 +13,7 @@ static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_join_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...);
+static int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...);
 static void assign_task(server_information_t *, char *);
 static void moderator_selection(server_information_t *, mcast_group_node_t *, char *);
 /* <doc>
@@ -43,6 +44,9 @@ fptr server_func_handler(unsigned int msgType)
         break;
     case moderator_notify_rsp:
         func_name = handle_moderator_notify_response;
+        break;
+    case TASK_RESPONSE:
+        func_name = handle_moderator_task_response;
         break;
     default:
         PRINT("Invalid msg type of type - %d.", msgType);
@@ -339,7 +343,6 @@ unsigned int get_task_count(const char* filename,unsigned int** task_set)
   return count;
 }
 
-
 /* <doc>
  * void mcast_start_task_distribution(server_information_t *server_info,
  *                                    void *fsm_msg)
@@ -400,6 +403,130 @@ void mcast_start_task_distribution(server_information_t *server_info,
     PRINT("[Task Assigned]");
     return 0;
 }
+
+void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer){
+     time_t rawtime;
+     struct tm * timeinfo;
+     char buffer2[40];
+ 
+     time ( &rawtime );
+     timeinfo = localtime ( &rawtime );
+     sprintf(buffer,"Resp_%s_%d_", gname , *task_id);
+     strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
+     strcat(buffer,buffer2);
+     PRINT(" The Response from %s for task %d is written in %s",gname, *task_id,  buffer);
+     return;
+}  
+void
+write_task_response_file(task_rsp_t * task_rsp, char* fname){
+  uint32_t i, j;
+  FILE *fp=NULL;
+  fp=fopen(fname,"w");
+  fprintf(fp, "Client Id, Result Size, Result\n");
+  for(i=0;i<task_rsp->num_clients;i++){
+    fprintf(fp, "%u", task_rsp->client_ids[i]);
+    fprintf(fp, ", %u", task_rsp->result[i].size);
+    for(j=0;j<task_rsp->result[i].size;j++){
+      fprintf(fp, ", %u", task_rsp->result[i].value[j]);
+    }
+    fprintf(fp, "\n");
+  }
+  fclose(fp);
+}
+
+/* <doc>
+ * void mcast_handle_task_response(server_information_t *server_info,
+ *                                    void *fsm_msg)
+ * Function to handle task response from the multicast group moderator. It takes 
+ * input as response collated by the moderator of the group along with the client IDs 
+ *  and the task type.
+ *
+ * </doc>
+ */
+void mcast_handle_task_response(server_information_t *server_info,
+                                   void *fsm_msg)
+{
+  char ipaddr[INET6_ADDRSTRLEN];
+  //unsigned int task_set[50] = {1, 5, 8, 7, 6, 20, 39, 46, 57, 63, 78, 81, 93, 13};
+  int count = 0;
+  comm_struct_t req;
+  fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+  pdu_t rsp_pdu;
+  unsigned int* task_set,task_count;
+  char filename[80];
+
+  /* fetch the group node pointer from fsm_data */
+  mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
+
+  /* Changing the fsm state as task has been started */
+  group_node->fsm_state = GROUP_TASK_COMPLETED;
+
+  pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+  task_rsp_t *task_response= &(pdu->msg.idv.task_rsp);
+  /* Get the file name based on current time stamp */ 
+  get_task_response_file_name(group_node->group_name,&(task_response->task_id),filename); 
+  /* Write the response  to file */  
+  write_task_response_file(task_response, filename);
+  PRINT("[Task Assigned]");
+  return 0;
+}
+
+/* <doc>
+ * static
+ * int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...)
+ * This is the handler function for moderator task response. It
+ * reads the responses from all clients and store it in a file.
+ * </doc>
+ */
+static
+int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...)
+{
+    comm_struct_t *rsp = &(pdu->msg);
+    char ipaddr[INET6_ADDRSTRLEN];
+    server_information_t *server_info = NULL;
+    RBT_tree *tree = NULL;
+    RBT_node *rbNode = NULL;
+    unsigned int clientID;
+    fsm_data_t fsm_msg;
+
+    task_rsp_t *moderator_task_rsp = &(rsp->idv.task_rsp);
+
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, server_information_t*, server_info);
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Moderator_Task_Rsp: GRP - %s] Moderator Task Response received from %s", moderator_task_rsp->group_name, ipaddr);
+
+    /* Search for client moderator node by moderator ID in RBTree. Through RBnode, traverse the rb group list
+     * to identify the LL group node.
+     * Traversing this way is faster than searching the group node in LL. */
+    clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
+
+    tree = (RBT_tree*) server_info->client_RBT_head;
+
+    if (clientID > 0) {
+         /*Lookup in RBTree for moderator*/
+         rbNode = RBFindNodeByID(tree, clientID);
+
+         if (rbNode) {
+             rb_cl_grp_node_t *rb_grp_node;
+             rb_info_t *rb_info_list = (rb_info_t*) rbNode->client_grp_list;
+
+             /*Search for group node in group list of RBnode*/
+             if (search_rb_grp_node(&rb_info_list, moderator_task_rsp->group_name, &rb_grp_node)) {
+                  mcast_group_node_t *ll_grp_node = ((mcast_group_node_t *)rb_grp_node->grp_addr);
+                  fsm_msg.fsm_state = ll_grp_node->fsm_state;
+                  fsm_msg.grp_node_ptr = (void *) ll_grp_node;
+                  fsm_msg.pdu = pdu;
+
+                  /*Run the server fsm*/
+                  server_info->fsm(server_info, MOD_TASK_RSP_RCVD_EVENT, &fsm_msg);
+               }
+         }
+    }
+}
+
+
 
 /* <doc>
  * static

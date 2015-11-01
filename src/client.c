@@ -23,7 +23,7 @@ static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
 static int handle_perform_task_req(const int, pdu_t *pdu, ...);
 void* find_prime_numbers(void *args);
-static void send_task_results_to_moderator(client_information_t *, rsp_type_t, result_t *,unsigned int);
+static void send_task_results_to_moderator(client_information_t *, char*, unsigned int,rsp_type_t, result_t *,unsigned int);
 
 /* <doc>
  * fptr client_func_handler(unsigned int msgType)
@@ -916,12 +916,12 @@ int main(int argc, char * argv[])
  *
  * </doc>
  */
-static void send_task_results_to_moderator(client_information_t *client_info, rsp_type_t rtype, result_t *result, unsigned int my_id)
+static void send_task_results_to_moderator(client_information_t *client_info, char* group_name, unsigned int task_id,  rsp_type_t rtype, result_t *result, unsigned int my_id)
 {
 
      pdu_t pdu;
      /* Sending task response for 1 group*/
-     populate_task_rsp(&(pdu.msg), rtype ,result, my_id);
+     populate_task_rsp(&(pdu.msg),task_id, group_name, rtype ,result, my_id);
      write_record(client_info->client_fd, &(client_info->moderator) , &pdu);
      // PRINT("[Task_Response: GRP - %s] Task Response sent to Moderator. ", group_name);
 }
@@ -1003,6 +1003,30 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
     }
 }
 
+result_t* copy_result_from_args(thread_args * args){
+   result_t * result=NULL;
+   int i;
+      result = malloc(sizeof(result_t));
+      result->value=NULL; 
+      result->size=0;
+  if(args->result_count>0){
+      result->size=args->result_count;
+      result->value=malloc(sizeof(int)*result->size);
+      for(i=0;i<result->size;i++){
+        result->value[i]=args->result[i];
+      }
+   }
+   return result;
+}
+
+
+void send_task_results(thread_args *args){
+        
+        result_t *answer = copy_result_from_args(args); 
+        if(answer !=NULL) 
+          send_task_results_to_moderator(args->client_info,args->group_name, args->task_id, TYPE_INT, answer, args->client_info->client_id); 
+}
+
 /* <doc>
  * void* find_prime_numbers(void *args)
  * Read's the sub set of data and prints prime numbers
@@ -1029,8 +1053,8 @@ void* find_prime_numbers(void *args)
     }
     if(!flag)
     {
-      t_args->result[i] = t_args->data[i];
-      PRINT("Prime number %d",t_args->result[i]);
+      t_args->result[t_args->result_count] = t_args->data[i];
+//      PRINT("Prime number %d",t_args->result[i]);
       
       /* Total count of prime numbers */
       t_args->result_count++;
@@ -1038,6 +1062,8 @@ void* find_prime_numbers(void *args)
   }
   if(t_args->result_count == 0)
     PRINT("No prime numbers found..");
+
+  send_task_results(args);
 
   return NULL;
 }
@@ -1064,9 +1090,11 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     
     perform_task_req_t perform_task = req->idv.perform_task_req;
     thread_args *args = malloc(sizeof(thread_args));
-    
+    client_information_t * client_info; 
     PRINT("[Task Set Received]");
-    
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, client_information_t*, client_info);
+
     for(count = 0; count < perform_task.client_id_count; count++)
     {
       if(clientID == perform_task.client_ids[count]) /*This client needs to perform the task */
@@ -1098,6 +1126,9 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
 
         args->data_count = client_task_count;
 
+        args->client_info=client_info;
+        args->task_id = 44;
+        args->group_name="G1";
         /* Create a thread to perform the task */
         result = pthread_create(&thread, NULL, find_prime_numbers ,args);
         
@@ -1106,6 +1137,9 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
           PRINT("Could not create thread to perform task");
         }
         pthread_join(thread,NULL);
+//        result_t *answer = copy_result_from_args(args ); 
+//        if(answer !=NULL) 
+//          send_task_results_to_moderator(client_info, TYPE_INT, result, clientID); 
       }
    }
 }

@@ -13,7 +13,7 @@ typedef enum{
   MODERATOR_SELECTION_PENDING = 1,
   MODERATOR_SELECTED,
   GROUP_TASK_IN_PROGRESS,
-  GROUP_TASK_DONE,
+  GROUP_TASK_COMPLETED,
   STATE_NONE,
   STATE_MAX
 }server_state_t;
@@ -23,6 +23,7 @@ typedef enum{
   ECHO_RSP_RCVD_EVENT = 1,
   SEND_KEEPALIVE_EVENT,
   MOD_NOTIFY_RSP_RCVD_EVENT,
+  MOD_TASK_RSP_RCVD_EVENT,
   EVENT_NONE,
   EVENT_MAX
 }server_event_t;
@@ -104,6 +105,8 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
 void mcast_start_task_distribution(server_information_t *server_info,
                                    void *fsm_msg);
 
+void mcast_handle_task_response(server_information_t *server_info,
+                                   void *fsm_msg);
 /*fsm data structure*/
 typedef struct
 {

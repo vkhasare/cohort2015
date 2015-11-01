@@ -19,6 +19,7 @@
 #include <net/if.h>
 #include "comm_primitives.h"
 #include "print.h"
+#include <time.h>
 
 //#define port "3490"
 #define TIMEOUT_SECS 5

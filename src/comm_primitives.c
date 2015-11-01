@@ -513,11 +513,13 @@ bool xdr_result_t(XDR* xdrs, result_t* m){
 }
 bool process_task_resp(XDR* xdrs, task_rsp_t* m){
     if(xdrs->x_op == XDR_DECODE){
+        m->group_name = NULL;
         m->client_ids = NULL;
         m->result = NULL;
     }
 
     bool string_res = xdr_string(xdrs, &(m->group_name), max_gname_len);
+    bool task_id_res = xdr_u_int(xdrs, &(m->task_id));
     bool typ_res = xdr_enum(xdrs, (enum_t *)(&(m->type)));
     bool num_client_res = xdr_u_int(xdrs, &(m->num_clients));
     bool client_id_res = xdr_array(xdrs, (char**)&(m->client_ids), &(m->num_clients), max_client_in_group,
@@ -525,7 +527,7 @@ bool process_task_resp(XDR* xdrs, task_rsp_t* m){
     bool arr_res = xdr_array(xdrs, (char**) &(m->result),
             &(m->num_clients), max_client_in_group, sizeof(result_t),(xdrproc_t )xdr_result_t);
 
-    return string_res && typ_res  && num_client_res && client_id_res && arr_res;
+    return string_res && task_id_res && typ_res  && num_client_res && client_id_res && arr_res;
 }
 
 bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
@@ -562,19 +564,23 @@ inline unsigned int get_size(rsp_type_t type){
 void update_task_rsp(comm_struct_t* m, rsp_type_t r_type, result_t *resp, unsigned int client_id ){
     int iter;
     unsigned int * num_clients = &(m->idv.task_rsp.num_clients);
-    result_t * temp =&( m->idv.task_rsp.result[*num_clients]);
+    result_t * temp =&(m->idv.task_rsp.result[*num_clients]);
     temp->size=resp->size;
-    temp->value=malloc(get_size(r_type)*resp->size);
+    temp->value=malloc(sizeof(int)*resp->size);
     for(iter = 0; iter < resp->size; iter++){
        temp->value[iter]=resp->value[iter];
     }
     m->idv.task_rsp.client_ids[*num_clients] = client_id; 
-    *num_clients++;
+    (*num_clients)++;
 }
-void populate_task_rsp(comm_struct_t* m, rsp_type_t r_type, result_t *resp, unsigned int client_id ){
+void populate_task_rsp(comm_struct_t* m, unsigned int task_id,char* group_name, rsp_type_t r_type, result_t *resp, unsigned int client_id ){
     memset(&(m->idv),0,sizeof(task_rsp_t));
     m->id=TASK_RESPONSE;
     m->idv.task_rsp.type = r_type;
+    m->idv.task_rsp.task_id = task_id;
+    m->idv.task_rsp.group_name = malloc(sizeof(char)*strlen(group_name));
+    strcpy(m->idv.task_rsp.group_name, group_name); 
+    m->idv.task_rsp.task_id = task_id;
     m->idv.task_rsp.result = (result_t *)malloc(sizeof(result_t)); 
     m->idv.task_rsp.client_ids = (unsigned int *)malloc(sizeof(unsigned int *)); 
     update_task_rsp(m,r_type,resp, client_id);
@@ -586,10 +592,11 @@ void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsig
     m->id=TASK_RESPONSE;
     task_rsp_t * task_rsp = &(m->idv.task_rsp);
     task_rsp->type = resp->type;
+    task_rsp->task_id = resp->task_id;
     task_rsp->group_name = malloc(sizeof(char)*strlen(resp->group_name));
     strcpy(task_rsp->group_name, resp->group_name); 
-    task_rsp->result = (result_t *)malloc(sizeof(result_t)*num_clients);
-    task_rsp->client_ids = (unsigned int *)malloc(sizeof(unsigned int *)*num_clients);
+    task_rsp->result = (result_t *)(l_saddr_in_t *) calloc (num_clients, sizeof(result_t));
+    task_rsp->client_ids = (unsigned int *)calloc(num_clients, sizeof(unsigned int *));
     update_task_rsp(m, task_rsp->type, resp->result, client_id);
     return rsp_pdu;
 }

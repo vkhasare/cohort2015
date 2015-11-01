@@ -41,6 +41,22 @@ void server_fsm_mod_selected (server_information_t *server_info,
           mcast_start_task_distribution(server_info,
                                         fsm_msg);
           break;
+
+   default:
+          /*ignore case*/
+          break;
+
+   }
+}
+void server_fsm_task_in_progress (server_information_t *server_info,
+                               server_event_t event,
+                               void *fsm_msg)
+{
+   switch (event) {
+   case MOD_TASK_RSP_RCVD_EVENT:
+          mcast_handle_task_response(server_info,
+                                        fsm_msg);
+          break;
    default:
           /*ignore case*/
           break;
@@ -61,8 +77,12 @@ bool server_callline_fsm(server_information_t *server_info,
    case MODERATOR_SELECTED:
           server_fsm_mod_selected(server_info,event,fsm_msg);
           break;
-    default:
+   case GROUP_TASK_IN_PROGRESS:
+          server_fsm_task_in_progress(server_info,event,fsm_msg);
+          break;
+   default:
           /*ignore case*/
           break;
    }
 }
+
