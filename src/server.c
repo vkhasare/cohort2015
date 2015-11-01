@@ -353,11 +353,10 @@ void mcast_start_task_distribution(server_information_t *server_info,
                                    void *fsm_msg)
 {
   char ipaddr[INET6_ADDRSTRLEN];
-  //unsigned int task_set[50] = {1, 5, 8, 7, 6, 20, 39, 46, 57, 63, 78, 81, 93, 13};
   int count = 0;
   comm_struct_t req;
   fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
-  pdu_t rsp_pdu;
+  pdu_t req_pdu;
   unsigned int* task_set,task_count;
 
   /* fetch the group node pointer from fsm_data */
@@ -368,9 +367,12 @@ void mcast_start_task_distribution(server_information_t *server_info,
 
   pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
+  /* Get the task set for prime numbers */
   task_count = get_task_count("src/task_set.txt", &task_set);
   
   req.id = perform_task_req;
+
+  /* Fetch the client ID's and copy the task set */
   if (pdu->msg.idv.moderator_notify_rsp.client_id_count)
   {
       req.idv.perform_task_req.client_id_count = pdu->msg.idv.moderator_notify_rsp.client_id_count;
@@ -390,8 +392,11 @@ void mcast_start_task_distribution(server_information_t *server_info,
       req.idv.perform_task_req.task_set[count] = task_set[count];
     }
 
-    rsp_pdu.msg = req;
-    write_record(server_info->server_fd,&(group_node->grp_mcast_addr), &rsp_pdu);
+    req_pdu.msg = req;
+
+    /* Send multicast msg to group to perform task */
+    write_record(server_info->server_fd,&(group_node->grp_mcast_addr), &req_pdu);
+    
     PRINT("[Task Assigned]");
     return 0;
 }
@@ -755,8 +760,23 @@ void server_stdin_data(int fd, server_information_t *server_info)
     }
     else if(strncmp(read_buffer,"task",4) == 0)
     {
-       //hardcoded as of now
-       assign_task(server_info, "G1");
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        while(i < 1)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        if (!ptr)
+        {
+            PRINT("Error: Unrecognized Command.\n");
+            return;
+        }
+        for(i = 0;i < num_groups; i++)
+        {
+            if(strcmp(ptr,mapping[i].grname) == 0)
+              assign_task(server_info, mapping[i].grname);
+        }
     }
     else if( strncmp(read_buffer,"send msg",8) == 0)
     {

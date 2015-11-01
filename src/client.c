@@ -1014,7 +1014,8 @@ void* find_prime_numbers(void *args)
   unsigned int i,j,flag;
 
   thread_args *t_args = (thread_args *)args;
-
+  
+  /* Loop for prime number's in given data set */
   for(i = 0; i < t_args->data_count; i++)
   {
     flag = 0;
@@ -1030,6 +1031,8 @@ void* find_prime_numbers(void *args)
     {
       t_args->result[i] = t_args->data[i];
       PRINT("Prime number %d",t_args->result[i]);
+      
+      /* Total count of prime numbers */
       t_args->result_count++;
     }
   }
@@ -1066,14 +1069,19 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     
     for(count = 0; count < perform_task.client_id_count; count++)
     {
-      if(clientID == perform_task.client_ids[count])
+      if(clientID == perform_task.client_ids[count]) /*This client needs to perform the task */
       {
-        /* assumption client_id_count < num of task count */
+        /* assumption client_id_count < num of task count 
+         * start_index : the index of the original task set from where this clients starts performing task
+         * stop_index : the index of the original task set to which this client perform's the task
+         */
         start_index = ((perform_task.task_count/perform_task.client_id_count) * count);
+        /* client_task_count is the count of total number's which client has to work upon */
         client_task_count = (perform_task.task_count/perform_task.client_id_count);
 
-        if((count +1) == perform_task.client_id_count) /* l ast clint */
+        if((count +1) == perform_task.client_id_count) /* last client */
         {
+          /* Consider rest all elements of task set */
           stop_index = perform_task.task_count - 1;
           client_task_count = stop_index - start_index + 1;
         }
@@ -1082,6 +1090,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
 
         while(i != client_task_count)
         {
+            /* Derive the task set for client */
             client_task_set[i] = perform_task.task_set[(start_index + i)];
             args->data[i] = client_task_set[i];
             i++;
@@ -1089,7 +1098,9 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
 
         args->data_count = client_task_count;
 
+        /* Create a thread to perform the task */
         result = pthread_create(&thread, NULL, find_prime_numbers ,args);
+        
         if(result)
         {
           PRINT("Could not create thread to perform task");
