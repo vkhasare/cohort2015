@@ -118,7 +118,7 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
        mod_info->active_client_count = mod_notify_req.num_of_clients_in_grp;
 
        /**Register the moderator fsm handler and set the fsm state*/
-       mod_info->fsm = moderator_callline_fsm;
+       mod_info->fsm = moderator_main_fsm;
        mod_info->fsm_state = MODERATOR_NOTIFY_RSP_PENDING;
 
        /*allocate the client node for pending list, to add the moderator node into it.*/
@@ -430,6 +430,28 @@ void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_in
   }
 }
 
+/* <doc>
+ * void moderator_echo_req_task_rsp_pending_state(client_information_t *client_info,
+ *                                               void *fsm_msg)
+ * Function will get hit when all clients are working on the task and client is in
+ * task response pending state to server and echo request from client comes.
+ * All periodic echo's will hit this function.
+ *
+ * </doc>
+ */
+void moderator_echo_req_task_rsp_pending_state(client_information_t *client_info,
+                                               void *fsm_msg)
+{
+  fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+  pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+  comm_struct_t *req = &(pdu->msg);
+  echo_req_t echo_req = req->idv.echo_req;
+
+
+//commented for now.
+//  check_keepalive_working_clients(&client_info);
+//UPDATE THE DS HERE
+}
 
 
 /* <doc>

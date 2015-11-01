@@ -2,19 +2,17 @@
 #include "server_DS.h"
 #include "print.h"
 
-/*
-typedef enum{
-  MODERATOR_SELECTION_PENDING = 1,
-  MODERATOR_SELECTED          = 2,
-  STATE_MAX
-}server_state_t;
-
-typedef enum{
-  FIRST_ECHO_RSP_RCVD = 1,
-  EVENT_MAX
-}server_event_t;
-*/
-
+/* <doc>
+ * void server_fsm_mod_pend_state(server_information_t *server_info,
+ *                                server_event_t event,
+ *                                void *fsm_msg)
+ * This is the fsm handler when group is in moderator selection pending
+ * state.
+ * Events could be
+ * - echo response from client comes for becoming moderator.
+ *
+ * </doc>
+ */
 void server_fsm_mod_pend_state(server_information_t *server_info,
                                server_event_t event,
                                void *fsm_msg)
@@ -32,6 +30,15 @@ void server_fsm_mod_pend_state(server_information_t *server_info,
    }
 }
 
+/* <doc>
+ * void server_fsm_mod_selected (server_information_t *server_info,
+ *                               server_event_t event,
+ *                               void *fsm_msg)
+ * This is the fsm handler when a moderator has been selected for
+ * a group and any event comes.
+ *
+ * </doc>
+ */
 void server_fsm_mod_selected (server_information_t *server_info,
                                server_event_t event,
                                void *fsm_msg)
@@ -48,9 +55,42 @@ void server_fsm_mod_selected (server_information_t *server_info,
    }
 }
 
-bool server_callline_fsm(server_information_t *server_info,
-      server_event_t event,
-      void *fsm_msg)
+/* <doc>
+ * void server_fsm_task_in_progress(server_information_t *server_info,
+ *                                  server_event_t event,
+ *                                  void *fsm_msg)
+ * This is the fsm handler when server has delegated some task to
+ * a group and group is now in task in progress state.
+ *
+ * </doc>
+ */
+void server_fsm_task_in_progress(server_information_t *server_info,
+                                 server_event_t event,
+                                 void *fsm_msg)
+{
+   switch (event) {
+   case ECHO_RSP_RCVD_EVENT:
+          server_echo_req_task_in_progress_state(server_info,
+                                                 fsm_msg);
+          break;
+   default:
+          /*ignore case*/
+          break;
+
+   }
+}
+
+/* <doc>
+ * bool server_main_fsm(server_information_t *server_info,
+ *                      server_event_t event,
+ *                      void *fsm_msg)
+ * Main FSM Handler of Server
+ *
+ * </doc>
+ */
+bool server_main_fsm(server_information_t *server_info,
+                     server_event_t event,
+                     void *fsm_msg)
 {
    fsm_data_t *fsm_data = (fsm_data_t *) fsm_msg;
    
@@ -60,6 +100,9 @@ bool server_callline_fsm(server_information_t *server_info,
           break;
    case MODERATOR_SELECTED:
           server_fsm_mod_selected(server_info,event,fsm_msg);
+          break;
+   case GROUP_TASK_IN_PROGRESS:
+          server_fsm_task_in_progress(server_info,event,fsm_msg);
           break;
     default:
           /*ignore case*/

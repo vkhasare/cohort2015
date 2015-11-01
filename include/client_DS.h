@@ -13,6 +13,7 @@ typedef enum{
 typedef enum{
   MODERATOR_NOTIFY_RSP_PENDING = 1,
   MODERATOR_NOTIFY_RSP_SENT,
+  MODERATOR_TASK_RSP_PENDING,
   STATE_NONE,
   STATE_MAX
 }moderator_state_t;
@@ -82,12 +83,15 @@ typedef struct
   void *pdu;
 }fsm_data_t;
 
-bool moderator_callline_fsm(client_information_t *client_info,
-                            moderator_event_t event,
-                            void *fsm_msg);
+bool moderator_main_fsm(client_information_t *client_info,
+                        moderator_event_t event,
+                        void *fsm_msg);
 
 void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_info,
                                                  void *fsm_msg);
+
+void moderator_echo_req_task_rsp_pending_state(client_information_t *client_info,
+                                               void *fsm_msg);
 
 typedef struct {
   unsigned int data_count;
