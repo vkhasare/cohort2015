@@ -128,8 +128,7 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
        get_my_ip("eth0", &moderatorIP);
 
        mod_node->peer_client_id = client_info->client_id;
-       mod_node->peer_client_addr.sa_family = moderatorIP.sa_family;
-       strcpy(mod_node->peer_client_addr.sa_data, moderatorIP.sa_data);
+       memcpy(&mod_node->peer_client_addr, &moderatorIP, sizeof(mod_node->peer_client_addr));
 
        /*If only 1 client in the group, then send moderator notify response for moderator right away.*/
        if (1 == mod_info->active_client_count) {
@@ -418,9 +417,8 @@ void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_in
   /*allocate the moderator client node and store the information about the group active clients*/
   mod_client_node_t *mod_node = (mod_client_node_t *) allocate_clnt_moderator_node(&client_info->moderator_info);
 
-  mod_node->peer_client_id = calc_key(&pdu->peer_addr); 
-  mod_node->peer_client_addr.sa_family = pdu->peer_addr.sa_family;
-  strcpy(mod_node->peer_client_addr.sa_data, pdu->peer_addr.sa_data);
+  mod_node->peer_client_id = calc_key(&pdu->peer_addr);
+  memcpy(&mod_node->peer_client_addr, &pdu->peer_addr, sizeof(pdu->peer_addr)); 
 
   /* Send notification response to server if all the clients have responded with echo req or TIMEOUT happened
    * This is the case where all clients have responded.*/
@@ -987,23 +985,31 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
 
     task_rsp_t * task_response = &resp->idv.task_rsp;
     moderator_information_t * moderator_info = client_info->moderator_info;
-    if(moderator_info != NULL && MATCH_STRING(moderator_info->group_name, task_response->group_name)){ 
-    unsigned int peer_id = calc_key(&(pdu->peer_addr));
+
+    if(moderator_info != NULL && MATCH_STRING(moderator_info->group_name, task_response->group_name)){
+        mod_client_node_t *mod_node = NULL; 
+        unsigned int peer_id = calc_key(&(pdu->peer_addr));
     
      
-    if(moderator_info->moderator_resp_msg != NULL){
-      update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
+        if(moderator_info->moderator_resp_msg != NULL){
+            update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
+        } else{
+            moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
+        }
+        
+        get_client_from_moderator_pending_list(client_info, peer_id, &mod_node);
+        if (mod_node) {
+          move_moderator_node_pending_to_done_list(client_info, &mod_node);
+        }
+
+        pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
+
+        if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count){
+            write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
+            PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
+        }
     } else{
-      moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
-    }
-//    move_moderator_node_pending_to_done_list(
-    pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
-    if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count){
-        write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
-        PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
-    }
-    } else{
-      PRINT("Error case : Moderator received a wrong input");
+        PRINT("Error case : Moderator received a wrong input");
     }
 }
 

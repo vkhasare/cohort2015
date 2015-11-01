@@ -3,6 +3,45 @@
 #include "print.h"
 
 /* <doc>
+ * void get_client_from_moderator_pending_list(client_information_t *client_info, unsigned int clientID, mod_client_node_t **client_node)
+ * This is a MODERATOR function, for getting the client node from it,
+ * searched on basis of clientID.
+ * Returns node address if found. Else returns null.
+ *
+ *
+ * </doc>
+ */
+void get_client_from_moderator_pending_list(client_information_t *client_info, unsigned int clientID, mod_client_node_t **client_node)
+{
+  mod_client_node_t *mod_node = NULL;
+
+      mod_node =     SN_LIST_MEMBER_HEAD(&((client_info)->moderator_info->pending_client_list->client_grp_node),
+                                           mod_client_node_t,
+                                           list_element);
+
+  /*If no nodes associated with the list*/
+  if (mod_node == NULL)
+  {
+    *client_node = NULL;
+    return;
+  }
+
+  while (mod_node)
+  {
+
+     if (mod_node->peer_client_id == clientID)
+     {
+        *client_node = mod_node;
+        return;
+     }
+
+     mod_node  =    SN_LIST_MEMBER_NEXT(mod_node,
+                                        mod_client_node_t,
+                                        list_element);
+  }
+}
+
+/* <doc>
  * void display_moderator_pending_list(client_information_t **client_info, moderator_show_type_t show_type)
  * This is a MODERATOR function, for displaying the contents of pending and done client lists.
  * It takes argument as show_type which can be -
@@ -105,15 +144,17 @@ void deallocate_moderator_list(client_information_t **client_info)
  *
  * </doc>
  */
-void move_moderator_node_pending_to_done_list(moderator_information_t *moderator_info, mod_client_node_t *mod_node)
+void move_moderator_node_pending_to_done_list(client_information_t *client_info, mod_client_node_t *mod_node)
 {
+   moderator_information_t **mod_info = &client_info->moderator_info;
+
    /*Insert in done list*/
-   SN_LIST_MEMBER_INSERT_HEAD(&((moderator_info)->done_client_list->client_grp_node),
+   SN_LIST_MEMBER_INSERT_HEAD(&((*mod_info)->done_client_list->client_grp_node),
                               mod_node,
                               list_element);
 
    /*Remove from pending list*/
-   SN_LIST_MEMBER_REMOVE(&((moderator_info)->pending_client_list->client_grp_node),
+   SN_LIST_MEMBER_REMOVE(&((*mod_info)->pending_client_list->client_grp_node),
                          mod_node,
                          list_element);  
 }
