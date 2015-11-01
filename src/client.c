@@ -1011,7 +1011,7 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
     
      
     if(moderator_info->moderator_resp_msg != NULL){
-      update_task_rsp(((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
+      update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
     } else{
       moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
     }
@@ -1076,7 +1076,7 @@ void* find_prime_numbers(void *args)
     if(!flag)
     {
       t_args->result[t_args->result_count] = t_args->data[i];
-//      PRINT("Prime number %d",t_args->result[i]);
+      //PRINT("Prime number %d",t_args->result[t_args->result_count]);
       
       /* Total count of prime numbers */
       t_args->result_count++;
