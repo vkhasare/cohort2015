@@ -24,6 +24,7 @@ typedef enum{
   SEND_KEEPALIVE_EVENT,
   MOD_NOTIFY_RSP_RCVD_EVENT,
   MOD_TASK_RSP_RCVD_EVENT,
+  ECHO_REQ_RCVD_EVENT,
   EVENT_NONE,
   EVENT_MAX
 }server_event_t;
@@ -95,9 +96,9 @@ sn_list_element_t list_element;
 /*Declarations*/
 rb_cl_grp_node_t *allocate_rb_cl_node(rb_info_t **rb_info);
 
-bool server_callline_fsm(server_information_t *server_info,
-      server_event_t event,
-      void *fsm_msg);
+bool server_main_fsm(server_information_t *server_info,
+                     server_event_t event,
+                     void *fsm_msg);
 
 void mcast_send_chk_alive_msg(server_information_t *server_info,
                              void *fsm_msg);
@@ -105,8 +106,14 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
 void mcast_start_task_distribution(server_information_t *server_info,
                                    void *fsm_msg);
 
+<<<<<<< HEAD
 void mcast_handle_task_response(server_information_t *server_info,
                                    void *fsm_msg);
+=======
+void server_echo_req_task_in_progress_state(server_information_t *server_info,
+                                            void *fsm_msg);
+
+>>>>>>> 9ef19691b2fa04943dd377fcb9d7694a6e3aea8b
 /*fsm data structure*/
 typedef struct
 {
