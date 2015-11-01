@@ -93,7 +93,11 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 
     clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
-    PRINT("[Leave_Request: GRP - %s, CL - %d] Leave Request Received.", group_name, clientID);
+    char ipaddr[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+//    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
+
+    PRINT("[Leave_Request: GRP - %s, Client - %s] Leave Request Received.", group_name, ipaddr);
 
     tree = (RBT_tree*) server_info->client_RBT_head;
 
@@ -129,7 +133,7 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 
     leave_rsp->cause = cause;
 
-    PRINT("[Leave_Response: GRP - %s, CL - %d] Cause: %s.",group_name, clientID, enum_to_str(cause));
+    PRINT("[Leave_Response: GRP - %s, Client - %s] Cause: %s.",group_name, ipaddr, enum_to_str(cause));
 
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
@@ -174,7 +178,10 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
         cause = REJECTED;
         group_name = join_req.group_ids[cl_iter].str;
 
-        PRINT("[Join_Request: GRP - %s] Join Request Received.", group_name);
+        char ipaddr[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+
+        PRINT("[Join_Request: GRP - %s, Client - %s] Join Request Received.", group_name, ipaddr);
 
         /*search group_node in LL by group name*/
         get_group_node_by_name(&server_info, group_name, &group_node);
@@ -232,7 +239,7 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
 
         join_rsp->group_ips[cl_iter].cause =  cause;
 
-        PRINT("[Join_Response: GRP - %s] Cause: %s.", group_name, enum_to_str(cause));
+        PRINT("[Join_Response: GRP - %s, Client: %s] Cause: %s.", group_name, ipaddr, enum_to_str(cause));
     }
     
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);

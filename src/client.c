@@ -989,7 +989,10 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
     if(moderator_info != NULL && MATCH_STRING(moderator_info->group_name, task_response->group_name)){
         mod_client_node_t *mod_node = NULL; 
         unsigned int peer_id = calc_key(&(pdu->peer_addr));
-    
+        char ipaddr[INET6_ADDRSTRLEN];
+
+        inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN); 
+        PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Request received from client %s", task_response->group_name, ipaddr);
      
         if(moderator_info->moderator_resp_msg != NULL){
             update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
