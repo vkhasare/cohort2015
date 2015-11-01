@@ -70,6 +70,7 @@ struct server_information_t;
 
 typedef struct {
   unsigned int server_fd;               /*Server FD*/
+  unsigned int task_id;                 /*Next task Id*/
   mcast_group_t *server_list;           /*Server List having group nodes for all the multicast groups.*/
   void *client_RBT_head;                /*Pointer to RBTree head, which maintains global list of all clients.*/
   bool (* fsm)(struct server_information_t *server_info, server_event_t event, void *fsm_msg);    /*Server FSM function pointer*/

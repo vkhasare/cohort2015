@@ -482,11 +482,14 @@ bool process_client_leave(my_struct_t* m, XDR* xdrs){
 
 bool process_perform_task_req(XDR* xdrs, perform_task_req_t* m){
     if(xdrs->x_op == XDR_DECODE){
+        m->group_name = NULL;
         m->client_ids = NULL;
         m->task_set = NULL;
     }
 
     return (xdr_u_int(xdrs, &(m->client_id_count)) &&
+            xdr_u_int(xdrs, &(m->task_id)) &&
+            xdr_string(xdrs, &(m->group_name), max_gname_len) &&
             xdr_array(xdrs, (char**)&(m->client_ids), &(m->client_id_count), max_client_in_group,
                              (sizeof(unsigned int)),
                              (xdrproc_t )xdr_u_int) &&
