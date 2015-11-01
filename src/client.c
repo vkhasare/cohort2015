@@ -101,7 +101,8 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
     PRINT("[Moderator_Notify_Req: GRP - %s] Moderator IP is %s", mod_notify_req.group_name, ipaddr);
 
     /*After moderator information, inform moderator about the self presence by sending echo request msg.*/
-    if (client_info->client_id != mod_notify_req.moderator_id) {
+    if (client_info->client_id != mod_notify_req.moderator_id &&
+        client_info->client_status == FREE) {
        send_echo_request(client_info->client_fd, &client_info->moderator, mod_notify_req.group_name);
     } else {
        /*IT IS THE MODERATOR BLOCK.. UPDATE MODERATOR DATA STRUCTURES*/
@@ -866,8 +867,16 @@ int main(int argc, char * argv[])
         event_count = epoll_wait(efd, events, MAXEVENTS, -1);
 
         for (index = 0; index < event_count; index++) {
+            /* Code Block for handling input from STDIN */
+            if (STDIN_FILENO == events[index].data.fd)
+            {
+                /* Invoking function to recognize the cli fired and call its appropriate handler */
+                client_stdin_data(events[index].data.fd, client_info);
+
+                PRINT_PROMPT("[client] ");
+            }
             /* Code Block for receiving data on Client Socket */
-            if ((cfd == events[index].data.fd) && (events[index].events & EPOLLIN))
+            else
             {
                 fptr func;
 
@@ -875,24 +884,6 @@ int main(int argc, char * argv[])
                  * client_func_handler then returns function to handle the req depending
                  * upon req msg type. Once function handler name is received, it is invoked.
                  */
-                if ((func = client_func_handler(read_record(events[index].data.fd, &pdu))))
-                {
-                    (func)(events[index].data.fd, &pdu, client_info);
-                }
-                
-            }
-            /* Code Block for handling input from STDIN */
-            else if (STDIN_FILENO == events[index].data.fd)
-            {
-                /* Invoking function to recognize the cli fired and call its appropriate handler */
-                client_stdin_data(events[index].data.fd, client_info);
-
-                PRINT_PROMPT("[client] ");
-            }
-            /* Data for multicast grp */
-            else
-            {
-                fptr func;
                 if ((func = client_func_handler(read_record(events[index].data.fd, &pdu))))
                 {
                     (func)(events[index].data.fd, &pdu, client_info);
@@ -1106,6 +1097,9 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
+
+    /*Client is busy in working on task now.*/
+    client_info->client_status = BUSY;
 
     for(count = 0; count < perform_task.client_id_count; count++)
     {

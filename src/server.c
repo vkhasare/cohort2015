@@ -71,7 +71,7 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
     uint8_t cl_iter, s_iter;
     char *group_name;
     msg_cause cause = REJECTED;
-    bool found;
+    char ipaddr[INET6_ADDRSTRLEN];
     server_information_t *server_info = NULL;
     unsigned int clientID = 0;
     RBT_tree *tree = NULL;
@@ -93,9 +93,7 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 
     clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
-    char ipaddr[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-//    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
 
     PRINT("[Leave_Request: GRP - %s, Client - %s] Leave Request Received.", group_name, ipaddr);
 
@@ -156,6 +154,7 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
     msg_cause cause;
     server_information_t *server_info = NULL;
     unsigned int clientID = 0;
+    char ipaddr[INET6_ADDRSTRLEN];
     RBT_tree *tree = NULL;
     RBT_node *newNode = NULL;
     mcast_group_node_t *group_node = NULL;
@@ -170,6 +169,9 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
 
     resp->id = join_response;
     join_rsp->num_groups = join_req.num_groups;
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+
     /* Initializing is must for xdr msg. */
     join_rsp->group_ips = (l_saddr_in_t *) calloc (join_req.num_groups, sizeof(l_saddr_in_t));
     
@@ -177,9 +179,6 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
 
         cause = REJECTED;
         group_name = join_req.group_ids[cl_iter].str;
-
-        char ipaddr[INET6_ADDRSTRLEN];
-        inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
 
         PRINT("[Join_Request: GRP - %s, Client - %s] Join Request Received.", group_name, ipaddr);
 
@@ -502,7 +501,6 @@ void mcast_handle_task_response(server_information_t *server_info,
                                    void *fsm_msg)
 {
   char ipaddr[INET6_ADDRSTRLEN];
-  //unsigned int task_set[50] = {1, 5, 8, 7, 6, 20, 39, 46, 57, 63, 78, 81, 93, 13};
   int count = 0;
   comm_struct_t req;
   fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
@@ -568,6 +566,13 @@ int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...)
              /*Search for group node in group list of RBnode*/
              if (search_rb_grp_node(&rb_info_list, moderator_task_rsp->group_name, &rb_grp_node)) {
                   mcast_group_node_t *ll_grp_node = ((mcast_group_node_t *)rb_grp_node->grp_addr);
+
+                  /*Marking the client free again*/
+                  rbNode->av_status = RB_FREE;
+                  rbNode->is_moderator = FALSE;
+                  ll_grp_node->moderator_client->av_status = CLFREE;
+                  ll_grp_node->moderator_client = NULL;
+
                   fsm_msg.fsm_state = ll_grp_node->fsm_state;
                   fsm_msg.grp_node_ptr = (void *) ll_grp_node;
                   fsm_msg.pdu = pdu;
@@ -812,8 +817,11 @@ void assign_task(server_information_t *server_info, char *grp_name)
    /*fetch the group information whose clients are supposed to work on task*/
    get_group_node_by_name(&server_info, grp_name, &group_node); 
 
-   if (group_node->client_info == NULL)
-   {
+   /*If group node has moderator, that means group is currently busy working on a task*/
+   if (group_node->moderator_client) {
+      PRINT("Group %s is currently Busy.", grp_name);
+      return;
+   } else if (group_node->client_info == NULL) {
       PRINT("No clients present in the group.");
       return;
    }
@@ -821,6 +829,7 @@ void assign_task(server_information_t *server_info, char *grp_name)
    /*Select the moderator for the multicast group*/
    moderator_selection(server_info, group_node, grp_name);
 }
+
 
 /* RBT comparision function */
 int IntComp(unsigned a,unsigned int b) {
@@ -849,13 +858,12 @@ void server_stdin_data(int fd, server_information_t *server_info)
     
     int cnt=0, i = 0, msfd;
     int group_msg[1000] = {0};
-    //uint32_t num_groups;
     
     struct sockaddr_in maddr;
     
     cnt=read(fd, read_buffer, 99);
 
-    //If input buffer is empty return. Ideally this should not happen.
+    /*If input buffer is empty return. Ideally this should not happen.*/
     if (cnt <= 0) return;
 
     read_buffer[cnt-1] = '\0';
