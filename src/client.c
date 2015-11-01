@@ -1158,7 +1158,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         {
           PRINT("Could not create thread to perform task");
         }
-        pthread_join(thread,NULL);
+//        pthread_join(thread,NULL);
 //        result_t *answer = copy_result_from_args(args ); 
 //        if(answer !=NULL) 
 //          send_task_results_to_moderator(client_info, TYPE_INT, result, clientID); 

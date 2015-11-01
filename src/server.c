@@ -443,9 +443,8 @@ void mcast_start_task_distribution(server_information_t *server_info,
 
     /* Send multicast msg to group to perform task */
     write_record(server_info->server_fd,&(group_node->grp_mcast_addr), &req_pdu);
-    
-    PRINT("[Task Assigned]");
-    return 0;
+
+    PRINT("[Task_Request: GRP - %s] Task Request Sent.", group_node->group_name);
 }
 
 void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer){
@@ -458,9 +457,10 @@ void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer)
      sprintf(buffer,"Resp_%s_%d_", gname , *task_id);
      strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
      strcat(buffer,buffer2);
-     PRINT(" The Response from %s for task %d is written in %s",gname, *task_id,  buffer);
-     return;
-}  
+     PRINT("[INFO] The Response from %s for task %d is written in %s",gname, *task_id,  buffer);
+}
+
+ 
 void
 write_task_response_file(task_rsp_t * task_rsp, char* fname){
   uint32_t i, j;
@@ -508,11 +508,9 @@ void mcast_handle_task_response(server_information_t *server_info,
   pdu_t *pdu = (pdu_t *) fsm_data->pdu;
   task_rsp_t *task_response= &(pdu->msg.idv.task_rsp);
   /* Get the file name based on current time stamp */ 
-  get_task_response_file_name(group_node->group_name,&(task_response->task_id),filename); 
+  get_task_response_file_name(group_node->group_name, &(task_response->task_id), filename); 
   /* Write the response  to file */  
   write_task_response_file(task_response, filename);
-  PRINT("[Task Assigned]");
-  return 0;
 }
 
 /* <doc>
@@ -539,7 +537,7 @@ int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...)
     EXTRACT_ARG(pdu, server_information_t*, server_info);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("[Moderator_Task_Rsp: GRP - %s] Moderator Task Response received from %s", moderator_task_rsp->group_name, ipaddr);
+    PRINT("[Task_Response: GRP - %s] Task Response received from moderator %s", moderator_task_rsp->group_name, ipaddr);
 
     /* Search for client moderator node by moderator ID in RBTree. Through RBnode, traverse the rb group list
      * to identify the LL group node.
