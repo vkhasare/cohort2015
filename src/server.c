@@ -419,6 +419,10 @@ void mcast_start_task_distribution(server_information_t *server_info,
   
   req.id = perform_task_req;
 
+  req.idv.perform_task_req.group_name= malloc(sizeof(char)*strlen(group_node->group_name));
+  strcpy(req.idv.perform_task_req.group_name, group_node->group_name);
+  req.idv.perform_task_req.task_id = server_info->task_id;
+  (server_info->task_id)++;  
   /* Fetch the client ID's and copy the task set */
   if (pdu->msg.idv.moderator_notify_rsp.client_id_count)
   {

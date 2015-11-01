@@ -233,6 +233,7 @@ void allocate_mcast_group_list(server_information_t **server_info)
    mcast_group  = malloc(sizeof(mcast_group_t));
    SN_LIST_INIT(&(mcast_group->group_node));
    (*server_info)->server_list = mcast_group;
+   (*server_info)->task_id =1;
 }
 
 /* <doc>

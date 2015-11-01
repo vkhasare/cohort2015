@@ -1149,8 +1149,9 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         args->data_count = client_task_count;
 
         args->client_info=client_info;
-        args->task_id = 44;
-        args->group_name="G1";
+        args->task_id = perform_task.task_id;
+        args->group_name=malloc(sizeof(char)*strlen(perform_task.group_name));
+        strcpy(args->group_name, perform_task.group_name);
         /* Create a thread to perform the task */
         result = pthread_create(&thread, NULL, find_prime_numbers ,args);
         
