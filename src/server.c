@@ -471,7 +471,7 @@ void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer)
  
      time ( &rawtime );
      timeinfo = localtime ( &rawtime );
-     sprintf(buffer,"Resp_%s_%d_", gname , *task_id);
+     sprintf(buffer,"task_result/Resp_%s_%d_", gname , *task_id);
      strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
      strcat(buffer,buffer2);
      PRINT("[INFO] The Response from %s for task %d is written in %s",gname, *task_id,  buffer);

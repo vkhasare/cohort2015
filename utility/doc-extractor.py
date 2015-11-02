@@ -35,8 +35,8 @@ def main(argv):
     docPtr = open(docFile, 'w+')
 
     #All files starting with .c or .h
-    c_files = [f for f in os.listdir("src/") if f.endswith('.c')]
-    h_files = [f for f in os.listdir("include/") if f.endswith('.h')]
+    c_files = [f for f in os.listdir("../src/") if f.endswith('.c')]
+    h_files = [f for f in os.listdir("../include/") if f.endswith('.h')]
 
     all_files = c_files + h_files
 
