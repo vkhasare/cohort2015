@@ -462,7 +462,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
  * void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer)
  * This function returns the file name for result file
  *
- * <doc>
+ * </doc>
  */
 void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer){
      time_t rawtime;

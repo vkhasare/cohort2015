@@ -20,7 +20,7 @@ find_file(file_name)
 Function to find the the relative path of the given file.
 """
 def find_file(file_name):
-    for root, dirs, files in os.walk(".", topdown=False):
+    for root, dirs, files in os.walk("../", topdown=False):
         if file_name in files:
               return os.path.join(root, file_name)
 
@@ -44,7 +44,6 @@ def main(argv):
     for fileIndex in range(len(all_files)):
 
         fileName = all_files[fileIndex]
-
         relfileName = find_file(fileName)
 
         lines = open(relfileName).read().splitlines()
