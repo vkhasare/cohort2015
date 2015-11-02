@@ -12,6 +12,7 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <time.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <limits.h>
@@ -19,13 +20,16 @@
 #include <net/if.h>
 #include "comm_primitives.h"
 #include "print.h"
-#include <time.h>
 
 //#define port "3490"
 #define TIMEOUT_SECS 5
 #define BACKLOG 30000
 #define MAXEVENTS 30000
 #define MAXDATASIZE 100
+#define CLOCKID CLOCK_REALTIME
+
+#define errExit(msg)    do { perror(msg); exit(EXIT_FAILURE); \
+                        } while (0)
 
 extern const unsigned int max_groups;
 extern const unsigned int max_gname_len; //includes nul termination
@@ -97,14 +101,17 @@ typedef struct grname_ip_mapping{
 typedef int (*fptr)(int, pdu_t *, ...);
 int create_and_bind(char *machine_addr, char *machine_port, int oper_mode);
 int make_socket_non_blocking (int sfd);
-void *get_in_addr(struct sockaddr *sa);
+char *get_in_addr(struct sockaddr *sa);
 int IS_SERVER(int oper);
 int IS_CLIENT(int oper);
 //uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping, server_information_t ** server_info);
 void display_mapping(grname_ip_mapping_t * mapping, uint32_t count);
 void display_clis();
+void initialize_echo_request(echo_req_t *echo_req);
 char* enum_to_str(msg_cause cause);
 msg_cause str_to_enum(char *str);
 inline unsigned int calc_key(struct sockaddr *sa);
 void get_my_ip(const char *, struct sockaddr *);
-
+int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name);
+void start_oneshot_timer(timer_t *t, uint8_t interval, uint32_t sigval);
+void start_recurring_timer(timer_t *t, uint8_t interval, uint32_t sigval);

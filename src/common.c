@@ -171,14 +171,51 @@ int make_socket_non_blocking (int sfd)
 }
 
 
-void* get_in_addr(struct sockaddr *sa)
+char* get_in_addr(struct sockaddr *sa)
 {
     if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*) sa)->sin_addr);
+        return (char *) &(((struct sockaddr_in*) sa)->sin_addr);
     } else {
-        return &(((struct sockaddr_in6*) sa)->sin6_addr);
+        return (char *) &(((struct sockaddr_in6*) sa)->sin6_addr);
     }
 }
+
+void initialize_echo_request(echo_req_t *echo_req)
+{
+    echo_req->group_name  = NULL;
+    echo_req->num_clients = 0;
+    echo_req->client_ids  = NULL;
+}
+
+/* <doc>
+ * int send_echo_request(unsigned int sockfd, struct sockaddr *addr, char *grp_name)
+ * Sends echo request on mentioned sockfd to the addr passed.
+ * grp_name is filled in echo req pdu.
+ *
+ * </doc>
+ */
+
+int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
+{
+    pdu_t pdu;
+    char ipaddr[INET6_ADDRSTRLEN];
+    
+    comm_struct_t *req = &(pdu.msg);
+    req->id = echo_req;
+    
+    echo_req_t *echo_request = &(req->idv.echo_req);
+    initialize_echo_request(echo_request);
+
+    /*Create the echo request pdu*/
+    echo_request->group_name = grp_name;
+    write_record(sockfd, addr, &pdu);
+
+    inet_ntop(AF_INET, get_in_addr(addr), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
+
+    return 0;
+}
+
 
 /* <doc>
  * inline int calc_key(struct sockaddr *addr)
@@ -206,3 +243,52 @@ void display_server_clis()
   PRINT("cls                                --  Clears the screen");
 }
 
+void start_oneshot_timer(timer_t *timer_id, uint8_t interval, uint32_t sigval)
+{
+    struct itimerspec its;
+    struct sigevent sev;
+    
+    its.it_value.tv_sec = interval;
+    its.it_value.tv_nsec = 0;
+    its.it_interval.tv_sec = 0;
+    its.it_interval.tv_nsec = 0;
+    
+    sev.sigev_notify = SIGEV_SIGNAL;
+    sev.sigev_signo = sigval;
+    sev.sigev_value.sival_ptr = timer_id;
+    
+    if (timer_create(CLOCKID, &sev, timer_id) == -1)
+        errExit("timer_create");
+
+    if (timer_settime(*timer_id, 0, &its, NULL) == -1)
+         errExit("timer_settime");
+}
+
+void start_recurring_timer(timer_t *timer_id, uint8_t interval, uint32_t sigval)
+{
+    struct itimerspec its;
+    struct sigevent sev;
+    
+    //For now, using simplified timer structure. First timeout and subsequent
+    //timeouts are at the granularity of seconds and are same. This can be
+    //modified to operate at nanosecond granularity though.
+    uint8_t r_interval = interval;
+    
+    //its.it_value.tv_sec = interval / 1000000000;
+    //its.it_value.tv_nsec = interval % 1000000000;
+    
+    its.it_value.tv_sec = interval;
+    its.it_value.tv_nsec = 0;
+    its.it_interval.tv_sec = its.it_value.tv_sec;
+    its.it_interval.tv_nsec = its.it_value.tv_nsec;
+    
+    sev.sigev_notify = SIGEV_SIGNAL;
+    sev.sigev_signo = sigval;
+    sev.sigev_value.sival_ptr = timer_id;
+    
+    if (timer_create(CLOCKID, &sev, timer_id) == -1)
+        errExit("timer_create");
+
+    if (timer_settime(*timer_id, 0, &its, NULL) == -1)
+         errExit("timer_settime");
+}

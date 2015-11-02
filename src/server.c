@@ -7,7 +7,9 @@ extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 unsigned int num_groups = 0; // should be removed in future, when we remove mapping array and completely migrate on LL.
 
-static int send_echo_request(const int sockfd, struct sockaddr *,char *); 
+const int MAX_CLIENTS_TRIED_PER_ATTEMPT = 3;
+const int MAX_ALLOWED_KA_MISSES = 5;
+
 static int handle_echo_req(const int, pdu_t *pdu, ...);
 static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_join_req(const int sockfd, pdu_t *pdu, ...);
@@ -15,7 +17,8 @@ static int handle_leave_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...);
 static void assign_task(server_information_t *, char *, int);
-static void moderator_selection(server_information_t *, mcast_group_node_t *, char *);
+static void moderator_selection(server_information_t *, mcast_group_node_t *);
+
 /* <doc>
  * fptr server_func_handler(unsigned int msgType)
  * This function takes the msg type as input
@@ -45,7 +48,7 @@ fptr server_func_handler(unsigned int msgType)
     case moderator_notify_rsp:
         func_name = handle_moderator_notify_response;
         break;
-    case TASK_RESPONSE:
+    case task_response:
         func_name = handle_moderator_task_response;
         break;
     default:
@@ -303,19 +306,85 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
 
   /* fetch the group node pointer from fsm_data */
   mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
-
+  
   pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
-  /*Search client node of Moderator*/
-  unsigned int clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
-  RBT_tree *tree = (RBT_tree*) server_info->client_RBT_head;
+  group_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
+  //PRINT("num: %d name:%s", group_node->heartbeat_remaining, group_node->group_name);
+  echo_req_t *echo_req = &pdu->msg.idv.echo_req;
+  if(echo_req->num_clients)
+  {
+      uint8_t iter;
+      for(iter = 0; iter < echo_req->num_clients; iter++)
+      {
+          char ipaddr[INET6_ADDRSTRLEN];
+          struct sockaddr_in cl_addr;
+          cl_addr.sin_addr.s_addr = echo_req->client_ids[iter]; 
+          inet_ntop(AF_INET, 
+                  get_in_addr((struct sockaddr *)&cl_addr), 
+                  ipaddr, INET6_ADDRSTRLEN);
+          PRINT("[UNREACHABLE_ALERT: GRP - %s] Client (%s) is unreachable. ", group_node->group_name, ipaddr);
+      }
+  }
+  else
+  {
+      PRINT("[INFO] All clients are up and executing task.");
+  }
+}
 
-  if (clientID > 0) {
-      /*Mark client as Busy in LL and RBTree*/
-      RBT_node *rbNode = RBFindNodeByID(tree, clientID);
+void handle_timeout_real(bool init, int signal, siginfo_t *si,
+                         server_information_t **server_info)
+{
+    static server_information_t **server_info_local;
+    mcast_group_node_t *grp_node = NULL;
+    
+    if(init)
+    {
+        /* Context restoration is possible in very limited context with signals. In order
+         * to step around this problem we are calling this routine in two stages. In first
+         * leg (init), we push/preserve address of DS that serves as lifeline throughout life
+         * of application. In subsequent timer hits, where this info will be unavailable,
+         * we use context stored at init time to perform the task. */
+        
+        server_info_local = server_info;
+        return;
+    }
+    else
+    {
+        //traverse the list to find which group timer expired
+        get_group_node_by_timerid(server_info_local, 
+                                  si->si_value.sival_ptr, 
+                                  &grp_node);
+        
+        if(signal == MOD_SEL_TIMEOUT)
+        {
+            //call handler logic here
+            timer_delete(grp_node->timer_id);
+            moderator_selection(*server_info_local, grp_node);
+        }
+        else if(signal == MOD_RSP_TIMEOUT)
+        {
+            //decrement counter and check if moderator has missed n successive heartbeat
+            if(grp_node->heartbeat_remaining-- == 0)
+            {
+                char ipaddr[INET6_ADDRSTRLEN];
+                inet_ntop(AF_INET, 
+                          get_in_addr(&(grp_node->moderator_client->client_addr)), 
+                          ipaddr, INET6_ADDRSTRLEN);
+                PRINT("[UNREACHABLE_ALERT: GRP - %s] Moderator (%s) is unreachable. ", grp_node->group_name, ipaddr);
+                timer_delete(grp_node->timer_id);
+            }
+            //PRINT("***came here for decrementing: %d***", grp_node->heartbeat_remaining);
+        }
+    }
+    
+}
 
-       ///////UPDATE THE DS here
-   }
+void handle_timeout(int signal, siginfo_t *si, void *uc)
+{
+    if(si == NULL)
+        PRINT("***yikes!***");
+    handle_timeout_real(false, signal, si, NULL);
 }
 
 /* <doc>
@@ -334,6 +403,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     comm_struct_t *rsp = &(rsp_pdu.msg);
     char ipaddr[INET6_ADDRSTRLEN];
     server_information_t *server_info = NULL;
+    mcast_group_node_t *group_node = NULL;
     fsm_data_t fsm_msg;
     echo_req_t echo_req = req->idv.echo_req;
 
@@ -346,6 +416,8 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
 
+    get_group_node_by_name(&server_info, echo_req.group_name, &group_node);
+    
     /*filling echo rsp pdu*/
     echo_response->status    = 11;
     echo_response->group_name = echo_req.group_name;
@@ -356,7 +428,6 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
 
     /*Check the fsm of group node and act accordingly.*/
-    mcast_group_node_t *group_node = NULL;
     get_group_node_by_name(&server_info, echo_req.group_name, &group_node);
 
     fsm_msg.fsm_state = group_node->fsm_state;
@@ -405,40 +476,41 @@ unsigned int get_task_count(const char* filename,unsigned int** task_set)
 void mcast_start_task_distribution(server_information_t *server_info,
                                    void *fsm_msg)
 {
-  char ipaddr[INET6_ADDRSTRLEN];
-  int count = 0;
-  comm_struct_t req;
-  fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
-  pdu_t req_pdu;
-  unsigned int* task_set,task_count;
+    char ipaddr[INET6_ADDRSTRLEN];
+    int count = 0;
+    comm_struct_t req;
+    fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+    pdu_t req_pdu;
+    unsigned int* task_set,task_count;
 
-  /* fetch the group node pointer from fsm_data */
-  mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
+    /* fetch the group node pointer from fsm_data */
+    mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
 
-  /* Changing the fsm state as task has been started */
-  group_node->fsm_state = GROUP_TASK_IN_PROGRESS;
+    /* Changing the fsm state as task has been started */
+    group_node->fsm_state = GROUP_TASK_IN_PROGRESS;
 
-  pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+    pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
-  /* Get the task set for prime numbers */
-  task_count = get_task_count("src/task_set.txt", &task_set);
-  
-  req.id = perform_task_req;
+    /* Get the task set for prime numbers */
+    task_count = get_task_count("src/task_set.txt", &task_set);
 
-  req.idv.perform_task_req.group_name= malloc(sizeof(char)*strlen(group_node->group_name));
-  strcpy(req.idv.perform_task_req.group_name, group_node->group_name);
-  req.idv.perform_task_req.task_id = server_info->task_id;
-  (server_info->task_id)++;  
-  /* Fetch the client ID's and copy the task set */
-  if (pdu->msg.idv.moderator_notify_rsp.client_id_count)
-  {
-      req.idv.perform_task_req.client_id_count = pdu->msg.idv.moderator_notify_rsp.client_id_count;
-      req.idv.perform_task_req.client_ids = (unsigned int *) malloc(sizeof(unsigned int) * pdu->msg.idv.moderator_notify_rsp.client_id_count);
+    req.idv.perform_task_req.group_name= malloc(sizeof(char)*strlen(group_node->group_name));
+    strcpy(req.idv.perform_task_req.group_name, group_node->group_name);
+    req.idv.perform_task_req.task_id = server_info->task_id;
+    (server_info->task_id)++;  
+    
+    req.id = perform_task_req;
+
+    /* Fetch the client ID's and copy the task set */
+    if (pdu->msg.idv.moderator_notify_rsp.client_id_count)
+    {
+        req.idv.perform_task_req.client_id_count = pdu->msg.idv.moderator_notify_rsp.client_id_count;
+        req.idv.perform_task_req.client_ids = (unsigned int *) malloc(sizeof(unsigned int) * pdu->msg.idv.moderator_notify_rsp.client_id_count);
     }
 
     for(count = 0; count < pdu->msg.idv.moderator_notify_rsp.client_id_count; count++)
     {
-      req.idv.perform_task_req.client_ids[count] = pdu->msg.idv.moderator_notify_rsp.client_ids[count];
+        req.idv.perform_task_req.client_ids[count] = pdu->msg.idv.moderator_notify_rsp.client_ids[count];
     }
 
     req.idv.perform_task_req.task_count = task_count;
@@ -446,7 +518,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
 
     for(count = 0; count < task_count; count++)
     {
-      req.idv.perform_task_req.task_set[count] = task_set[count];
+        req.idv.perform_task_req.task_set[count] = task_set[count];
     }
 
     req.idv.perform_task_req.task_type = group_node->task_type;
@@ -459,22 +531,22 @@ void mcast_start_task_distribution(server_information_t *server_info,
 }
 
 /* <doc>
- * void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer)
+ * void get_task_response_file_name(char * gname, uint8_t task_id, char * buffer)
  * This function returns the file name for result file
  *
  * </doc>
  */
-void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer){
+void get_task_response_file_name(char * gname, uint8_t task_id, char * buffer){
      time_t rawtime;
      struct tm * timeinfo;
      char buffer2[40];
  
      time ( &rawtime );
      timeinfo = localtime ( &rawtime );
-     sprintf(buffer,"task_result/Resp_%s_%d_", gname , *task_id);
+     sprintf(buffer,"task_result/Resp_%s_%d_", gname , task_id);
      strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
      strcat(buffer,buffer2);
-     PRINT("[INFO] The Response from %s for task %d is written in %s",gname, *task_id,  buffer);
+     PRINT("[INFO] The Response from %s for task %d is written in %s",gname, task_id,  buffer);
 }
 
 
@@ -514,13 +586,13 @@ write_task_response_file(task_rsp_t * task_rsp, char* fname){
 void mcast_handle_task_response(server_information_t *server_info,
                                    void *fsm_msg)
 {
-  char ipaddr[INET6_ADDRSTRLEN];
+  char ipaddr[INET6_ADDRSTRLEN], filename[80];
+  
   int count = 0;
   comm_struct_t req;
   fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
   pdu_t rsp_pdu;
   unsigned int* task_set,task_count;
-  char filename[80];
 
   /* fetch the group node pointer from fsm_data */
   mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
@@ -530,10 +602,18 @@ void mcast_handle_task_response(server_information_t *server_info,
 
   pdu_t *pdu = (pdu_t *) fsm_data->pdu;
   task_rsp_t *task_response= &(pdu->msg.idv.task_rsp);
+  
   /* Get the file name based on current time stamp */ 
-  get_task_response_file_name(group_node->group_name, &(task_response->task_id), filename); 
+  get_task_response_file_name(group_node->group_name, task_response->task_id, filename); 
+  
   /* Write the response  to file */  
   write_task_response_file(task_response, filename);
+     
+  /*Disarming the keepalive for this mod since task is complete.*/
+  timer_delete(group_node->timer_id);
+  
+  /*Resetting mod_client pointer to avoid havoc in moderator_selection*/
+  group_node->moderator_client = NULL;
 }
 
 /* <doc>
@@ -569,32 +649,33 @@ int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...)
 
     tree = (RBT_tree*) server_info->client_RBT_head;
 
-    if (clientID > 0) {
-         /*Lookup in RBTree for moderator*/
-         rbNode = RBFindNodeByID(tree, clientID);
+    if (clientID <= 0) return; 
+         
+    /*Lookup in RBTree for moderator*/
+    rbNode = RBFindNodeByID(tree, clientID);
 
-         if (rbNode) {
-             rb_cl_grp_node_t *rb_grp_node;
-             rb_info_t *rb_info_list = (rb_info_t*) rbNode->client_grp_list;
+    if (rbNode == NULL) return;
+    
+    rb_cl_grp_node_t *rb_grp_node;
+    rb_info_t *rb_info_list = (rb_info_t*) rbNode->client_grp_list;
 
-             /*Search for group node in group list of RBnode*/
-             if (search_rb_grp_node(&rb_info_list, moderator_task_rsp->group_name, &rb_grp_node)) {
-                  mcast_group_node_t *ll_grp_node = ((mcast_group_node_t *)rb_grp_node->grp_addr);
+    /*Search for group node in group list of RBnode*/
+    if (search_rb_grp_node(&rb_info_list, moderator_task_rsp->group_name, &rb_grp_node)) 
+    {
+        mcast_group_node_t *ll_grp_node = ((mcast_group_node_t *)rb_grp_node->grp_addr);
 
-                  /*Marking the client free again*/
-                  rbNode->av_status = RB_FREE;
-                  rbNode->is_moderator = FALSE;
-                  ll_grp_node->moderator_client->av_status = CLFREE;
-                  ll_grp_node->moderator_client = NULL;
+        /*Marking the client free again*/
+        rbNode->av_status = RB_FREE;
+        rbNode->is_moderator = FALSE;
+        ll_grp_node->moderator_client->av_status = CLFREE;
+        ll_grp_node->moderator_client = NULL;
 
-                  fsm_msg.fsm_state = ll_grp_node->fsm_state;
-                  fsm_msg.grp_node_ptr = (void *) ll_grp_node;
-                  fsm_msg.pdu = pdu;
+        fsm_msg.fsm_state = ll_grp_node->fsm_state;
+        fsm_msg.grp_node_ptr = (void *) ll_grp_node;
+        fsm_msg.pdu = pdu;
 
-                  /*Run the server fsm*/
-                  server_info->fsm(server_info, MOD_TASK_RSP_RCVD_EVENT, &fsm_msg);
-               }
-         }
+        /*Run the server fsm*/
+        server_info->fsm(server_info, MOD_TASK_RSP_RCVD_EVENT, &fsm_msg);
     }
 }
 
@@ -632,26 +713,60 @@ int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...)
 
     tree = (RBT_tree*) server_info->client_RBT_head;
 
-    if (clientID > 0) {
-         /*Lookup in RBTree for moderator*/
-         rbNode = RBFindNodeByID(tree, clientID);
+    if (clientID <= 0) return;
+    /*Lookup in RBTree for moderator*/
+    rbNode = RBFindNodeByID(tree, clientID);
 
-         if (rbNode) {
-             rb_cl_grp_node_t *rb_grp_node;
-             rb_info_t *rb_info_list = (rb_info_t*) rbNode->client_grp_list;
+    if (rbNode == NULL) return;
+    rb_cl_grp_node_t *rb_grp_node;
+    rb_info_t *rb_info_list = (rb_info_t*) rbNode->client_grp_list;
 
-             /*Search for group node in group list of RBnode*/
-             if (search_rb_grp_node(&rb_info_list, moderator_notify_rsp->group_name, &rb_grp_node)) {
-                  mcast_group_node_t *ll_grp_node = ((mcast_group_node_t *)rb_grp_node->grp_addr);
-                  fsm_msg.fsm_state = ll_grp_node->fsm_state;
-                  fsm_msg.grp_node_ptr = (void *) ll_grp_node;
-                  fsm_msg.pdu = pdu;
+    /*Search for group node in group list of RBnode*/
+    if (search_rb_grp_node(&rb_info_list, moderator_notify_rsp->group_name, &rb_grp_node)) 
+    {
+        mcast_group_node_t *ll_grp_node = ((mcast_group_node_t *)rb_grp_node->grp_addr);
+        fsm_msg.fsm_state = ll_grp_node->fsm_state;
+        fsm_msg.grp_node_ptr = (void *) ll_grp_node;
+        fsm_msg.pdu = pdu;
 
-                  /*Run the server fsm*/
-                  server_info->fsm(server_info, MOD_NOTIFY_RSP_RCVD_EVENT, &fsm_msg);
-               }
-         }
+        /*Run the server fsm*/
+        server_info->fsm(server_info, MOD_NOTIFY_RSP_RCVD_EVENT, &fsm_msg);
     }
+}
+
+bool activate_moderator_keepalive(server_information_t *server_info,
+                                  mcast_group_node_t *group_node, 
+                                  unsigned int clientID)
+{
+    RBT_tree *tree = (RBT_tree*) server_info->client_RBT_head;
+    RBT_node *rbNode = RBFindNodeByID(tree, clientID);;
+    mcast_client_node_t *client_node = NULL;
+
+    if(!rbNode)
+    {
+        //something seriously wrong. ID not registered with sever. Log fatal error.
+        return false;
+    }
+    
+    /*Mark RBT node as moderator and busy*/
+    rbNode->av_status = RB_BUSY;
+    rbNode->is_moderator = TRUE;
+
+    /*In group node LL, store pointer for moderator client node and also mark client in LL as busy.*/
+    if(search_client_in_group_node(group_node, clientID, &client_node))
+    {
+        group_node->moderator_client = client_node;
+        client_node->av_status = CLBUSY;
+
+        /* Disarm initial MOD_SEL_TIMEOUT oneshot timer and start recurring timer
+         * for moderator keepalive on this group */
+        timer_delete(group_node->timer_id);
+
+        /* Start recurring timeer for monitoring status of this moderator node.*/
+        start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, MOD_RSP_TIMEOUT);
+        return true;
+    }
+    return false;
 }
 
 /* <doc
@@ -664,54 +779,49 @@ int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...)
 void mcast_send_chk_alive_msg(server_information_t *server_info,
                               void *fsm_msg)
 {
-  char ipaddr[INET6_ADDRSTRLEN];
-  mcast_client_node_t *client_node = NULL;
-  fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+    char ipaddr[INET6_ADDRSTRLEN];
+    fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
 
-  /* fetch the group node pointer from fsm_data */
-  mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
+    /* fetch the group node pointer from fsm_data */
+    mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
 
-  /* Changing the fsm state as moderator has been selected */
-  group_node->fsm_state = MODERATOR_SELECTED;
+    pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
-  pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+    /*Marking client node as Moderator*/
+    unsigned int clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
-  /*Marking client node as Moderator*/
-  unsigned int clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
-  RBT_tree *tree = (RBT_tree*) server_info->client_RBT_head;
+    if (clientID <= 0){
+        //Peer addr 0 in PDU. Log error.
+        return;
+    }
+    if(/*NOT*/ !activate_moderator_keepalive(server_info, group_node, clientID))
+        return;
 
-  if (clientID > 0) {
-      /*Mark client as Busy in LL and RBTree*/
-      RBT_node *rbNode = RBFindNodeByID(tree, clientID);
-      /*Mark RBT node as moderator and busy*/
-      rbNode->av_status = RB_BUSY;
-      rbNode->is_moderator = TRUE;
-      /*In group node LL, store pointer for moderator client node and also mark client in LL as busy.*/
-      search_client_in_group_node(group_node, clientID, &client_node);
-      group_node->moderator_client = client_node;
-      client_node->av_status = CLBUSY;
+    /* Changing the fsm state as moderator has been selected */
+    group_node->fsm_state = MODERATOR_SELECTED;
+    group_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
+    
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("-------------[NOTIFICATION] Client %s has been selected as MODERATOR for group %s  ---------------", ipaddr, group_node->group_name);
 
-      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-      PRINT("-------------[NOTIFICATION] Client %s has been selected as MODERATOR for group %s  ---------------", ipaddr, group_node->group_name);
-  }
+    /*Create the moderator notification request and inform the multicast group about the Group Moderator*/
+    pdu_t notify_pdu;
+    comm_struct_t *req = &(notify_pdu.msg);
+    moderator_notify_req_t *mod_notify_req = &(req->idv.moderator_notify_req);
 
-  /*Create the moderator notification request and inform the multicast group about the Group Moderator*/
-  pdu_t notify_pdu;
-  comm_struct_t *req = &(notify_pdu.msg);
-  moderator_notify_req_t *mod_notify_req = &(req->idv.moderator_notify_req);
+    struct sockaddr_in *addr_in = (struct sockaddr_in *) &pdu->peer_addr;
 
-  struct sockaddr_in *addr_in = (struct sockaddr_in *) &pdu->peer_addr;
+    req->id = moderator_notify_req;
+    mod_notify_req->moderator_id = clientID;
+    mod_notify_req->moderator_port = addr_in->sin_port;
+    mod_notify_req->group_name = group_node->group_name;
+    mod_notify_req->num_of_clients_in_grp = group_node->number_of_clients;
 
-  req->id = moderator_notify_req;
-  mod_notify_req->moderator_id = clientID;
-  mod_notify_req->moderator_port = addr_in->sin_port;
-  mod_notify_req->group_name = group_node->group_name;
-  mod_notify_req->num_of_clients_in_grp = group_node->number_of_clients;
+    /*Send to multicast group*/
+    write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &notify_pdu);
 
-  /*Send to multicast group*/
-  write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &notify_pdu);
-
-  PRINT("[Moderator_Notify_Req: GRP - %s] Moderator Notify Request sent to group %s.", mod_notify_req->group_name , mod_notify_req->group_name);
+    PRINT("[Moderator_Notify_Req: GRP - %s] Moderator Notify Request sent to group %s.", mod_notify_req->group_name , mod_notify_req->group_name);
+    //  group_node->fsm_state = MOD_NOTIFICATION_PENDING;
 }
 
 
@@ -723,10 +833,11 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
  * </doc>
  */
 static
-int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
+int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
+{
     char ipaddr[INET6_ADDRSTRLEN];
     server_information_t *server_info = NULL;
-    comm_struct_t *rsp = &(pdu->msg);
+    comm_struct_t *rsp = &(pdu->msg); 
     echo_rsp_t echo_rsp = rsp->idv.echo_resp;
     fsm_data_t fsm_msg;
 
@@ -752,65 +863,52 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...){
 
 /* <doc>
  * static
- * int send_echo_request(unsigned int sockfd, struct sockaddr *addr, char *grp_name)
- * Sends echo request on mentioned sockfd to the addr passed.
- * grp_name is filled in echo req pdu.
- *
- * </doc>
- */
-static
-int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
-{
-  pdu_t pdu;
-  char ipaddr[INET6_ADDRSTRLEN];
-  comm_struct_t *req = &(pdu.msg);
-  echo_req_t *echo_request = &(req->idv.echo_req);
-
-  req->id = echo_req;
-
-  /*Create the echo request pdu*/
-  echo_request->group_name = grp_name;
-  write_record(sockfd, addr, &pdu);
-
-  inet_ntop(AF_INET, get_in_addr(addr), ipaddr, INET6_ADDRSTRLEN);
-  PRINT("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
-
-  return 0;
-}
-
-/* <doc>
- * static
- * void moderator_selection(server_information_t *server_info, mcast_group_node_t *group_node, char *grp_name)
+ * void moderator_selection(server_information_t *server_info, mcast_group_node_t *group_node)
  * Functionality of this is to choose moderator amongst the client nodes of a multicast group.
  * It takes parameter as multicast group node and group name.
  *
  * </doc>
  */
 static
-void moderator_selection(server_information_t *server_info, mcast_group_node_t *group_node, char *grp_name)
+void moderator_selection(server_information_t *server_info, mcast_group_node_t *group_node)
 {
-   mcast_client_node_t *client_node = NULL;
+    size_t iter;
+    mcast_client_node_t *client_node = NULL;
 
-   /*Group is in moderator selection pending state*/
-   group_node->fsm_state = MODERATOR_SELECTION_PENDING;
+    /*Group is in moderator selection pending state*/
+    group_node->fsm_state = MODERATOR_SELECTION_PENDING;
 
-   client_node = SN_LIST_MEMBER_HEAD(&((group_node)->client_info->client_node),
-                                     mcast_client_node_t,
-                                     list_element);
+    if(group_node->moderator_client == NULL)
+    {
+        /* This check/design mandates that when task has been completed and moderator 
+         * is no longer required, the pointer should appropriately reinitialized to NULL.*/
+        client_node = SN_LIST_MEMBER_HEAD(&((group_node)->client_info->client_node),
+                                          mcast_client_node_t,
+                                          list_element);
+    }
+    else
+    {
+      client_node = group_node->moderator_client;
+    }
 
-   /* Send the echo req to clients of group for moderator selection. The one who
-    * who replies first will be selected as moderator.*/
-   while (client_node)
-   {
+    /* Send the echo req to some n clients of group for moderator selection. The one who
+     * who replies first will be selected as moderator.*/
+    for(iter = 0; iter < MAX_CLIENTS_TRIED_PER_ATTEMPT && client_node; iter++)
+// while(client_node)
+    {
       /*Send echo to only free clients for moderator selection*/
-      if (client_node->av_status = CLFREE) {
-        send_echo_request(server_info->server_fd, &client_node->client_addr, grp_name);
-      }
+        if (client_node->av_status == CLFREE)
+            send_echo_request(server_info->server_fd, &client_node->client_addr, group_node->group_name);
 
-      client_node =     SN_LIST_MEMBER_NEXT(client_node,
-                                            mcast_client_node_t,
-                                            list_element);
-   }
+        client_node =     SN_LIST_MEMBER_NEXT(client_node,
+                                              mcast_client_node_t,
+                                              list_element);
+    }
+    group_node->moderator_client = client_node;
+
+    /*Start a one time timer and wait for first client to respond. If no
+     *response within timeout frame, retry. */
+    start_oneshot_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, MOD_SEL_TIMEOUT);
 }
 
 /* <doc>
@@ -824,36 +922,40 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
 static
 void assign_task(server_information_t *server_info, char *grp_name, int task_type)
 {
-   mcast_group_node_t *group_node = NULL;
+    mcast_group_node_t *group_node = NULL;
 
-   /*fetch the group information whose clients are supposed to work on task*/
-   get_group_node_by_name(&server_info, grp_name, &group_node); 
+    /*fetch the group information whose clients are supposed to work on task*/
+    get_group_node_by_name(&server_info, grp_name, &group_node); 
 
    /*If group node has moderator, that means group is currently busy working on a task*/
-   if (group_node->moderator_client) {
+   if (group_node->moderator_client) 
+   {
       PRINT("Group %s is currently Busy.", grp_name);
       return;
-   } else if (group_node->client_info == NULL) {
+   } 
+   else if (group_node->client_info == NULL) 
+   {
       PRINT("No clients present in the group.");
       return;
    }
    
    group_node->task_type = task_type;
    /*Select the moderator for the multicast group*/
-   moderator_selection(server_info, group_node, grp_name);
+   moderator_selection(server_info, group_node);
 }
 
 
 /* RBT comparision function */
-int IntComp(unsigned a,unsigned int b) {
-  if( a > b) return(1);
-  if( a < b) return(-1);
-  return(0);
+int IntComp(unsigned a,unsigned int b) 
+{
+    if( a > b) return(1);
+    if( a < b) return(-1);
+    return(0);
 }
 
 /* RBT Printing function */
 void IntPrint(unsigned int a) {
-  PRINT("number - %u", a);
+    PRINT("number - %u", a);
 }
 
 /* <doc>
@@ -1030,7 +1132,7 @@ int main(int argc, char * argv[])
     {
         printf("Usage: %s <server_IP> <server_port>\n", argv[0]);
         struct sockaddr myIp;
-        argv[1] = &ip_addr;
+        argv[1] = ip_addr;
         get_my_ip("eth0", &myIp);
         inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(myIp)), argv[1], INET6_ADDRSTRLEN);
         argv[2] = "3490";
@@ -1092,6 +1194,25 @@ int main(int argc, char * argv[])
 
     server_info->server_fd = sfd;
 
+    //Initialize timeout handler
+    handle_timeout_real(true, 0, NULL, &server_info);
+
+    struct sigaction sa;
+    
+    PRINT("Establishing handler for moderator selection timeout(signal: %d)\n", MOD_SEL_TIMEOUT);
+    sa.sa_flags = SA_SIGINFO;
+    sa.sa_sigaction = handle_timeout;
+    sigemptyset(&sa.sa_mask);
+    if (sigaction(MOD_SEL_TIMEOUT, &sa, NULL) == -1)
+        errExit("sigaction");
+    
+    PRINT("Establishing handler for moderator resp timeout(signal: %d)\n", MOD_RSP_TIMEOUT);
+    sa.sa_flags = SA_SIGINFO;
+    sa.sa_sigaction = handle_timeout;
+    sigemptyset(&sa.sa_mask);
+    if (sigaction(MOD_RSP_TIMEOUT, &sa, NULL) == -1)
+        errExit("sigaction");
+    
     events = calloc(MAXEVENTS, sizeof(event));
 
     while (1) 

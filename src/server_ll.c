@@ -349,6 +349,39 @@ void  get_group_node_by_name(server_information_t **server_info, char *exp_grp_n
 
 }
 
+/* <doc>
+ * mcast_group_node_t* get_group_node_by_timerid(server_information_t **server_info, char *exp_grp_name)
+ * Traverses server_info list and returns the group node pointer which is required.
+ * timer_ptr - is address of the timer we are looking for.
+ *
+ * </doc>
+ */
+void  get_group_node_by_timerid(server_information_t **server_info, timer_t *timer_ptr,
+                             mcast_group_node_t **grp_node)
+{
+   mcast_group_node_t *group_node;
+   char groupIP[INET_ADDRSTRLEN];
+
+   group_node =     SN_LIST_MEMBER_HEAD(&((*server_info)->server_list->group_node),
+                                        mcast_group_node_t,
+                                        list_element);
+
+   while (group_node)
+   {
+     if (timer_ptr == &(group_node->timer_id))
+     {
+        /* Return on finding the node */
+        *grp_node = group_node;
+        return;
+     }
+
+     group_node =     SN_LIST_MEMBER_NEXT(group_node,
+                                        mcast_group_node_t,
+                                        list_element);
+   }
+
+}
+
 /* Invoked internally by display_mcast_client_node */
 void display_mcast_client_node(mcast_group_node_t **group_node)
 {
@@ -396,7 +429,7 @@ void display_mcast_group_node(server_information_t **server_info, display_show_t
 
    while (group_node)
    {
-     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(group_node->grp_mcast_addr)), groupIP, INET6_ADDRSTRLEN);
+     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)(&group_node->grp_mcast_addr)), groupIP, INET6_ADDRSTRLEN);
      sprintf(buf,
      "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d",
      group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);

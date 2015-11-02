@@ -32,7 +32,7 @@ typedef enum struct_id{
     moderator_notify_req = 40,
     moderator_notify_rsp = 41,
     perform_task_req = 42,
-    TASK_RESPONSE
+    task_response = 43
 }e_struct_id_t; 
 
 typedef struct string{
@@ -54,6 +54,8 @@ typedef struct local_sockaddr_in{
 
 typedef struct echo_req{
     char* group_name;
+    unsigned int num_clients;
+    unsigned int* client_ids; 
 } echo_req_t;
 
 typedef struct echo_response{
@@ -158,12 +160,10 @@ typedef struct pdu{
   comm_struct_t msg;
 }pdu_t;
 
-void print_structs(comm_struct_t* m);
-void populate_my_struct(my_struct_t*, int);
-bool process_my_struct(my_struct_t*, XDR*);
 int rdata ();
 int wdata ();
+bool process_comm_struct(XDR* xdrs, void* m, ...);
+void print_structs(comm_struct_t* m);
+void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsigned int client_id );
 
-
-    
 #endif

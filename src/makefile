@@ -37,17 +37,17 @@ deps:
 
 $(SERVER): logger deps
 	$(CPP) -o../$(SERVER) ${OBJ}/logg.so ${COMM_OBJ} ${DEPS_O} ${S_DEPS_O} \
-	${LC_STR} -lpthread
+	${LC_STR} -lrt
 
 $(CLIENT): logger deps
 	$(CPP) -o../$(CLIENT) ${OBJ}/logg.so ${COMM_OBJ} ${DEPS_O} ${C_DEPS_O} \
-	${LC_STR} -lpthread
+	${LC_STR} -lpthread -lrt
 
 $(SERVER_STR): deps
-	$(CPP) -o../$(SERVER) ${COMM_OBJ} ${DEPS_O} ${S_DEPS_O}
+	$(CPP) -o../$(SERVER) ${COMM_OBJ} ${DEPS_O} ${S_DEPS_O} -lrt
 
 $(CLIENT_STR): deps
-	$(CPP) -o../$(CLIENT) ${COMM_OBJ} ${DEPS_O} ${C_DEPS_O} -lpthread
+	$(CPP) -o../$(CLIENT) ${COMM_OBJ} ${DEPS_O} ${C_DEPS_O} -lpthread -lrt
 
 .PHONY: dummy_rule
 

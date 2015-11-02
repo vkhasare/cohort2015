@@ -1,13 +1,6 @@
 #include "comm_primitives.h"
 #include "print.h"
 #define MAXMSGSIZE 100000
-#if 0
-bool process_client_req();
-bool process_client_init();
-bool process_server_task();
-bool process_client_answer();
-bool process_client_leave();
-#endif
 
 const unsigned int max_groups = 1000;
 const unsigned int max_client_in_group = 255;
@@ -16,9 +9,6 @@ const unsigned int max_data_size = 10000000;
 const unsigned int max_gname_len = 25; //includes nul termination
 const unsigned int echo_req_len = 256; //includes nul termination
 const unsigned int echo_resp_len = 21; //includes nul termination
-
-bool process_comm_struct(XDR* xdrs, comm_struct_t* m);
-bool xdr_process_uarray(XDR* xdrs, uarray_t* m);
 
 int rdata (char* fp, char* buf, int n)
 {
@@ -71,17 +61,6 @@ void print_join_rsp(join_rsp_t* m){
         PRINT("\n(%d): %d", iter, m->group_ips[iter]);
     }
     return;
-}
-
-void populate_my_struct(my_struct_t* m, int some_rand){
-    m->a = 10 * some_rand;
-    m->b = 13.9 * some_rand;
-    m->d = 3.14156 * some_rand;
-    m->c_count = 4; 
-    m->c = (int *) malloc (sizeof(int)*m->c_count);
-    m->c[0]=1;
-    m->c[1]=10;
-    m->c[2]=100;
 }
 
 void populate_join_req(comm_struct_t* m, char** grnames, int num_groups){
@@ -138,17 +117,6 @@ m->idv.leave_rsp.group_ids[(x)].str = MALLOC_STR;
         strcpy(SUBS_TXT(iter),grnames[iter]);
 #undef SUBS_TXT
     }
-}
-
-void populate_client_init(comm_struct_t* m){
-    m->id = join_response;
-    m->idv.join_rsp.num_groups = 4; /*
-    m->idv.cl_init.group_ips = (int *) malloc (sizeof(int) *
-                                               m->idv.cl_init.num_groups);
-    m->idv.cl_init.group_ips[0]=7945801;
-    m->idv.cl_init.group_ips[1]=1825090;
-    m->idv.cl_init.group_ips[2]=1583060;
-    m->idv.cl_init.group_ips[3]=1342003;*/
 }
 
 void print_structs(comm_struct_t* m){
@@ -235,9 +203,7 @@ void write_record(int sockfd, struct sockaddr_in *destAddr, pdu_t *pdu){
     /*pdu received from App. Decapsulating it.*/
     m = &(pdu->msg);
 
-    msglen = xdr_sizeof(process_comm_struct,m);
-
-    //memset(msgbuf, 0, sizeof(msgbuf));
+    msglen = xdr_sizeof((xdrproc_t)process_comm_struct, (void *) m);
 
     /* msglen will ensure only pdu of req. length goes on wire, not whole MAXMSGSIZE btyes.*/
     xdrmem_create(&xdrs, msgbuf, (unsigned int)msglen, XDR_ENCODE);
@@ -248,38 +214,10 @@ void write_record(int sockfd, struct sockaddr_in *destAddr, pdu_t *pdu){
         PRINT("Error in sending msg.");
     }
 
-    /*
-    //Only for debugging
-    int size;
-    size = xdr_getpos(&xdrs);
-    PRINT("Size of encoded data: %i\n", size); 
-    */
     xdr_destroy(&xdrs);
     sendto(sockfd, msgbuf, msglen, MSG_DONTWAIT,
                      (struct sockaddr *) destAddr, sizeof(*destAddr));
 
-}
-
-bool read_my_record(int sockfd){
-    FILE* fp = fdopen(sockfd, "rb");
-    my_struct_t m ;
-    XDR xdrs ;
-    int res;
-
-    m.c = NULL;
-    xdrs.x_op = XDR_DECODE;
-
-    xdrrec_create(&xdrs,0,0,(char*)fp,rdata,wdata);
-    xdrrec_skiprecord(&xdrs);
-
-    do{
-        //count = process_comm_struct(&m , &xdrs);
-        //postprocess_struct_stream(&m , &xdrs, count);
-        res = process_my_struct(&m , &xdrs);
-        postprocess_my_struct_stream(&m , &xdrs, res);
-    }while(!xdrrec_eof(&xdrs));
-    
-    xdr_destroy(&xdrs);
 }
 
 /* <doc>
@@ -347,18 +285,21 @@ bool process_moderator_notify_rsp(XDR* xdrs, moderator_notify_rsp_t* m){
                              (sizeof(unsigned int)),
                              (xdrproc_t )xdr_u_int);
 
-/*    int uarray_res2 = xdr_array(xdrs, (unsigned int**)&(m->client_ids), &(m->client_id_count), max_client_in_group,
-                      sizeof(int),(xdrproc_t )xdr_int);
-*/
     return (uint_res1 && uint_res2 && uarray_res2 && str_res);
 }
 
 bool xdr_echo_req(XDR* xdrs, echo_req_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->group_name = NULL;
+        m->client_ids = NULL;
     }
 
-    return (xdr_string(xdrs, &(m->group_name), max_gname_len));
+    int str_res    = xdr_string(xdrs, &(m->group_name), max_gname_len);
+    int uint_res   = xdr_u_int(xdrs, &(m->num_clients));
+    int uarray_res = xdr_array(xdrs, (char **)&(m->client_ids), &(m->num_clients), max_client_in_group,
+                              (sizeof(unsigned int)),
+                              (xdrproc_t )xdr_u_int);
+    return str_res && uint_res && uarray_res;
 }
 
 bool xdr_echo_resp(XDR* xdrs, echo_rsp_t* m){
@@ -371,13 +312,6 @@ bool xdr_echo_resp(XDR* xdrs, echo_rsp_t* m){
     int str_res =  xdr_string(xdrs, &(m->group_name), max_gname_len);
 
     return uint_res && str_res;
-}
-
-bool xdr_process_uarray(XDR* xdrs, uarray_t* m){
-    if(xdrs->x_op == XDR_DECODE){
-        m->val = 0;
-    }
-    return xdr_u_int(xdrs, &(m->val));
 }
 
 bool xdr_gname_string(XDR* xdrs, string_t* m){
@@ -396,7 +330,6 @@ bool process_join_req(XDR* xdrs, join_req_t* m){
             xdr_array(xdrs, (char **)&(m->group_ids), &(m->num_groups), max_groups,
                              (sizeof(string_t)),
                              (xdrproc_t )xdr_gname_string));
-//          xdr_string(xdrs, &(m->group_ids), max_groups * max_gname_len));
 }
 
 bool process_leave_req(XDR* xdrs, leave_req_t* m){
@@ -430,7 +363,6 @@ bool process_leave_resp(XDR* xdrs, leave_rsp_t* m){
                                   (xdrproc_t )xdr_gname_string);
     int uint_cause = xdr_u_int(xdrs, &(m->cause));
     return uint_res && gid_res && uint_cause;
-//  return uint_res && c_res;
 }
 
 bool xdr_l_saddr_in(XDR* xdrs, l_saddr_in_t* m){
@@ -452,32 +384,17 @@ bool xdr_l_saddr_in(XDR* xdrs, l_saddr_in_t* m){
 }
 
 bool process_join_resp(XDR* xdrs, join_rsp_t* m){
-/* return (xdr_u_int(xdrs, &(m->num_groups)) &&
-           xdr_array(xdrs, (char**) &(m->group_ips), &(m->num_groups), max_groups,
-                     sizeof(char),(xdrproc_t )xdr_int));*/
     if(xdrs->x_op == XDR_DECODE){
         m->group_ips = NULL;
     }
     
-//  return (xdr_u_int(xdrs, &(m->num_groups)) &&
-//          xdr_array(xdrs, (char**) &(m->group_ips),
-//          &(m->num_groups), max_groups, sizeof(l_saddr_in_t),(xdrproc_t )xdr_l_saddr_in));
+/*  return (xdr_u_int(xdrs, &(m->num_groups)) &&
+            xdr_array(xdrs, (char**) &(m->group_ips),
+            &(m->num_groups), max_groups, sizeof(l_saddr_in_t),(xdrproc_t)xdr_l_saddr_in));*/
     int int_res = xdr_u_int(xdrs, &(m->num_groups));
     int arr_res = xdr_array(xdrs, (char**) &(m->group_ips),
             &(m->num_groups), max_groups, sizeof(l_saddr_in_t),(xdrproc_t )xdr_l_saddr_in);
     return int_res && arr_res;
-}
-
-bool process_server_task(my_struct_t* m, XDR* xdrs){
-    return false;
-}
-
-bool process_client_answer(my_struct_t* m, XDR* xdrs){
-    return false;
-}
-
-bool process_client_leave(my_struct_t* m, XDR* xdrs){
-    return false;
 }
 
 bool process_perform_task_req(XDR* xdrs, perform_task_req_t* m){
@@ -534,28 +451,27 @@ bool process_task_resp(XDR* xdrs, task_rsp_t* m){
     return string_res && task_id_res && typ_res  && num_client_res && client_id_res && arr_res;
 }
 
-bool process_comm_struct(XDR* xdrs, comm_struct_t* m){
+bool process_comm_struct(XDR* xdrs, void* msg, ...){
+    comm_struct_t* m = (comm_struct_t*) msg;
     struct xdr_discrim comm_discrim[] = {
-        {join_request,    (xdrproc_t)process_join_req},
-        {join_response,   (xdrproc_t)process_join_resp},
-//      {server_task, NULL},
-//      {client_answer, NULL},
-//      {client_leave, NULL},
-        {echo_req,      (xdrproc_t)xdr_echo_req},
-        {echo_response, (xdrproc_t)xdr_echo_resp},
-        {leave_request, (xdrproc_t)process_leave_req},
-        {leave_response, (xdrproc_t)process_leave_resp},
-        {moderator_notify_req, (xdrproc_t)process_moderator_notify_req},
-        {moderator_notify_rsp, (xdrproc_t)process_moderator_notify_rsp},
-        {perform_task_req, (xdrproc_t)process_perform_task_req},
-        {TASK_RESPONSE, (xdrproc_t)process_task_resp},
-        { __dontcare__, NULL }
+        {join_request,          (xdrproc_t)process_join_req},
+        {join_response,         (xdrproc_t)process_join_resp},
+        {echo_req,              (xdrproc_t)xdr_echo_req},
+        {echo_response,         (xdrproc_t)xdr_echo_resp},
+        {leave_request,         (xdrproc_t)process_leave_req},
+        {leave_response,        (xdrproc_t)process_leave_resp},
+        {moderator_notify_req,  (xdrproc_t)process_moderator_notify_req},
+        {moderator_notify_rsp,  (xdrproc_t)process_moderator_notify_rsp},
+        {perform_task_req,      (xdrproc_t)process_perform_task_req},
+        {task_response,         (xdrproc_t)process_task_resp},
+        { __dontcare__,         NULL }
     };
     int enum_res = xdr_enum(xdrs, (enum_t *)(&(m->id)));
     int union_res =  xdr_union(xdrs,(enum_t *)(&(m->id)), (char *)&m->idv, comm_discrim, NULL);
 
     return enum_res && union_res;
 }
+
 inline unsigned int get_size(rsp_type_t type){
 /*
   switch(type){
@@ -577,9 +493,10 @@ void update_task_rsp(comm_struct_t* m, rsp_type_t r_type, result_t *resp, unsign
     m->idv.task_rsp.client_ids[*num_clients] = client_id; 
     (*num_clients)++;
 }
+
 void populate_task_rsp(comm_struct_t* m, unsigned int task_id,char* group_name, rsp_type_t r_type, result_t *resp, unsigned int client_id ){
     memset(&(m->idv),0,sizeof(task_rsp_t));
-    m->id=TASK_RESPONSE;
+    m->id=task_response;
     m->idv.task_rsp.type = r_type;
     m->idv.task_rsp.task_id = task_id;
     m->idv.task_rsp.group_name = malloc(sizeof(char)*strlen(group_name));
@@ -589,11 +506,12 @@ void populate_task_rsp(comm_struct_t* m, unsigned int task_id,char* group_name, 
     m->idv.task_rsp.client_ids = (unsigned int *)malloc(sizeof(unsigned int *)); 
     update_task_rsp(m,r_type,resp, client_id);
 }
+
 void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsigned int client_id ){
     pdu_t *rsp_pdu= malloc(sizeof(pdu_t)); 
     comm_struct_t* m = &(rsp_pdu->msg);
     memset(&(m->idv),0,sizeof(task_rsp_t));
-    m->id=TASK_RESPONSE;
+    m->id=task_response;
     task_rsp_t * task_rsp = &(m->idv.task_rsp);
     task_rsp->type = resp->type;
     task_rsp->task_id = resp->task_id;

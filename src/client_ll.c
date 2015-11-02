@@ -1,6 +1,7 @@
-#include <stdbool.h>
 #include "client_DS.h"
 #include "print.h"
+
+extern int MAX_ALLOWED_KA_MISSES;
 
 /* <doc>
  * void get_client_from_moderator_pending_list(client_information_t *client_info, unsigned int clientID, mod_client_node_t **client_node)
@@ -42,7 +43,7 @@ void get_client_from_moderator_pending_list(client_information_t *client_info, u
 }
 
 /* <doc>
- * void display_moderator_pending_list(client_information_t **client_info, moderator_show_type_t show_type)
+ * void display_moderator_list(client_information_t **client_info, moderator_show_type_t show_type)
  * This is a MODERATOR function, for displaying the contents of pending and done client lists.
  * It takes argument as show_type which can be -
  * SHOW_MOD_PENDING_CLIENTS
@@ -50,7 +51,7 @@ void get_client_from_moderator_pending_list(client_information_t *client_info, u
  *
  * </doc>
  */
-void display_moderator_pending_list(client_information_t **client_info, moderator_show_type_t show_type)
+void display_moderator_list(client_information_t **client_info, moderator_show_type_t show_type)
 {
   mod_client_node_t *mod_node = NULL;
   char buf[100];
@@ -90,7 +91,7 @@ void display_moderator_pending_list(client_information_t **client_info, moderato
      sprintf(buf,
              "\n\t%s \t\t\t\t\t %d",
              clientIP,
-             mod_node->heartbeats_missed);
+             mod_node->heartbeat_remaining);
      SIMPLE_PRINT(buf);
 
      mod_node  =    SN_LIST_MEMBER_NEXT(mod_node,
@@ -101,12 +102,12 @@ void display_moderator_pending_list(client_information_t **client_info, moderato
 }
 
 /* <doc>
- * void deallocate_moderator_list(moderator_information_t **moderator_info)
- * Deallocates the moderator list.
+ * void deallocate_mod_done_list(moderator_information_t **moderator_info)
+ * Deallocates the done list of moderator.
  *
  * </doc>
  */
-void deallocate_moderator_list(client_information_t **client_info)
+void deallocate_mod_done_list(client_information_t **client_info)
 {
    mod_client_node_t *mod_node = NULL;
    moderator_information_t *mod_info = (*client_info)->moderator_info;
@@ -129,10 +130,53 @@ void deallocate_moderator_list(client_information_t **client_info)
    }
 
    /*deallocate the pending and done lists*/
+   free(mod_info->done_client_list);   
+}
+
+/* <doc>
+ * void deallocate_mod_pending_list(moderator_information_t **moderator_info)
+ * Deallocates the pending list of moderator.
+ *
+ * </doc>
+ */
+void deallocate_mod_pending_list(client_information_t **client_info)
+{
+   mod_client_node_t *mod_node = NULL;
+   moderator_information_t *mod_info = (*client_info)->moderator_info;
+
+   /*Deallocate all nodes from done list first*/
+   mod_node =     SN_LIST_MEMBER_HEAD(&(mod_info->pending_client_list->client_grp_node),
+                                         mod_client_node_t,
+                                         list_element);
+
+   while (mod_node)
+   {
+      SN_LIST_MEMBER_REMOVE(&(mod_info->pending_client_list->client_grp_node),
+                            mod_node,
+                            list_element);
+      free(mod_node);
+
+      mod_node =     SN_LIST_MEMBER_HEAD(&(mod_info->pending_client_list->client_grp_node),
+                                         mod_client_node_t,
+                                         list_element);
+   }
+
+   /*deallocate the pending and done lists*/
    free(mod_info->pending_client_list);
-   free(mod_info->done_client_list);
-//   (*moderator_info)->pending_client_list = NULL;
-//   (*moderator_info)->done_client_list = NULL;
+}
+
+/* <doc>
+ * void deallocate_moderator_list(moderator_information_t **moderator_info)
+ * Deallocates the moderator list.
+ *
+ * </doc>
+ */
+void deallocate_moderator_list(client_information_t **client_info)
+{
+   mod_client_node_t *mod_node = NULL;
+   moderator_information_t *mod_info = (*client_info)->moderator_info;
+
+   deallocate_mod_done_list(client_info);
    /*free the moderator_info*/
    free(mod_info);
    (*client_info)->moderator_info = NULL;
@@ -165,14 +209,14 @@ void move_moderator_node_pending_to_done_list(client_information_t *client_info,
  *
  * </doc>
  */
-mod_client_node_t *allocate_clnt_moderator_node(moderator_information_t **moderator_info)
+mod_client_node_t* allocate_clnt_moderator_node(moderator_information_t **moderator_info)
 {
    mod_client_node_t *mod_node = NULL;
 
    mod_node = (mod_client_node_t *) malloc(sizeof(mod_client_node_t));
 
    mod_node->peer_client_id = 0;
-   mod_node->heartbeats_missed = 0;
+   mod_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
 
    SN_LIST_MEMBER_INSERT_HEAD(&((*moderator_info)->pending_client_list->client_grp_node),
                               mod_node,

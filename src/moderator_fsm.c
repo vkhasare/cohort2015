@@ -1,4 +1,3 @@
-#include <stdbool.h>
 #include "client_DS.h"
 #include "print.h"
 

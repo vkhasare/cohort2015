@@ -1,6 +1,10 @@
-#include <stdbool.h>
 #include "header.h"
+//#include "common.h"
 #include "sn_ll.h"
+
+#define MOD_SEL_TIMEOUT SIGUSR1
+#define MOD_RSP_TIMEOUT SIGUSR2
+#define DEFAULT_TIMEOUT 3
 
 /*Enum for cli 'show groups' and 'show group info G1' */
 typedef enum{
@@ -37,6 +41,12 @@ typedef enum {
  CLDEAD  = 58
 } svr_client_state;
 
+/*Enum for operations on client list*/
+typedef enum{
+    DISPLAY = 1,
+    UPDATE_NODE = 2
+}ops;
+
 typedef struct {
   sn_list_t client_node;
 } mcast_client_t;
@@ -61,21 +71,23 @@ typedef struct {
   unsigned int group_port;                  /*Group Multicast Port*/
   mcast_client_t *client_info;              /*List of clients, joined to multicast group*/
   mcast_client_node_t *moderator_client;    /*Points to client which is moderator*/
-  server_state_t fsm_state;                 /*FSM state of group, to be used by server FSM*/
+  timer_t timer_id;                         /*Timer for monitoring moderator when task is in progress*/
+  uint8_t heartbeat_remaining;              /*Non-zero count represents active moderator */
+  server_state_t fsm_state;                 /*Current state of group in FSM, to be used by server*/
   sn_list_element_t list_element;
   int task_type;                            /* A group can perform only one task at a time. Maintaining the task type */
 } mcast_group_node_t;
 
 /* Declaration of Server Info - Main Data structure on Server*/
-struct server_information_t;
+typedef struct server_information_t server_information_t;
 
-typedef struct {
+struct server_information_t{
   unsigned int server_fd;               /*Server FD*/
   unsigned int task_id;                 /*Next task Id*/
   mcast_group_t *server_list;           /*Server List having group nodes for all the multicast groups.*/
   void *client_RBT_head;                /*Pointer to RBTree head, which maintains global list of all clients.*/
-  bool (* fsm)(struct server_information_t *server_info, server_event_t event, void *fsm_msg);    /*Server FSM function pointer*/
-} server_information_t;
+  bool (* fsm)(server_information_t* server_info, server_event_t event, void* fsm_msg);    /*Server FSM function pointer*/
+};
 
 /* RBT - This is client group node, which is part of client list of RBT tree node.
  * This node maintains pointer to LL group node.*/
@@ -93,7 +105,13 @@ typedef struct {
   rb_client_t *cl_list;
 } rb_info_t;
 
-sn_list_element_t list_element;
+/*fsm data structure*/
+typedef struct
+{
+  server_event_t fsm_state;
+  mcast_group_node_t *grp_node_ptr;
+  void *pdu;
+}fsm_data_t;
 
 /*Declarations*/
 rb_cl_grp_node_t *allocate_rb_cl_node(rb_info_t **rb_info);
@@ -112,13 +130,5 @@ void mcast_handle_task_response(server_information_t *server_info,
                                    void *fsm_msg);
 void server_echo_req_task_in_progress_state(server_information_t *server_info,
                                             void *fsm_msg);
-
-/*fsm data structure*/
-typedef struct
-{
-  server_event_t fsm_state;
-  mcast_group_node_t *grp_node_ptr;
-  void *pdu;
-}fsm_data_t;
 
 

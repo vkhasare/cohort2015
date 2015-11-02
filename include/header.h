@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -21,4 +22,4 @@
 #ifndef TRUE
 #define TRUE   (!FALSE)
 #endif
-
+char* get_in_addr(struct sockaddr *sa);
