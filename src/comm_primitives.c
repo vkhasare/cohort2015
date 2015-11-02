@@ -496,7 +496,8 @@ bool process_perform_task_req(XDR* xdrs, perform_task_req_t* m){
             xdr_u_int(xdrs, &(m->task_count)) &&
             xdr_array(xdrs, (char**)&(m->task_set), &(m->task_count), max_task_count,
                              (sizeof(unsigned int)),
-                             (xdrproc_t )xdr_u_int));
+                             (xdrproc_t )xdr_u_int) &&
+            xdr_int(xdrs, &(m->task_type)));
 }
 
 bool xdr_result_t(XDR* xdrs, result_t* m){

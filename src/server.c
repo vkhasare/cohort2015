@@ -14,7 +14,7 @@ static int handle_join_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...);
-static void assign_task(server_information_t *, char *);
+static void assign_task(server_information_t *, char *, int);
 static void moderator_selection(server_information_t *, mcast_group_node_t *, char *);
 /* <doc>
  * fptr server_func_handler(unsigned int msgType)
@@ -449,6 +449,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
       req.idv.perform_task_req.task_set[count] = task_set[count];
     }
 
+    req.idv.perform_task_req.task_type = group_node->task_type;
     req_pdu.msg = req;
 
     /* Send multicast msg to group to perform task */
@@ -803,14 +804,14 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
 
 /* <doc>
  * static
- * void assign_task(server_information_t *server_info, char *grp_name)
+ * void assign_task(server_information_t *server_info, char *grp_name, int task_type)
  * This function takes parameter as multicast group name and type
  * of task to be done. It then multicasts the task request.
  *
  * </doc>
  */
 static
-void assign_task(server_information_t *server_info, char *grp_name)
+void assign_task(server_information_t *server_info, char *grp_name, int task_type)
 {
    mcast_group_node_t *group_node = NULL;
 
@@ -825,7 +826,8 @@ void assign_task(server_information_t *server_info, char *grp_name)
       PRINT("No clients present in the group.");
       return;
    }
-
+   
+   group_node->task_type = task_type;
    /*Select the moderator for the multicast group*/
    moderator_selection(server_info, group_node, grp_name);
 }
@@ -947,9 +949,22 @@ void server_stdin_data(int fd, server_information_t *server_info)
     }
     else if(strncmp(read_buffer,"task",4) == 0)
     {
+        int task_type = 0;
         strcpy(read_buffer_copy,read_buffer);
         ptr = strtok(read_buffer_copy," ");
         while(i < 1)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+
+        if(ptr)
+          task_type = atoi(ptr);
+
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        i = 0;
+        while(i < 3)
         {
             ptr = strtok(NULL," ");
             i++;
@@ -962,7 +977,7 @@ void server_stdin_data(int fd, server_information_t *server_info)
         for(i = 0;i < num_groups; i++)
         {
             if(strcmp(ptr,mapping[i].grname) == 0)
-              assign_task(server_info, mapping[i].grname);
+              assign_task(server_info, mapping[i].grname, task_type);
         }
     }
     else

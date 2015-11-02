@@ -1101,53 +1101,59 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     /*Client is busy in working on task now.*/
     client_info->client_status = BUSY;
 
-    for(count = 0; count < perform_task.client_id_count; count++)
+    switch(perform_task.task_type)
     {
-      if(client_info->client_id == perform_task.client_ids[count]) /*This client needs to perform the task */
-      {
-        /* assumption client_id_count < num of task count 
-         * start_index : the index of the original task set from where this clients starts performing task
-         * stop_index : the index of the original task set to which this client perform's the task
-         */
-        start_index = ((perform_task.task_count/perform_task.client_id_count) * count);
-        /* client_task_count is the count of total number's which client has to work upon */
-        client_task_count = (perform_task.task_count/perform_task.client_id_count);
-
-        if((count +1) == perform_task.client_id_count) /* last client */
+      case FIND_PRIME_NUMBERS:
+        for(count = 0; count < perform_task.client_id_count; count++)
         {
-          /* Consider rest all elements of task set */
-          stop_index = perform_task.task_count - 1;
-          client_task_count = stop_index - start_index + 1;
-        }
-        else
-          stop_index = start_index + client_task_count;
+          if(client_info->client_id == perform_task.client_ids[count]) /*This client needs to perform the task */
+          {
+            /* assumption client_id_count < num of task count 
+             * start_index : the index of the original task set from where this clients starts performing task
+             * stop_index : the index of the original task set to which this client perform's the task
+             */
+            start_index = ((perform_task.task_count/perform_task.client_id_count) * count);
+            /* client_task_count is the count of total number's which client has to work upon */
+            client_task_count = (perform_task.task_count/perform_task.client_id_count);
 
-        while(i != client_task_count)
-        {
-            /* Derive the task set for client */
-            client_task_set[i] = perform_task.task_set[(start_index + i)];
-            args->data[i] = client_task_set[i];
-            i++;
-        }
+            if((count +1) == perform_task.client_id_count) /* last client */
+            {
+              /* Consider rest all elements of task set */
+              stop_index = perform_task.task_count - 1;
+              client_task_count = stop_index - start_index + 1;
+            }
+            else
+              stop_index = start_index + client_task_count;
 
-        args->data_count = client_task_count;
+            while(i != client_task_count)
+            {
+              /* Derive the task set for client */
+              client_task_set[i] = perform_task.task_set[(start_index + i)];
+              args->data[i] = client_task_set[i];
+              i++;
+            }
 
-        args->client_info=client_info;
-        args->task_id = perform_task.task_id;
-        args->group_name=malloc(sizeof(char)*strlen(perform_task.group_name));
-        strcpy(args->group_name, perform_task.group_name);
-        /* Create a thread to perform the task */
-        result = pthread_create(&thread, NULL, find_prime_numbers ,args);
+            args->data_count = client_task_count;
+            args->client_info=client_info;
+            args->task_id = perform_task.task_id;
+            
+            args->group_name=malloc(sizeof(char)*strlen(perform_task.group_name));
+            strcpy(args->group_name, perform_task.group_name);
+            
+            /* Create a thread to perform the task */
+            result = pthread_create(&thread, NULL, find_prime_numbers ,args);
         
-        if(result)
-        {
-          PRINT("Could not create thread to perform task");
-        }
+            if(result)
+            {
+              PRINT("Could not create thread to perform task");
+            }
 //        pthread_join(thread,NULL);
 //        result_t *answer = copy_result_from_args(args ); 
 //        if(answer !=NULL) 
 //          send_task_results_to_moderator(client_info, TYPE_INT, result, clientID); 
-      }
+         }
+       }
+       break;
    }
 }
 

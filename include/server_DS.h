@@ -63,6 +63,7 @@ typedef struct {
   mcast_client_node_t *moderator_client;    /*Points to client which is moderator*/
   server_state_t fsm_state;                 /*FSM state of group, to be used by server FSM*/
   sn_list_element_t list_element;
+  int task_type;                            /* A group can perform only one task at a time. Maintaining the task type */
 } mcast_group_node_t;
 
 /* Declaration of Server Info - Main Data structure on Server*/

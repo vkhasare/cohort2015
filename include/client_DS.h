@@ -102,3 +102,7 @@ typedef struct {
   char * group_name;
   unsigned int task_id;
 } thread_args;
+
+typedef enum {
+  FIND_PRIME_NUMBERS = 1
+} task_type_t;

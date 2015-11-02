@@ -104,6 +104,7 @@ typedef struct perform_task_req {
     unsigned int* client_ids; 
     unsigned int task_count;
     unsigned int* task_set;
+    int task_type;
 }perform_task_req_t;
 
 typedef struct my_struct{
