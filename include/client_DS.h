@@ -46,9 +46,9 @@ typedef struct {
   client_grp_t *done_client_list;                 /*List of clients who have completed the task*/
   moderator_state_t fsm_state;                    /*Moderator FSM state*/
   uint8_t task_id;                                /*Task Identifier */
-  uint8_t active_client_count;                      /*Number of active clients in the multicast group*/
+  uint8_t active_client_count;                    /*Number of active clients in the multicast group*/
   bool (* fsm)(struct client_information_t *client_info, moderator_event_t event, void *fsm_msg);    /*Moderator FSM function pointer*/
-  void * moderator_resp_msg;
+  void * moderator_resp_msg;                      /*Pointer to buffer where moderator will be storing the result of the group*/  
 } moderator_information_t;
   
 /* client group node - This node comprises of multicast group information, of which client is member of.*/
@@ -59,8 +59,8 @@ typedef struct {
   unsigned int mcast_fd;              /*Multicast FD associated with every group*/
   sn_list_element_t list_element;
 } client_grp_node_t;
-  
-/* client info - This contains all the information about client.*/
+
+/* Declaration of Client Info - Main Data structure on Client*/
 typedef struct {
   uint8_t is_moderator:1;                           /*Is this is a moderator?*/
   moderator_information_t* moderator_info;          /*If moderator, then it must have list of clients*/

@@ -42,28 +42,18 @@ void get_my_ip(const char * device, struct sockaddr *addr)
     ioctl (fd, SIOCGIFADDR, &ifr);
 
     close (fd);
-    /*returning sin_addr*/
-     //((struct sockaddr_in *)&ifr.ifr_addr);
+
     (*addr).sa_family = ifr.ifr_addr.sa_family;
     memcpy((*addr).sa_data, ifr.ifr_addr.sa_data,sizeof((*addr).sa_data));
 }
 
-/*
- <This is an obsolete function. Use display_mcast_group_node.>
- 
-void display_mapping(grname_ip_mapping_t * mapping, uint32_t count)
-{
-  uint32_t i;
-  char remoteIP[INET_ADDRSTRLEN];
 
-  for(i = 0;i < count; i++)
-  {
-    inet_ntop(AF_INET, &(mapping[i].grp_ip), remoteIP, INET_ADDRSTRLEN);
-    PRINT("Group name: %s \t\tIP addr: %s \t\tPort Number: %d", mapping[i].grname,remoteIP, mapping[i].port_no);
-  }
-}
-*/
-
+/* <doc>
+ * int IS_SERVER(int oper)
+ * Checks if operational mode type
+ * is Server
+ * </doc>
+ */
 int IS_SERVER(int oper)
 {
   if (SERVER_MODE == oper)
@@ -72,6 +62,12 @@ int IS_SERVER(int oper)
   return 0;
 }
 
+/* <doc>
+ * int IS_CLIENT(int oper)
+ * Checks if operational mode type
+ * is Client
+ * </doc>
+ */
 int IS_CLIENT(int oper)
 {
   if (CLIENT_MODE == oper)
@@ -80,6 +76,12 @@ int IS_CLIENT(int oper)
   return 0;
 }
 
+/* <doc>
+ * int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
+ * Create the UDP socket and binds it to specified address and port
+ *
+ * </doc>
+ */
 int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
 {
     struct addrinfo hints;
@@ -106,8 +108,10 @@ int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
             continue;
         }
 
+        /*Reuse the socket*/
         setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 
+        /*Keeping separate bind blocks for server and client for future changes*/
         if (IS_SERVER(oper_mode))
         {
            if (bind(sfd, rp->ai_addr, rp->ai_addrlen) == -1)
@@ -133,12 +137,17 @@ int create_and_bind(char *machine_addr, char *machine_port, int oper_mode)
 
     freeaddrinfo(result);
 
-//    DEBUG("Socket is created.");
-
     return sfd;
 }
 
-
+/* <doc>
+ * int make_socket_non_blocking (int sfd)
+ * This function accepts fd as input and
+ * makes it non-blocking using fcntl
+ * system call.
+ *
+ * </doc>
+ */
 int make_socket_non_blocking (int sfd)
 {
     int flags;
