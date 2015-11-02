@@ -457,6 +457,12 @@ void mcast_start_task_distribution(server_information_t *server_info,
     PRINT("[Task_Request: GRP - %s] Task Request Sent.", group_node->group_name);
 }
 
+/* <doc>
+ * void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer)
+ * This function returns the file name for result file
+ *
+ * <doc>
+ */
 void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer){
      time_t rawtime;
      struct tm * timeinfo;
@@ -470,7 +476,14 @@ void get_task_response_file_name(char * gname, uint8_t * task_id, char * buffer)
      PRINT("[INFO] The Response from %s for task %d is written in %s",gname, *task_id,  buffer);
 }
 
- 
+
+/* <doc>
+ * write_task_response_file(task_rsp_t * task_rsp, char* fname)
+ * After getting the task response, this function writes the
+ * result in the result file.
+ *
+ * </doc>
+ */ 
 void
 write_task_response_file(task_rsp_t * task_rsp, char* fname){
   uint32_t i, j;
@@ -583,8 +596,6 @@ int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...)
          }
     }
 }
-
-
 
 /* <doc>
  * static

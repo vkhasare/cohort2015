@@ -45,7 +45,7 @@ typedef struct {
 typedef struct {
   unsigned int client_id;              /*Client ID*/
   struct sockaddr client_addr;         /*Address of Client*/
-  svr_client_state av_status;          /*Availibity status of client - busy or free*/
+  svr_client_state av_status;          /*Availibility status of client - busy or free*/
   sn_list_element_t list_element;
 } mcast_client_node_t;
 

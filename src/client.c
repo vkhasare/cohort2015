@@ -5,12 +5,6 @@
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 
-struct keep_alive{
-    unsigned count;
-    char group_name[10][10];
-};
-struct keep_alive active_group;
-
 static int send_echo_request(const int sockfd, struct sockaddr *,char *);
 static int handle_echo_req(const int, pdu_t *pdu, ...);
 static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
@@ -549,79 +543,6 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
   return 0;
 }
 
-int is_gname_already_present(char *grp_name){
-
-   if(active_group.count == 0)
-     return 0;  
-
-   int i=0 , count=active_group.count;
-
-   while(i<count)
-   {
-     if(strcmp(grp_name,active_group.group_name[i])==0) return i+1;
-     i++;
-   }
-
-   return 0;
-}
-
-void insert_gname(char *gname){
-   strcpy(active_group.group_name[active_group.count], gname);
-   active_group.count++;
-}
-
-/* <doc>
- * void startKeepAlive(char * gname)
- * Function to start periodic timer for sending messages to server.
- * Takes the group name as argument.
- *
- * </doc>
- */
-void startKeepAlive(char * gname)
-{
-    if(is_gname_already_present(gname) == 0)
-    {
-       insert_gname(gname);
-    
-      if(active_group.count == 1)
-      {
-        struct sigaction myaction;
-//        myaction.sa_handler = send_echo_req;
-        sigfillset(&myaction.sa_mask);
-        myaction.sa_flags = 0;
-
-        if (sigaction(SIGALRM, &myaction, 0) < 0)
-        {
-          perror("\nError in sigaction.");
-          exit(0);
-        }
-    
-        alarm(TIMEOUT_SECS);
-      }
-   }
-}
-
-
-/* <doc>
- * void stopKeepAlive()
- * Function to stop periodic timer
- *
- * </doc>
- */
-void stopKeepAlive()
-{
-    int i = 0;
-
-    while(i < active_group.count)
-    {
-      strcpy(active_group.group_name[i] ,"IV");
-      i++;
-    }
-
-    active_group.count = 0;
-    alarm(0);
-}
-
 /* <doc>
  * void display_client_clis()
  * Displays all available Cli's.
@@ -631,8 +552,6 @@ void stopKeepAlive()
 void display_client_clis()
 {
    PRINT("show client groups                           --  displays list of groups joined by client");
-   PRINT("enable keepalive group <group_name>          --  Sends periodic messages to Server");
-   PRINT("disable keepalive                            --  Stops periodic messages to Server");
    PRINT("join group <name>                            --  Joins a new group");
    PRINT("leave group <name>                           --  Leaves a group");
    PRINT("cls                                          --  Clears the screen");
@@ -674,14 +593,6 @@ void client_stdin_data(int fd, client_information_t *client_info)
     else if (strncmp(read_buffer,"show client groups",22) == 0)
     {
        display_client_groups(client_info);
-    }
-    else if (strncmp(read_buffer,"enable keepalive group ",23) == 0)
-    {
-       startKeepAlive(read_buffer+23);
-    }
-    else if (strncmp(read_buffer,"disable keepalive",18) == 0)
-    {
-       stopKeepAlive();
     }
     else if (strncmp(read_buffer,"join group ",11) == 0)
     {
@@ -734,8 +645,6 @@ int main(int argc, char * argv[])
     struct addrinfo hints;
     int count = 0;
 
-    active_group.count = 0;
- 
     int event_count, index; 
     int status;
     int cfd, efd;
@@ -845,13 +754,11 @@ int main(int argc, char * argv[])
 
     events = calloc(MAXEVENTS, sizeof(event));
   
-    /* CLient takes program argument as group_name, creates join request
+    /* Client takes program argument as group_name, creates join request
      * and joins the multiple groups */ 
     char * gname=strtok(group_name,",");
     char * gr_list[max_groups];
     int iter = 0;
-
-    //m.id = join_request;
 
     while(gname!=NULL){ 
       gr_list[iter++] = gname;
@@ -873,7 +780,11 @@ int main(int argc, char * argv[])
                 /* Invoking function to recognize the cli fired and call its appropriate handler */
                 client_stdin_data(events[index].data.fd, client_info);
 
-                PRINT_PROMPT("[client] ");
+                if (client_info->moderator_info) {
+                   PRINT_PROMPT("[Moderator] ");
+                } else {
+                   PRINT_PROMPT("[client] ");
+                }
             }
             /* Code Block for receiving data on Client Socket */
             else
@@ -915,38 +826,9 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
      /* Sending task response for 1 group*/
      populate_task_rsp(&(pdu.msg),task_id, group_name, rtype ,result, my_id);
      write_record(client_info->client_fd, &(client_info->moderator) , &pdu);
-     PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Req sent to Moderator. ", group_name);
+     PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Req sent to Moderator.", group_name);
 }
 
-/*#define MAX_CLIENT 10
-void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsigned int client_id ){
-    pdu_t *rsp_pdu= malloc(sizeof(pdu_t)); 
-    comm_struct_t* m = &(rsp_pdu->msg);
-    memset(&(m->idv),0,sizeof(task_rsp_t));
-    m->id=TASK_RESPONSE;
-    task_rsp_t * task_rsp = &(m->idv.task_rsp);
-    task_rsp->type = resp->type;
-    task_rsp->group_name = malloc(sizeof(char)*strlen(resp->group_name));
-    strcpy(task_rsp->group_name, resp->group_name); 
-    task_rsp->result = (result_t **)malloc(sizeof(result_t*)*num_clients);
-    task_rsp->client_ids = (unsigned int *)malloc(sizeof(unsigned int *)*num_clients);
-    update_task_rsp(m, task_rsp->type, resp->result, client_id);
-    return rsp_pdu;
-}*/
-
-unsigned long int conv(char ipadr[])
-{
-    unsigned long int num=0,val;
-    char *tok,*ptr;
-    tok=strtok(ipadr,".");
-    while( tok != NULL)
-    {
-        val=strtoul(tok,&ptr,0);
-        num=(num << 8) + val;
-        tok=strtok(NULL,".");
-    }
-    return(num);
-}
 
 /* <doc>
  * int handle_task_response(const int sockfd, const comm_struct_t const resp, ...)
@@ -975,8 +857,11 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
     EXTRACT_ARG(pdu, client_information_t*, client_info);
 
     task_rsp_t * task_response = &resp->idv.task_rsp;
+
+    /*client_info->moderator_info will always be valid here*/
     moderator_information_t * moderator_info = client_info->moderator_info;
 
+    /*Response from peer clients should only be processed by the moderator*/
     if(moderator_info != NULL && MATCH_STRING(moderator_info->group_name, task_response->group_name)){
         mod_client_node_t *mod_node = NULL; 
         unsigned int peer_id = calc_key(&(pdu->peer_addr));
@@ -984,13 +869,16 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
 
         inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN); 
         PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Request received from client %s", task_response->group_name, ipaddr);
-     
+    
+        /*If response received from peer clients of group*/ 
         if(moderator_info->moderator_resp_msg != NULL){
             update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
         } else{
+            /*If response received from moderator*/
             moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
         }
         
+        /*Since response from client is received, move client to done list.*/
         get_client_from_moderator_pending_list(client_info, peer_id, &mod_node);
         if (mod_node) {
           move_moderator_node_pending_to_done_list(client_info, mod_node);
@@ -998,15 +886,30 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
 
         pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
 
-        if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count){
+        /*If response from all the clients is received, then send the collated result to Server.*/
+        if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count) {
             write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
             PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
+
+            /* Free the moderator, since moderator job is done now.
+             * and mark the client free
+             */
+            deallocate_moderator_list(&client_info);
+            client_info->is_moderator = FALSE;
+            client_info->client_status = FREE;
         }
     } else{
         PRINT("Error case : Moderator received a wrong input");
     }
 }
 
+/* <doc>
+ * result_t* copy_result_from_args(thread_args * args)
+ * Miscellaneous function to copy result data set from 
+ * thread_args to result_t.
+ *
+ * </doc>
+ */
 result_t* copy_result_from_args(thread_args * args){
    result_t * result=NULL;
    int i;
@@ -1023,12 +926,20 @@ result_t* copy_result_from_args(thread_args * args){
    return result;
 }
 
-
+/* <doc>
+ * void send_task_results(thread_args *args)
+ * This function is called when task is processed by the client and
+ * results are ready to send to moderator.
+ *
+ * </doc>
+ */
 void send_task_results(thread_args *args){
         
-        result_t *answer = copy_result_from_args(args); 
-        if(answer !=NULL) 
-          send_task_results_to_moderator(args->client_info,args->group_name, args->task_id, TYPE_INT, answer, args->client_info->client_id); 
+    result_t *answer = copy_result_from_args(args); 
+
+    if(answer !=NULL) {
+          send_task_results_to_moderator(args->client_info,args->group_name, args->task_id, TYPE_INT, answer, args->client_info->client_id);
+    }
 }
 
 /* <doc>
@@ -1042,7 +953,9 @@ void* find_prime_numbers(void *args)
   unsigned int i,j,flag;
 
   thread_args *t_args = (thread_args *)args;
-  
+
+  PRINT("[INFO] Started working on prime numbers for data set count : %d", t_args->data_count);
+
   /* Loop for prime number's in given data set */
   for(i = 0; i < t_args->data_count; i++)
   {
@@ -1058,7 +971,7 @@ void* find_prime_numbers(void *args)
     if(!flag)
     {
       t_args->result[t_args->result_count] = t_args->data[i];
-      //PRINT("Prime number %d",t_args->result[t_args->result_count]);
+      /*PRINT("Prime number %d",t_args->result[t_args->result_count]);*/
       
       /* Total count of prime numbers */
       t_args->result_count++;
@@ -1085,7 +998,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     comm_struct_t *req = &(pdu->msg);
     struct sockaddr myIp;
     int count = 0, i = 0, result;
-    unsigned int client_task_set[MAX_TASK_COUNT] = {0}, clientID;
+    unsigned int client_task_set[MAX_TASK_COUNT] = {0};
     unsigned int start_index = 0, stop_index = 0, client_task_count = 0;
     client_information_t * client_info;
     pthread_t thread;
@@ -1132,10 +1045,11 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
 
         args->data_count = client_task_count;
 
-        args->client_info=client_info;
+        args->client_info = client_info;
         args->task_id = perform_task.task_id;
-        args->group_name=malloc(sizeof(char)*strlen(perform_task.group_name));
+        args->group_name = malloc(sizeof(char)*strlen(perform_task.group_name));
         strcpy(args->group_name, perform_task.group_name);
+
         /* Create a thread to perform the task */
         result = pthread_create(&thread, NULL, find_prime_numbers ,args);
         
@@ -1144,9 +1058,6 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
           PRINT("Could not create thread to perform task");
         }
 //        pthread_join(thread,NULL);
-//        result_t *answer = copy_result_from_args(args ); 
-//        if(answer !=NULL) 
-//          send_task_results_to_moderator(client_info, TYPE_INT, result, clientID); 
       }
    }
 }
