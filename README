@@ -1,0 +1,26 @@
+**********************************************************
+************************READ FILE*************************
+**********************************************************
+
+***COMMON FILES***
+common.c                    -->         Common functions used by Server and Client
+sn_ll.c                     -->         Link List Primitives
+comm_primitives.c           -->         XDR Communication Encoding/Decoding
+
+***SERVER FILES***
+server.c                    -->         Main Server File
+server_fsm.c                -->         FSM Implementation of Server
+server_ll.c                 -->         Server Link List Implementation
+rbt.c                       -->         RBT Implementation for Server Clients
+
+***CLIENT FILES***
+client.c                    -->         Main Client File
+client_ll.c                 -->         Client Link List Implementation
+moderator_fsm.c             -->         FSM Implementation of Moderator
+receiver.c                  -->         Multicast logic of client
+
+***AUTOMATED CODE DOCUMENTATION***
+utility/doc-extractor.py    -->       Generates the code documentation
+
+
+
