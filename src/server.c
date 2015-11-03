@@ -6,6 +6,7 @@ grname_ip_mapping_t * mapping = NULL;
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 unsigned int num_groups = 0; // should be removed in future, when we remove mapping array and completely migrate on LL.
+extern debug_mode;
 
 const int MAX_CLIENTS_TRIED_PER_ATTEMPT = 3;
 const int MAX_ALLOWED_KA_MISSES = 5;
@@ -1109,6 +1110,16 @@ void server_stdin_data(int fd, server_information_t *server_info)
             if(strcmp(ptr,mapping[i].grname) == 0)
               assign_task(server_info, mapping[i].grname, task_type);
         }
+    }
+    else if(strncmp(read_buffer,"enable debug\0",12) == 0)
+    {
+      debug_mode = TRUE;
+      PRINT("<Debug Mode is ON>");
+    }
+    else if(strncmp(read_buffer,"disable debug\0",13) == 0)
+    {
+      debug_mode = FALSE;
+      PRINT("<Debug Mode is OFF>");
     }
     else
     {

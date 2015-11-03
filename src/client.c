@@ -6,6 +6,7 @@ const int MAX_ALLOWED_KA_MISSES = 5;
 
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
+extern debug_mode;
 
 fptr client_func_handler(unsigned int);
 static int handle_echo_req(const int, pdu_t *pdu, ...);
@@ -657,6 +658,8 @@ void display_client_clis()
    PRINT("cls                                          --  Clears the screen");
    PRINT("show pending clients                         --  Moderator CLI. Shows list of working clients");
    PRINT("show done clients                            --  Moderator CLI. Shows list of done clients");
+   PRINT("enable debug                                 --  Enables the debug mode");
+   PRINT("disable debug                                --  Disables the debug mode");
    PRINT("test echo                                    --  Echo debug CLI");
 }
 
@@ -713,6 +716,16 @@ void client_stdin_data(int fd, client_information_t *client_info)
     else if(strncmp(read_buffer,"show done clients",13) == 0)
     {
         display_moderator_list(&client_info, SHOW_MOD_DONE_CLIENTS);
+    }
+    else if(strncmp(read_buffer,"enable debug\0",12) == 0)
+    {
+      debug_mode = TRUE;
+      PRINT("<Debug Mode is ON>");
+    }
+    else if(strncmp(read_buffer,"disable debug\0",13) == 0)
+    {
+      debug_mode = FALSE;
+      PRINT("<Debug Mode is OFF>");
     }
     else if (0 == strcmp(read_buffer,"cls\0"))
     {

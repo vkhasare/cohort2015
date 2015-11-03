@@ -1,5 +1,8 @@
 #include "common.h"
 
+/*Flag for debug mode*/
+bool debug_mode = FALSE;
+
 char* enum_to_str(msg_cause cause)
 {
    switch(cause)
@@ -234,13 +237,15 @@ calc_key(struct sockaddr *addr)
 
 void display_server_clis()
 {
-  PRINT("show groups                        --  Displays list of groups");
-  PRINT("show group info <group_name|all>   --  Displays group - client association");
-  PRINT("enable msg group <group_name>      --  Enables display of messages for a specific group.");
-  PRINT("no msg group <group_name>          --  Disables display of messages for a specific group.");
-  PRINT("send msg <group_name>              --  Sends a multicast message to the specified Group");
-  PRINT("task <task_type> group <group_name>--  Assigns a specific task to the specified Group");
-  PRINT("cls                                --  Clears the screen");
+  PRINT("show groups                          --  Displays list of groups");
+  PRINT("show group info <group_name|all>     --  Displays group - client association");
+  PRINT("enable msg group <group_name>        --  Enables display of messages for a specific group.");
+  PRINT("no msg group <group_name>            --  Disables display of messages for a specific group.");
+  PRINT("send msg <group_name>                --  Sends a multicast message to the specified Group");
+  PRINT("task <task_type> group <group_name>  --  Assigns a specific task to the specified Group");
+  PRINT("enable debug                         --  Enables the debug mode");
+  PRINT("disable debug                        --  Disables the debug mode");
+  PRINT("cls                                  --  Clears the screen");
 }
 
 void start_oneshot_timer(timer_t *timer_id, uint8_t interval, uint32_t sigval)

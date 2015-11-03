@@ -1,6 +1,7 @@
 #include "client_DS.h"
 #include "print.h"
 
+extern int debug_mode;
 extern int MAX_ALLOWED_KA_MISSES;
 
 /* <doc>
@@ -341,20 +342,37 @@ void display_client_grp_node(client_information_t **client_info)
     return;
   }
 
-  sprintf(buf,"Grp Name  \t Grp IP \t Grp Port \t Mcast_fd \t client_fd");
-  PRINT(buf);
-  sprintf(buf,"---------------------------------------------------------------------------");
-  PRINT(buf);
+  /*Debug mode*/
+  if (debug_mode) {
+    sprintf(buf,"Grp Name  \t Grp IP \t Grp Port \t Mcast_fd \t client_fd");
+    PRINT(buf);
+    sprintf(buf,"---------------------------------------------------------------------------");
+    PRINT(buf);
+  } else {
+    sprintf(buf,"Grp Name  \t Grp IP \t Grp Port");
+    PRINT(buf);
+    sprintf(buf,"----------------------------------------------------");
+    PRINT(buf);
+  }
 
   while (client_grp_node)
   {
      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_grp_node->group_addr)), groupIP, INET6_ADDRSTRLEN);
 
-     sprintf(buf,
-             "\n\t%s \t\t %s \t\t %d \t\t %d \t\t %d",
-             client_grp_node->group_name, groupIP,
-             client_grp_node->group_port, client_grp_node->mcast_fd,
-             (*client_info)->client_fd);
+     /*Debug mode*/
+     if (debug_mode) {
+         sprintf(buf,
+               "\n\t%s \t\t %s \t\t %d \t\t %d \t\t %d",
+               client_grp_node->group_name, groupIP,
+               client_grp_node->group_port, client_grp_node->mcast_fd,
+               (*client_info)->client_fd);
+     } else {
+         sprintf(buf,
+               "\n\t%s \t\t %s \t\t %d",
+               client_grp_node->group_name, groupIP,
+               client_grp_node->group_port);
+     }
+
      SIMPLE_PRINT(buf);
 
      client_grp_node =     SN_LIST_MEMBER_NEXT(client_grp_node,

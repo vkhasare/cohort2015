@@ -2,6 +2,8 @@
 #include "server_DS.h"
 #include "print.h"
 
+extern int debug_mode;
+
 void allocate_rb_cl_list(rb_info_t **rb_info)
 {
    rb_client_t  *client = NULL;
@@ -397,9 +399,16 @@ void display_mcast_client_node(mcast_group_node_t **group_node)
    {
       inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_node->client_addr)), ipaddr, INET6_ADDRSTRLEN);
 
-      sprintf(buf,
-      "\n\tClient Address: %s \t Client FD: %u",
-      ipaddr, client_node->client_id);
+      if(debug_mode) {
+          sprintf(buf,
+          "\n\tClient Address: %s \t Client FD: %u",
+          ipaddr, client_node->client_id);
+      } else {
+          sprintf(buf,
+          "\n\tClient Address: %s \t Client Status: %s",
+          ipaddr,
+          (client_node->av_status == CLFREE)? "Free":"Busy");
+      }
 
       SIMPLE_PRINT(buf);
 
@@ -425,7 +434,6 @@ void display_mcast_group_node(server_information_t **server_info, display_show_t
    group_node =     SN_LIST_MEMBER_HEAD(&((*server_info)->server_list->group_node),
                                         mcast_group_node_t,
                                         list_element);
-
 
    while (group_node)
    {
