@@ -332,6 +332,14 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
   }
 }
 
+/* <doc>
+ * void handle_timeout_real(bool init, int signal, siginfo_t *si,
+ *                          server_information_t **server_info)
+ * This is the timeout handler function on server when the
+ * timer expires.
+ *
+ * </doc>
+ */
 void handle_timeout_real(bool init, int signal, siginfo_t *si,
                          server_information_t **server_info)
 {
@@ -734,6 +742,15 @@ int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...)
     }
 }
 
+/* <doc>
+ * bool activate_moderator_keepalive(server_information_t *server_info,
+ *                                   mcast_group_node_t *group_node,
+ *                                   unsigned int clientID)
+ * This function activates the monitoring of periodic keepalive of moderator 
+ * towards Server.
+ *
+ * </doc>
+ */
 bool activate_moderator_keepalive(server_information_t *server_info,
                                   mcast_group_node_t *group_node, 
                                   unsigned int clientID)
@@ -821,7 +838,6 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
     write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &notify_pdu);
 
     PRINT("[Moderator_Notify_Req: GRP - %s] Moderator Notify Request sent to group %s.", mod_notify_req->group_name , mod_notify_req->group_name);
-    //  group_node->fsm_state = MOD_NOTIFICATION_PENDING;
 }
 
 
@@ -894,16 +910,17 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
     /* Send the echo req to some n clients of group for moderator selection. The one who
      * who replies first will be selected as moderator.*/
     for(iter = 0; iter < MAX_CLIENTS_TRIED_PER_ATTEMPT && client_node; iter++)
-// while(client_node)
     {
       /*Send echo to only free clients for moderator selection*/
-        if (client_node->av_status == CLFREE)
+        if (client_node->av_status == CLFREE) {
             send_echo_request(server_info->server_fd, &client_node->client_addr, group_node->group_name);
+        }
 
         client_node =     SN_LIST_MEMBER_NEXT(client_node,
                                               mcast_client_node_t,
                                               list_element);
     }
+
     group_node->moderator_client = client_node;
 
     /*Start a one time timer and wait for first client to respond. If no
