@@ -442,9 +442,13 @@ static void send_join_group_req(client_information_t *client_info, char *group_n
 static void send_leave_group_req(client_information_t *client_info, char *group_name)
 {
 
+       if (client_info->client_status == BUSY) {
+          PRINT("[Error] Client cannot leave group %s as it is working on a task.", group_name);
+          return;
+       }
+
        /* If client is member of requested group, then only send leave request */
-       if (IS_GROUP_IN_CLIENT_LL(&client_info, group_name))
-       {
+       if (IS_GROUP_IN_CLIENT_LL(&client_info, group_name)) {
            pdu_t pdu;
            comm_struct_t *req = &(pdu.msg);
 
@@ -454,9 +458,7 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
            write_record(client_info->client_fd, &client_info->server, &pdu);
 
            PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", group_name);
-       }
-       else
-       {
+       } else {
            /* client is not member of request group */
            PRINT("Error: Client is not member of group %s.", group_name);
        }

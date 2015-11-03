@@ -1006,6 +1006,9 @@ void server_stdin_data(int fd, server_information_t *server_info)
     }
     else if(strncmp(read_buffer,"enable msg group",16) == 0)
     {
+        PRINT("<Cli is not supported as of now.>");
+        return;
+
         strcpy(read_buffer_copy,read_buffer);
         ptr = strtok(read_buffer_copy," ");
         while(i < 3)
@@ -1028,6 +1031,9 @@ void server_stdin_data(int fd, server_information_t *server_info)
     }
     else if(strncmp(read_buffer,"no msg group",12) == 0)
     {
+        PRINT("<Cli is not supported as of now.>");
+        return;
+
         strcpy(read_buffer_copy,read_buffer);
         ptr = strtok(read_buffer_copy," ");
         while(i < 3)
