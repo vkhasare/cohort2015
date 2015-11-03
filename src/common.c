@@ -241,7 +241,6 @@ void display_server_clis()
   PRINT("show group info <group_name|all>     --  Displays group - client association");
   PRINT("enable msg group <group_name>        --  Enables display of messages for a specific group.");
   PRINT("no msg group <group_name>            --  Disables display of messages for a specific group.");
-  PRINT("send msg <group_name>                --  Sends a multicast message to the specified Group");
   PRINT("task <task_type> group <group_name>  --  Assigns a specific task to the specified Group");
   PRINT("enable debug                         --  Enables the debug mode");
   PRINT("disable debug                        --  Disables the debug mode");
