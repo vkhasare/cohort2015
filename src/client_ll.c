@@ -242,7 +242,7 @@ void allocate_moderator_list(moderator_information_t **moderator_info)
  * Allocates the moderator info list and stores the pointer in
  * client info
  *
- * </doc
+ * </doc>
  */
 void allocate_moderator_info(client_information_t **client_info)
 {
