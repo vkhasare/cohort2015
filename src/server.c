@@ -951,7 +951,7 @@ void assign_task(server_information_t *server_info, char *grp_name, int task_typ
       PRINT("Group %s is currently Busy.", grp_name);
       return;
    } 
-   else if (group_node->client_info == NULL) 
+   else if (SN_LIST_LENGTH(&group_node->client_info->client_node) == 0)
    {
       PRINT("No clients present in the group.");
       return;

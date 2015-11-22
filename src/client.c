@@ -7,7 +7,9 @@ const int MAX_ALLOWED_KA_MISSES = 5;
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 extern debug_mode;
-
+static int echo_req_rcvd_in_notify_rsp_pending = 0;   /*Counter for number of clients who
+                                                        have responded with echo req when moderator
+                                                        is in moderator notify rsp state*/
 fptr client_func_handler(unsigned int);
 static int handle_echo_req(const int, pdu_t *pdu, ...);
 static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
@@ -67,6 +69,63 @@ fptr client_func_handler(unsigned int msgType)
 }
 
 /* <doc>
+ * void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
+ * Handler when timeout happens on moderator when in task response pending state. 
+ * Initiate task response towards server if required.
+ *
+ * </doc>
+ */
+void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
+{
+    /* Purpose of this block is to piggyback information about dead
+     * clients detected on the moderator's keepalive messages towards server. */
+     unsigned int client_ids[254], *id_arr, iter =0;
+     mod_client_node_t *mod_node = NULL;
+     mod_node = SN_LIST_MEMBER_HEAD(&(client_info_local->moderator_info->pending_client_list->client_grp_node),
+                                      mod_client_node_t,
+                                      list_element);
+
+     while (mod_node){
+        /*If all heartbeats are expired, then client is definitely dead.*/
+        if(--mod_node->heartbeat_remaining == 0){
+             client_ids[iter] = mod_node->peer_client_id;
+             iter++;
+             client_info_local->moderator_info->active_client_count--;
+
+             /*Remove this client from pending list*/
+             SN_LIST_MEMBER_REMOVE(&(client_info_local->moderator_info->pending_client_list->client_grp_node),
+                                     mod_node,
+                                     list_element);
+
+
+             char ipaddr[INET6_ADDRSTRLEN];
+             inet_ntop(AF_INET, get_in_addr(&mod_node->peer_client_addr), ipaddr, INET6_ADDRSTRLEN);
+             PRINT("[WARNING] Client %s is down.", ipaddr);
+
+             /*Send to Server if all clients, except this have responded with their task response*/
+             moderator_send_task_response_to_server(client_info_local);
+         }
+         mod_node = SN_LIST_MEMBER_NEXT(mod_node, mod_client_node_t, list_element);
+     }
+
+     if(iter){
+        id_arr = (unsigned int *) malloc(sizeof(unsigned int) * iter);
+        memcpy(id_arr, client_ids, sizeof(unsigned int) * iter);
+     }
+
+     pdu_t pdu;
+     pdu.msg.id = echo_req;
+     echo_req_t * echo_request = &pdu.msg.idv.echo_req;
+     initialize_echo_request(echo_request);
+
+     echo_request->group_name  = client_info_local->active_group->group_name;
+     echo_request->num_clients = iter;
+     echo_request->client_ids  = iter ? id_arr : NULL;
+
+     write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
+}
+
+/* <doc>
  * void handle_timeout_real(bool init, int signal, siginfo_t *si,
  *                          client_information_t *client_info)
  * This function manages keepalives in context of moderator-server and client-moderator link.
@@ -109,51 +168,22 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
  
         if(signal == MODERATOR_TIMEOUT)
         {
-            /* Purpose of this block is to piggyback information about dead
-             * clients detected on the moderator's keepalive messages towards server. */
-            unsigned int client_ids[254], *id_arr, iter =0;
-            mod_client_node_t *mod_node = NULL;
-            mod_node = SN_LIST_MEMBER_HEAD(&(client_info_local->moderator_info->pending_client_list->client_grp_node),
-                                           mod_client_node_t,
-                                           list_element);
-            
-            while (mod_node){
-                if(--mod_node->heartbeat_remaining == 0){
-                    client_ids[iter] = mod_node->peer_client_id;
-                    iter++;
-                    client_info_local->moderator_info->active_client_count--;
-
-                    /*Remove this client from pending list*/
-                    SN_LIST_MEMBER_REMOVE(&(client_info_local->moderator_info->pending_client_list->client_grp_node),
-                                          mod_node,
-                                          list_element);
-
-
-                    char ipaddr[INET6_ADDRSTRLEN];
-                    inet_ntop(AF_INET, get_in_addr(&mod_node->peer_client_addr), ipaddr, INET6_ADDRSTRLEN);
-                    PRINT("[WARNING] Client %s is down.", ipaddr);
-
-                    /*Send to Server if all clients, except this have responded with their task response*/
-                    moderator_send_task_response_to_server(client_info_local);
-                }
-                mod_node = SN_LIST_MEMBER_NEXT(mod_node, mod_client_node_t, list_element);
+            /* If moderator is in mod notify rsp pending state and timeout happens on moderator
+             * for receiving the echo's from all clients. */
+            if (client_info_local->moderator_info->fsm_state == MODERATOR_NOTIFY_RSP_PENDING) {
+              send_moderator_notify_response(client_info_local);
+              //timer_delete(client_info_local->moderator_info->timer_id);
             }
-            
-            if(iter){
-                id_arr = (unsigned int *) malloc(sizeof(unsigned int) * iter);
-                memcpy(id_arr, client_ids, sizeof(unsigned int) * iter);
+            /* If moderator is in mod task rsp pending state, and timeout happens on moderator,
+             * then echo towards server is initiated with dead client list*/
+            else if (client_info_local->moderator_info->fsm_state == MODERATOR_TASK_RSP_PENDING) {
+              moderator_task_rsp_pending_timeout(client_info_local);
+            } else {
+              /*If moderator fsm state is other than MODERATOR_NOTIFY_RSP_PENDING or MODERATOR_TASK_RSP_PENDING,
+               *then assert. */
+              assert(0);
+              /*add logging warning mentioning fsm state of moderator*/
             }
-            
-            pdu_t pdu;
-            pdu.msg.id = echo_req;
-            echo_req_t * echo_request = &pdu.msg.idv.echo_req;
-            initialize_echo_request(echo_request);
-            
-            echo_request->group_name  = client_info_local->active_group->group_name;
-            echo_request->num_clients = iter;
-            echo_request->client_ids  = iter ? id_arr : NULL;
-            
-            write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
         }
         else if(signal == CLIENT_TIMEOUT)
         {
@@ -480,6 +510,10 @@ static void send_moderator_notify_response(client_information_t *client_info)
     char ipaddr[INET6_ADDRSTRLEN];
     int iter = 0;
 
+    /*Delete the timer running for mod notify req timeout*/
+    timer_delete(mod_info->timer_id);
+    echo_req_rcvd_in_notify_rsp_pending = 0;
+
     rsp->id = moderator_notify_rsp;
     moderator_notify_rsp_t *moderator_notify_rsp = &(rsp->idv.moderator_notify_rsp);
 
@@ -487,7 +521,8 @@ static void send_moderator_notify_response(client_information_t *client_info)
     moderator_notify_rsp->group_name = mod_info->group_name;
     moderator_notify_rsp->moderator_id = client_info->client_id;    
 
-    moderator_notify_rsp->client_id_count = mod_info->active_client_count;
+    /*remove this line in future if you dont see any issues in this code*/
+    //moderator_notify_rsp->client_id_count = mod_info->active_client_count;
 
     /*allocate memory for client IDs*/
     moderator_notify_rsp->client_ids = (unsigned int *) malloc(sizeof(unsigned int) * mod_info->active_client_count);
@@ -507,8 +542,14 @@ static void send_moderator_notify_response(client_information_t *client_info)
       iter++;
     }
 
+    /*Filling actual alive clients count*/
+    moderator_notify_rsp->client_id_count = iter;
+
     write_record(client_info->client_fd, &client_info->server, &pdu);
-    
+
+    /*change the fsm state of moderator*/
+    client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_SENT;
+ 
     /* Start timer for maintaining client's keepalive*/
     if (1 < mod_info->active_client_count)
     start_recurring_timer(&(mod_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
@@ -534,10 +575,9 @@ void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_in
   pdu_t *pdu = (pdu_t *) fsm_data->pdu;
   comm_struct_t *req = &(pdu->msg);
   echo_req_t echo_req = req->idv.echo_req;
-  static int client_echo_req_rcvd = 0;
 
   /*Increment the counter as request from client is received*/
-  client_echo_req_rcvd = client_echo_req_rcvd + 1;
+  echo_req_rcvd_in_notify_rsp_pending = echo_req_rcvd_in_notify_rsp_pending + 1;
 
   /*allocate the moderator client node and store the information about the group active clients*/
   mod_client_node_t *mod_node = (mod_client_node_t *) allocate_clnt_moderator_node(&client_info->moderator_info);
@@ -547,10 +587,9 @@ void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_in
 
   /* Send notification response to server if all the clients have responded with echo req or TIMEOUT happened
    * This is the case where all clients have responded.*/
-  if (client_echo_req_rcvd == (client_info->moderator_info->active_client_count) - 1) 
+  if (echo_req_rcvd_in_notify_rsp_pending == (client_info->moderator_info->active_client_count) - 1) 
   {
      send_moderator_notify_response(client_info);
-     client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_SENT; 
   }
 }
 
@@ -914,7 +953,7 @@ int main(int argc, char * argv[])
                 client_stdin_data(events[index].data.fd, client_info);
 
                 if (client_info->moderator_info) {
-                   PRINT_PROMPT("[Moderator] ");
+                   PRINT_PROMPT("[moderator] ");
                 } else {
                    PRINT_PROMPT("[client] ");
                 }
@@ -962,8 +1001,10 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
      
      /* Deactivate timer for this group on client node. Not deleting for
       * moderator since it makes no sense to run task collection timer for self*/
-     if(client_info->is_moderator == false)
+     if(client_info->is_moderator == false) {
          timer_delete(client_info->active_group->timer_id);
+         client_info->client_status = FREE;
+     }
      PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Req sent to Moderator. ", group_name);
 }
 
@@ -1024,7 +1065,7 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
 
     task_rsp_t * task_response = &resp->idv.task_rsp;
 
-    /*client_info->moderator_info will always be valid here*/
+    /*client_info->moderator_info will always be valid here, in case result is not sent to server*/
     moderator_information_t * moderator_info = client_info->moderator_info;
 
     /*Response from peer clients should only be processed by the moderator*/
@@ -1035,30 +1076,39 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
 
         inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN); 
         PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Request received from client %s", task_response->group_name, ipaddr);
-    
-        /*If response received from peer clients of group*/ 
-        if(moderator_info->moderator_resp_msg != NULL)
-        {
-            update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
-        } 
-        else
-        {
-            /*If response received from moderator*/
-            moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
-        }
-        
-        /*Since response from client is received, move client to done list.*/
+
+        /*Since response from client is received, fetch client node from pending list.*/
         get_client_from_moderator_pending_list(client_info, peer_id, &mod_node);
-        
-        if (mod_node) 
-        {
-          move_moderator_node_pending_to_done_list(client_info, mod_node);
+
+        /*Process task response notify req only if it is expected by moderator, else ignore.*/ 
+        if (mod_node) {
+            /*If response received from peer clients of group*/ 
+            if(moderator_info->moderator_resp_msg != NULL) {
+                update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
+            } else {
+                /*If response received from moderator*/
+                moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
+            }
+
+            /*Move client from pending to done list.*/
+            move_moderator_node_pending_to_done_list(client_info, mod_node);
+        } else {
+          /* Add logging warning, as some client who is not expected to work on this task
+           * has responded to moderator with task rsp notify req
+           */
         }
 
         /*Send to Server if all clients have responded with their task response*/
         moderator_send_task_response_to_server(client_info);
     } else{
-        PRINT("Error case : Moderator received a wrong input");
+        /*PRINT("Error case : Moderator received a wrong input");
+          We should add logging warning here.
+          This case is possible when
+            - Result is received from a client, who was declared dead previously.
+            - Result from moderator has already been sent to Server.
+          In this case, we should ignore the result sent by client, which moderator
+          is not expecting.
+        */
     }
 }
 
@@ -1174,6 +1224,13 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
 
     /*Client is busy in working on task now.*/
     client_info->client_status = BUSY;
+
+    /*Update moderator_info with active number of clients working on task*/
+    if (client_info->moderator_info) {
+      client_info->moderator_info->fsm_state = MODERATOR_TASK_RSP_PENDING;
+      /*Number of clients working on this task*/
+      client_info->moderator_info->active_client_count = perform_task.client_id_count; 
+    }
 
     switch(perform_task.task_type)
     {

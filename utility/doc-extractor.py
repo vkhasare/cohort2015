@@ -3,7 +3,7 @@
 #############################################################################
 # Doc-extractor :
 # Reads the Code source files and prepares the documentation file
-# 'code-documentation'
+# 'api-documentation'
 #############################################################################
 
 import sys
@@ -11,7 +11,7 @@ import os, glob
 import re
 
 #Destination file where documentation will be written.
-docFile = "code-documentation"
+docFile = "api-documentation"
 
 """
 Function:

@@ -18,7 +18,7 @@ LC_STR=${L_INCLUDE} ${L_LIB_DIRS} ${MY_LIBS} -Wl,-rpath=${GFLAGS_BR}/lib:${GLOG_
 
 CC=gcc
 CPP=g++
-CFLAGS=-g -c
+CFLAGS=-g -c -Werror
 #CFLAGS=-g -W -O2
 
 logger:
