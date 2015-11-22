@@ -172,7 +172,6 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
              * for receiving the echo's from all clients. */
             if (client_info_local->moderator_info->fsm_state == MODERATOR_NOTIFY_RSP_PENDING) {
               send_moderator_notify_response(client_info_local);
-              //timer_delete(client_info_local->moderator_info->timer_id);
             }
             /* If moderator is in mod task rsp pending state, and timeout happens on moderator,
              * then echo towards server is initiated with dead client list*/
@@ -504,6 +503,9 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
  */
 static void send_moderator_notify_response(client_information_t *client_info)
 {
+    /*change fsm state as soon as we enter this function*/
+    client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_SENT;
+
     pdu_t pdu;
     moderator_information_t *mod_info = (client_info)->moderator_info;
     comm_struct_t *rsp = &(pdu.msg);
@@ -547,12 +549,9 @@ static void send_moderator_notify_response(client_information_t *client_info)
 
     write_record(client_info->client_fd, &client_info->server, &pdu);
 
-    /*change the fsm state of moderator*/
-    client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_SENT;
- 
     /* Start timer for maintaining client's keepalive*/
     if (1 < mod_info->active_client_count)
-    start_recurring_timer(&(mod_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
+      start_recurring_timer(&(mod_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_info->server)), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Moderator_Notify_Rsp: GRP - %s] Moderator Notify Response sent to server %s", moderator_notify_rsp->group_name, ipaddr);
