@@ -69,7 +69,7 @@ void server_fsm_task_in_progress(server_information_t *server_info,
                                  void *fsm_msg)
 {
    switch (event) {
-   case ECHO_RSP_RCVD_EVENT:
+   case ECHO_REQ_RCVD_EVENT:
           server_echo_req_task_in_progress_state(server_info,
                                                  fsm_msg);
           break;
