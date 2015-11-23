@@ -10,6 +10,12 @@ extern debug_mode;
 static int echo_req_rcvd_in_notify_rsp_pending = 0;   /*Counter for number of clients who
                                                         have responded with echo req when moderator
                                                         is in moderator notify rsp state*/
+struct clnt_notify_alive_list_struct{
+  unsigned int client_rsp_list[255];
+  int client_rsp_cntr;
+};
+struct clnt_notify_alive_list_struct clnt_notify_alive_list;
+
 fptr client_func_handler(unsigned int);
 static int handle_echo_req(const int, pdu_t *pdu, ...);
 static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
@@ -180,7 +186,7 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
             } else {
               /*If moderator fsm state is other than MODERATOR_NOTIFY_RSP_PENDING or MODERATOR_TASK_RSP_PENDING,
                *then assert. */
-              assert(0);
+//              assert(0);
               /*add logging warning mentioning fsm state of moderator*/
             }
         }
@@ -269,14 +275,8 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
        mod_info->fsm = moderator_main_fsm;
        mod_info->fsm_state = MODERATOR_NOTIFY_RSP_PENDING;
 
-       /*allocate the client node for pending list, to add the moderator node into it.*/
-       mod_client_node_t *mod_node = allocate_clnt_moderator_node(&(client_info->moderator_info));
-
-       struct sockaddr moderatorIP;
-       get_my_ip("eth0", &moderatorIP);
-
-       mod_node->peer_client_id = client_info->client_id;
-       memcpy(&mod_node->peer_client_addr, &moderatorIP, sizeof(mod_node->peer_client_addr));
+       /*Updating list of clients who have responded during moderator notify duration*/
+       clnt_notify_alive_list.client_rsp_list[(clnt_notify_alive_list.client_rsp_cntr)++] = client_info->client_id;
 
        /*If only 1 client in the group, then send moderator notify response for moderator right away.*/
        if (1 == mod_info->active_client_count) 
@@ -505,15 +505,16 @@ static void send_moderator_notify_response(client_information_t *client_info)
 {
     /*change fsm state as soon as we enter this function*/
     client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_SENT;
+    /*Delete the timer running for mod notify req timeout*/
+    if (client_info->moderator_info->timer_id) {
+      timer_delete(client_info->moderator_info->timer_id);
+    }
 
     pdu_t pdu;
     moderator_information_t *mod_info = (client_info)->moderator_info;
     comm_struct_t *rsp = &(pdu.msg);
     char ipaddr[INET6_ADDRSTRLEN];
-    int iter = 0;
 
-    /*Delete the timer running for mod notify req timeout*/
-    timer_delete(mod_info->timer_id);
     echo_req_rcvd_in_notify_rsp_pending = 0;
 
     rsp->id = moderator_notify_rsp;
@@ -529,25 +530,18 @@ static void send_moderator_notify_response(client_information_t *client_info)
     /*allocate memory for client IDs*/
     moderator_notify_rsp->client_ids = (unsigned int *) malloc(sizeof(unsigned int) * mod_info->active_client_count);
 
-    mod_client_node_t *mod_node = NULL;
-
-    mod_node =     SN_LIST_MEMBER_HEAD(&(mod_info->pending_client_list->client_grp_node),
-                                         mod_client_node_t, list_element);
-
-    while (mod_node)
-    {
-      /*Fill client ID of all the peer clients*/
-      moderator_notify_rsp->client_ids[iter] = mod_node->peer_client_id;
-
-      mod_node   =   SN_LIST_MEMBER_NEXT(mod_node, mod_client_node_t,
-                                         list_element);
-      iter++;
-    }
+    /*Copy active client's id list into mod notify rsp msg*/
+    memcpy(moderator_notify_rsp->client_ids,
+           clnt_notify_alive_list.client_rsp_list, 
+           (sizeof(clnt_notify_alive_list.client_rsp_list[0]) * clnt_notify_alive_list.client_rsp_cntr));
 
     /*Filling actual alive clients count*/
-    moderator_notify_rsp->client_id_count = iter;
+    moderator_notify_rsp->client_id_count = clnt_notify_alive_list.client_rsp_cntr;
 
     write_record(client_info->client_fd, &client_info->server, &pdu);
+
+    /*Reset variables related to mod notify response*/
+    clnt_notify_alive_list.client_rsp_cntr = 0;
 
     /* Start timer for maintaining client's keepalive*/
     if (1 < mod_info->active_client_count)
@@ -578,11 +572,8 @@ void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_in
   /*Increment the counter as request from client is received*/
   echo_req_rcvd_in_notify_rsp_pending = echo_req_rcvd_in_notify_rsp_pending + 1;
 
-  /*allocate the moderator client node and store the information about the group active clients*/
-  mod_client_node_t *mod_node = (mod_client_node_t *) allocate_clnt_moderator_node(&client_info->moderator_info);
-
-  mod_node->peer_client_id = calc_key(&pdu->peer_addr);
-  memcpy(&mod_node->peer_client_addr, &pdu->peer_addr, sizeof(pdu->peer_addr)); 
+  /*Updating list of clients who have responded during moderator notify duration*/
+  clnt_notify_alive_list.client_rsp_list[clnt_notify_alive_list.client_rsp_cntr++] = calc_key(&pdu->peer_addr);
 
   /* Send notification response to server if all the clients have responded with echo req or TIMEOUT happened
    * This is the case where all clients have responded.*/
@@ -1001,7 +992,9 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
      /* Deactivate timer for this group on client node. Not deleting for
       * moderator since it makes no sense to run task collection timer for self*/
      if(client_info->is_moderator == false) {
-         timer_delete(client_info->active_group->timer_id);
+         if (client_info->active_group->timer_id) {
+             timer_delete(client_info->active_group->timer_id);
+         }
          client_info->client_status = FREE;
      }
      PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Req sent to Moderator. ", group_name);
@@ -1226,9 +1219,30 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
 
     /*Update moderator_info with active number of clients working on task*/
     if (client_info->moderator_info) {
-      client_info->moderator_info->fsm_state = MODERATOR_TASK_RSP_PENDING;
-      /*Number of clients working on this task*/
-      client_info->moderator_info->active_client_count = perform_task.client_id_count; 
+        client_info->moderator_info->fsm_state = MODERATOR_TASK_RSP_PENDING;
+        /*Number of clients working on this task*/
+        client_info->moderator_info->active_client_count = perform_task.client_id_count;
+
+        /*allocate the moderator client node and store the information about the working active clients*/
+        int i = 0;
+        char str[100] = {0};
+        struct sockaddr_in ipAddr;
+        char ipAddress[INET_ADDRSTRLEN];
+
+        while (i < perform_task.client_id_count) {
+            mod_client_node_t *mod_node = (mod_client_node_t *) allocate_clnt_moderator_node(&client_info->moderator_info);
+  
+            mod_node->peer_client_id = perform_task.client_ids[i];
+
+            ipAddr.sin_addr.s_addr = perform_task.client_ids[i];
+            ipAddr.sin_family = AF_INET;
+            ipAddr.sin_port = htons(atoi(PORT));
+            inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET_ADDRSTRLEN);
+            sprintf(str, "%s , %s", str, ipAddress);
+            memcpy(&mod_node->peer_client_addr, &ipAddr, sizeof(ipAddr));
+            i++;
+        }
+        PRINT("Working clients are - %s", str);
     }
 
     switch(perform_task.task_type)

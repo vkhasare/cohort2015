@@ -22,7 +22,7 @@
 #include "comm_primitives.h"
 #include "print.h"
 
-//#define port "3490"
+#define PORT "3490"
 #define TIMEOUT_SECS 5
 #define BACKLOG 30000
 #define MAXEVENTS 30000
