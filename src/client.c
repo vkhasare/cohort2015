@@ -996,8 +996,13 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
      pdu_t pdu;
      /* Sending task response for 1 group*/
      populate_task_rsp(&(pdu.msg),task_id, group_name, rtype ,result, my_id);
-     write_record(client_info->client_fd, &(client_info->active_group->moderator) , &pdu);
-     
+     moderator_information_t * moderator_info = client_info->moderator_info;
+     if(!(moderator_info != NULL && MATCH_STRING(moderator_info->group_name, group_name))){ 
+       write_record(client_info->client_fd, &(client_info->active_group->moderator) , &pdu);
+     } 
+     else {
+       handle_task_response(client_info->client_fd, &pdu);
+     } 
      /* Deactivate timer for this group on client node. Not deleting for
       * moderator since it makes no sense to run task collection timer for self*/
      if(client_info->is_moderator == false) {
@@ -1019,22 +1024,24 @@ void moderator_send_task_response_to_server(client_information_t *client_info) {
   /*client_info->moderator_info will always be valid here*/
   moderator_information_t * moderator_info = client_info->moderator_info;
   pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
-
+  /*Check if there is message to send*/
+  if(rsp_pdu){
   /*If response from all the clients is received, then send the collated result to Server.*/
-  if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count) {
-      write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
-
-      timer_delete(moderator_info->timer_id);
-
-      PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
-
-      /* Free the moderator, since moderator job is done now.
-       * and mark the client free
-       */
-      deallocate_moderator_list(&client_info);
-      client_info->is_moderator = FALSE;
-      client_info->client_status = FREE;
-   }
+    if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count) {
+        write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
+  
+        timer_delete(moderator_info->timer_id);
+  
+        PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
+  
+        /* Free the moderator, since moderator job is done now.
+         * and mark the client free
+         */
+        deallocate_moderator_list(&client_info);
+        client_info->is_moderator = FALSE;
+        client_info->client_status = FREE;
+     }
+  }
 }
 
 
@@ -1148,7 +1155,9 @@ void send_task_results(thread_args *args){
     result_t *answer = copy_result_from_args(args); 
 
     if(answer !=NULL) {
+
           send_task_results_to_moderator(args->client_info,args->group_name, args->task_id, TYPE_INT, answer, args->client_info->client_id);
+
     }
 }
 
