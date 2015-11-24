@@ -18,6 +18,7 @@ typedef enum{
   MODERATOR_SELECTED,
   GROUP_TASK_IN_PROGRESS,
   GROUP_TASK_COMPLETED,
+  TASK_IN_PROGRESS_MOD_SEL_PEND,
   STATE_NONE,
   STATE_MAX
 }server_state_t;
@@ -73,6 +74,8 @@ typedef struct {
   mcast_client_node_t *moderator_client;    /*Points to client which is moderator*/
   timer_t timer_id;                         /*Timer for monitoring moderator when task is in progress*/
   uint8_t heartbeat_remaining;              /*Non-zero count represents active moderator */
+  int number_of_working_clients;
+  unsigned int* working_clients;
   server_state_t fsm_state;                 /*Current state of group in FSM, to be used by server*/
   sn_list_element_t list_element;
   int task_type;                            /* A group can perform only one task at a time. Maintaining the task type */

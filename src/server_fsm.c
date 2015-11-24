@@ -56,6 +56,29 @@ void server_fsm_mod_selected (server_information_t *server_info,
 }
 
 /* <doc>
+ * void server_fsm_task_in_progress_mod_sel_pend(server_information_t *server_info,
+ *                                               server_event_t event,
+ *                                               void *fsm_msg)
+ * This is the fsm handler when server group is in task in progress state
+ * and moderator is detected as dead, then reselection of moderator should
+ * happen.
+ *
+ * </doc>
+ */
+void server_fsm_task_in_progress_mod_sel_pend(server_information_t *server_info,
+                                              server_event_t event,
+                                              void *fsm_msg)
+{
+   switch (event) {
+   case ECHO_RSP_RCVD_EVENT:
+          send_new_moderator_info(server_info,
+                                  fsm_msg);
+          break;
+   }
+
+}
+
+/* <doc>
  * void server_fsm_task_in_progress(server_information_t *server_info,
  *                                  server_event_t event,
  *                                  void *fsm_msg)
@@ -107,6 +130,9 @@ bool server_main_fsm(server_information_t *server_info,
           break;
    case GROUP_TASK_IN_PROGRESS:
           server_fsm_task_in_progress(server_info,event,fsm_msg);
+          break;
+   case TASK_IN_PROGRESS_MOD_SEL_PEND:
+          server_fsm_task_in_progress_mod_sel_pend(server_info,event,fsm_msg);
           break;
    default:
           /*ignore case*/

@@ -32,7 +32,8 @@ typedef enum struct_id{
     moderator_notify_req = 40,
     moderator_notify_rsp = 41,
     perform_task_req = 42,
-    task_response = 43
+    task_response = 43,
+    moderator_update_req = 44
 }e_struct_id_t; 
 
 typedef struct string{
@@ -99,6 +100,14 @@ typedef struct moderator_notify_rsp {
     unsigned int* client_ids;
 }moderator_notify_rsp_t;
 
+typedef struct moderator_update_req {
+    unsigned int moderator_id;
+    unsigned int moderator_port;
+    char* group_name;
+    int client_id_count;
+    unsigned int* client_ids;
+}moderator_update_req_t;
+
 typedef struct perform_task_req {
     char *group_name;
     unsigned int task_id;
@@ -148,6 +157,7 @@ typedef struct common_struct{
         leave_rsp_t leave_rsp;
         moderator_notify_req_t moderator_notify_req;
         moderator_notify_rsp_t moderator_notify_rsp;
+        moderator_update_req_t moderator_update_req;
         task_rsp_t task_rsp;
         perform_task_req_t perform_task_req;
     }idv;

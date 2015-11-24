@@ -258,6 +258,23 @@ int read_record(int sockfd, pdu_t *pdu){
     return pdu->msg.id;
 }
 
+bool process_moderator_update_req(XDR* xdrs, moderator_update_req_t* m){
+
+    if(xdrs->x_op == XDR_DECODE){
+        m->group_name = NULL;
+        m->client_ids = NULL;
+    }
+
+    int uint_res1 = (xdr_u_int(xdrs, &(m->moderator_id)));
+    int uint_res2 = (xdr_u_int(xdrs, &(m->moderator_port)));
+    int uint_res3   = (xdr_u_int(xdrs, &(m->client_id_count)));
+    int str_res =  xdr_string(xdrs, &(m->group_name), max_gname_len);
+    int uarray_res2 = xdr_array(xdrs, (char **)&(m->client_ids), &(m->client_id_count), max_client_in_group,
+                               (sizeof(unsigned int)),
+                               (xdrproc_t )xdr_u_int);
+    return (uint_res1 && uint_res2 && uint_res3 && str_res && uarray_res2);
+}
+
 bool process_moderator_notify_req(XDR* xdrs, moderator_notify_req_t* m){
 
     if(xdrs->x_op == XDR_DECODE){
@@ -462,6 +479,7 @@ bool process_comm_struct(XDR* xdrs, void* msg, ...){
         {leave_response,        (xdrproc_t)process_leave_resp},
         {moderator_notify_req,  (xdrproc_t)process_moderator_notify_req},
         {moderator_notify_rsp,  (xdrproc_t)process_moderator_notify_rsp},
+        {moderator_update_req,  (xdrproc_t)process_moderator_update_req},
         {perform_task_req,      (xdrproc_t)process_perform_task_req},
         {task_response,         (xdrproc_t)process_task_resp},
         { __dontcare__,         NULL }

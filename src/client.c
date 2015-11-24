@@ -22,6 +22,7 @@ static int handle_echo_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_response(const int, pdu_t *pdu, ...);
 static int handle_join_response(const int, pdu_t *pdu, ...);
 static int handle_mod_notification(const int, pdu_t *pdu, ...);
+static int handle_moderator_update(const int, pdu_t *pdu, ...);
 static int handle_task_response(const int, pdu_t *pdu, ...);
 static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
@@ -62,6 +63,9 @@ fptr client_func_handler(unsigned int msgType)
         break;
     case moderator_notify_req:
         func_name = handle_mod_notification;
+        break;
+    case moderator_update_req:
+        func_name = handle_moderator_update;
         break;
     case perform_task_req:
         func_name = handle_perform_task_req;
@@ -213,6 +217,91 @@ void handle_timeout(int signal, siginfo_t *si, void *uc)
     if(si == NULL)
         PRINT("***yikes!*** Signal context info found to be NULL.");
     handle_timeout_real(false, signal, si, NULL);
+}
+
+/* <doc>
+ * static
+ * int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
+ * This functions receives message from Server, regarding some
+ * update of moderator. It then updates the all clients/moderator
+ * regarding update sent by server.
+ *
+ * </doc>
+ */
+static
+int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
+{
+    client_information_t *client_info = NULL;
+    struct sockaddr_in mod;
+    char ipaddr[INET6_ADDRSTRLEN];
+    moderator_information_t *mod_info = NULL;
+    int i = 0;
+    char str[100] = {0};
+
+    comm_struct_t *rsp = &(pdu->msg);
+    moderator_update_req_t mod_update_req = rsp->idv.moderator_update_req;
+
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, client_information_t*, client_info);
+
+    /*Storing moderator IP in client info*/
+    mod.sin_family = AF_INET;
+    mod.sin_port = mod_update_req.moderator_port;
+    mod.sin_addr.s_addr = mod_update_req.moderator_id;
+
+    get_client_grp_node_by_group_name(&client_info, mod_update_req.group_name, &client_info->active_group);
+    memcpy(&client_info->active_group->moderator, (struct sockaddr *) &mod, sizeof(client_info->active_group->moderator));
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(mod)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Moderator_Update_Req: GRP - %s] New Moderator IP is %s", mod_update_req.group_name, ipaddr);
+
+    /*Start the recurring timer*/
+    if (client_info->client_id != mod_update_req.moderator_id)
+    {
+        start_recurring_timer(&(client_info->active_group->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
+    }
+    else
+    {
+       /*IT IS THE MODERATOR BLOCK.. UPDATE MODERATOR DATA STRUCTURES*/
+       PRINT("THIS CLIENT IS RE-SELECTED AS MODERATOR FOR GROUP %s", mod_update_req.group_name);
+
+       /*Allocate the moderator info*/
+       allocate_moderator_info(&client_info);
+       /*mark client node as moderator*/
+       client_info->is_moderator = TRUE;
+
+       mod_info = (client_info)->moderator_info;
+
+       strcpy(mod_info->group_name, mod_update_req.group_name);
+
+       /*Number of clients in group, to be monitored by moderator*/
+       mod_info->active_client_count = mod_update_req.client_id_count;
+
+       /**Register the moderator fsm handler and set the fsm state*/
+       mod_info->fsm = moderator_main_fsm;
+       /* Since modertor reselection can happen only during task execution of task,
+        * hence putting moderator in MODERATOR_TASK_RSP_PENDING state*/
+       mod_info->fsm_state = MODERATOR_TASK_RSP_PENDING;
+
+       while (i < mod_update_req.client_id_count) {
+          /*allocate the client node for pending list, to add the moderator node into it.*/
+          mod_client_node_t *mod_node = allocate_clnt_moderator_node(&(client_info->moderator_info));
+
+          struct sockaddr_in ipAddr;
+          char ipAddress[INET6_ADDRSTRLEN];
+
+          mod_node->peer_client_id = mod_update_req.client_ids[i];
+          ipAddr.sin_addr.s_addr = mod_update_req.client_ids[i];
+          ipAddr.sin_family = AF_INET;
+          ipAddr.sin_port = htons(atoi(PORT));
+          inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET6_ADDRSTRLEN);
+          sprintf(str, "%s , %s", str, ipAddress);
+          memcpy(&mod_node->peer_client_addr, &ipAddr, sizeof(ipAddr));
+          mod_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
+          i++;
+       }
+      PRINT("Moderator is working with clients - %s", str);
+    }
 }
 
 /* <doc>
@@ -602,7 +691,10 @@ void moderator_echo_req_task_rsp_pending_state(client_information_t *client_info
   mod_client_node_t *client_node = NULL;
 
   get_client_from_moderator_pending_list(client_info, calc_key(&pdu->peer_addr), &client_node);
-  client_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
+
+  if (client_node) {
+     client_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
+  }
 }
 
 
@@ -1017,7 +1109,9 @@ void moderator_send_task_response_to_server(client_information_t *client_info) {
   if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count) {
       write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
 
-      timer_delete(moderator_info->timer_id);
+      if (moderator_info->timer_id) {
+          timer_delete(moderator_info->timer_id);
+      }
 
       PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
 

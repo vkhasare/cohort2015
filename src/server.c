@@ -382,6 +382,9 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
                           ipaddr, INET6_ADDRSTRLEN);
                 PRINT("[UNREACHABLE_ALERT: GRP - %s] Moderator (%s) is unreachable. ", grp_node->group_name, ipaddr);
                 timer_delete(grp_node->timer_id);
+
+                grp_node->fsm_state = TASK_IN_PROGRESS_MOD_SEL_PEND;
+                moderator_selection(*server_info_local, grp_node);
             }
             //PRINT("***came here for decrementing: %d***", grp_node->heartbeat_remaining);
         }
@@ -394,6 +397,66 @@ void handle_timeout(int signal, siginfo_t *si, void *uc)
     if(si == NULL)
         PRINT("***yikes!***");
     handle_timeout_real(false, signal, si, NULL);
+}
+
+
+/* <doc>
+ * void send_new_moderator_info(server_information_t *server_info,
+ *                              void *fsm_msg)
+ * This sends the moderator update req to the multicast group to
+ * update them about the new moderator selected for the group.
+ *
+ * </doc>
+ */
+void send_new_moderator_info(server_information_t *server_info,
+                             void *fsm_msg)
+{
+
+    char ipaddr[INET6_ADDRSTRLEN];
+    fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+
+    /* fetch the group node pointer from fsm_data */
+    mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
+
+    group_node->fsm_state = GROUP_TASK_IN_PROGRESS;
+
+    pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+
+    /*Marking client node as Moderator*/
+    unsigned int clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
+
+    if (clientID <= 0){
+        return;
+    }
+
+    /* Changing the fsm state as moderator has been selected */
+    group_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
+
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("-------------[NOTIFICATION] NEW MODERATOR - Client %s is selected for group %s  ---------------", ipaddr, group_node->group_name);
+
+    /*Create the moderator notification request and inform the multicast group about the Group Moderator*/
+    pdu_t mod_update_pdu;
+    comm_struct_t *req = &(mod_update_pdu.msg);
+    moderator_update_req_t *mod_update_req = &(req->idv.moderator_update_req);
+
+    struct sockaddr_in *addr_in = (struct sockaddr_in *) &pdu->peer_addr;
+
+    req->id = moderator_update_req;
+    mod_update_req->moderator_id = clientID;
+    mod_update_req->moderator_port = addr_in->sin_port;
+    mod_update_req->group_name = group_node->group_name;
+
+    mod_update_req->client_id_count = group_node->number_of_working_clients;
+    mod_update_req->client_ids = (unsigned int *) malloc(sizeof(unsigned int) * mod_update_req->client_id_count);
+
+    memcpy(mod_update_req->client_ids, group_node->working_clients, 
+           group_node->number_of_working_clients * sizeof(group_node->working_clients[0]));
+
+    /*Send to multicast group*/
+    write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &mod_update_pdu);
+
+    PRINT("[Moderator_Update_Req: GRP - %s] Moderator Update Request sent to group %s.", mod_update_req->group_name , mod_update_req->group_name);
 }
 
 /* <doc>
@@ -522,6 +585,14 @@ void mcast_start_task_distribution(server_information_t *server_info,
         req.idv.perform_task_req.client_ids[count] = pdu->msg.idv.moderator_notify_rsp.client_ids[count];
     }
 
+    /*Copy list of working clients in group node*/
+    group_node->number_of_working_clients = pdu->msg.idv.moderator_notify_rsp.client_id_count;
+
+    group_node->working_clients = (unsigned int *) malloc(sizeof(unsigned int) * group_node->number_of_working_clients);
+    memcpy(group_node->working_clients,
+           pdu->msg.idv.moderator_notify_rsp.client_ids,
+           group_node->number_of_working_clients * (sizeof(pdu->msg.idv.moderator_notify_rsp.client_ids[0])));
+
     req.idv.perform_task_req.task_count = task_count;
     req.idv.perform_task_req.task_set = (unsigned int *) malloc(sizeof(unsigned int) * task_count);
 
@@ -623,6 +694,11 @@ void mcast_handle_task_response(server_information_t *server_info,
   
   /*Resetting mod_client pointer to avoid havoc in moderator_selection*/
   group_node->moderator_client = NULL;
+
+  /*Free if group node has maintained array list of working clients*/
+  if (group_node->working_clients) {
+    free(group_node->working_clients);
+  }
 }
 
 /* <doc>
@@ -892,9 +968,6 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
     size_t iter;
     mcast_client_node_t *client_node = NULL;
 
-    /*Group is in moderator selection pending state*/
-    group_node->fsm_state = MODERATOR_SELECTION_PENDING;
-
     if(group_node->moderator_client == NULL)
     {
         /* This check/design mandates that when task has been completed and moderator 
@@ -958,6 +1031,10 @@ void assign_task(server_information_t *server_info, char *grp_name, int task_typ
    }
    
    group_node->task_type = task_type;
+
+   /*Group is in moderator selection pending state*/
+   group_node->fsm_state = MODERATOR_SELECTION_PENDING;
+
    /*Select the moderator for the multicast group*/
    moderator_selection(server_info, group_node);
 }
