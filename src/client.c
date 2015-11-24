@@ -889,26 +889,46 @@ int main(int argc, char * argv[])
    
     struct sockaddr_storage their_addr;
     socklen_t sin_size;
-    char ipStr[INET6_ADDRSTRLEN];
-    char port[6], *serverAddr;
+    char clientAddress[INET6_ADDRSTRLEN];
+    char port[6], client_port[6], *serverAddr;
     struct sockaddr myIp;
-
+    struct sockaddr_in saa;
     client_information_t *client_info = NULL;
 
     /* Allocates client_info */
     allocate_client_info(&client_info);
 
+    if (argc != 5)
+    {
+      PRINT("Usage: %s <server_IP> <server_port> <group_name>\n", argv[0]);
+      /* server_IP/server_port not provided. Attempting talk with server on same machine
+       * with default port. */
+//      argv[1] = ipStr;
+      argv[2] = "3490";
+      argv[3] = "G1,G2";
+      argv[4] = "eth0";
+    }
+    serverAddr = argv[1];
+    strcpy(port, argv[2]);
+    strcpy(group_name,argv[3]);
+    strcpy(clientAddress, argv[4]);
+
     /* Binding to any random user space port for client.*/
-    sprintf(port, "%d", htons(0)); 
+    sprintf(client_port, "%d", htons(0)); 
 
-    /*Fetching eth0 IP for client*/
-    get_my_ip("eth0", &myIp);
-    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(myIp)), ipStr, INET6_ADDRSTRLEN);
-
-    client_info->client_id = calc_key(&myIp);
+    /*decide on client address depending upon user provided client address or eth0 address*/
+    if (!strcmp(clientAddress, "eth0")) {
+       /*Fetching eth0 IP for client*/
+       get_my_ip(clientAddress, &myIp);
+       inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(myIp)), clientAddress, INET6_ADDRSTRLEN);
+       client_info->client_id = calc_key(&myIp);
+    } else {
+       inet_pton(AF_INET, clientAddress, &(saa.sin_addr));
+       client_info->client_id = saa.sin_addr.s_addr;
+    }
 
     /* Creating Client socket*/    
-    cfd = create_and_bind(ipStr, port, CLIENT_MODE);
+    cfd = create_and_bind(clientAddress, client_port, CLIENT_MODE);
 
     if (cfd == -1)
     {
@@ -918,20 +938,6 @@ int main(int argc, char * argv[])
 
     /* Socket is made non-blocking */
     status = make_socket_non_blocking(cfd);
-
-
-    if (argc != 4)
-    {
-      PRINT("Usage: %s <server_IP> <server_port> <group_name>\n", argv[0]);
-      /* server_IP/server_port not provided. Attempting talk with server on same machine
-       * with default port. */
-      argv[1] = ipStr;
-      argv[2] = "3490";
-      argv[3] = "G1";
-    }
-    serverAddr = argv[1];
-    strcpy(port, argv[2]);
-    strcpy(group_name,argv[3]);
 
     /* Creating sockaddr_in struct for Server entry and keeping it in client_info */
     client_info->server.sin_family = AF_INET;
@@ -944,7 +950,7 @@ int main(int argc, char * argv[])
         exit(0);
     }
 
-    PRINT("..WELCOME TO CLIENT (%s)..", ipStr);
+    PRINT("..WELCOME TO CLIENT (%s)..", clientAddress);
     PRINT("\r   <Use \"show help\" to see all supported clis.>\n");
 
     PRINT_PROMPT("[client] ");
