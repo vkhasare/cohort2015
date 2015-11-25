@@ -29,10 +29,6 @@ typedef enum{
   EVENT_MAX
 }moderator_event_t;
 
-typedef enum {
-  FIND_PRIME_NUMBERS = 1
-} task_type_t;
- 
 typedef struct {
   sn_list_t client_grp_node;
 } client_grp_t;

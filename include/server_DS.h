@@ -79,6 +79,7 @@ typedef struct {
   server_state_t fsm_state;                 /*Current state of group in FSM, to be used by server*/
   sn_list_element_t list_element;
   int task_type;                            /* A group can perform only one task at a time. Maintaining the task type */
+  char *task_set_filename;                  /* A group can perform only one task at a time. Maintaining the task set filename */
 } mcast_group_node_t;
 
 /* Declaration of Server Info - Main Data structure on Server*/
