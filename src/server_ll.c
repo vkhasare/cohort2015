@@ -404,10 +404,7 @@ void display_mcast_client_node(mcast_group_node_t **group_node)
           "\n\tClient Address: %s \t Client FD: %u",
           ipaddr, client_node->client_id);
       } else {
-          sprintf(buf,
-          "\n\tClient Address: %s \t Client Status: %s",
-          ipaddr,
-          (client_node->av_status == CLFREE)? "Free":"Busy");
+          sprintf(buf, "\n\tClient Address: %s", ipaddr);
       }
 
       SIMPLE_PRINT(buf);
@@ -429,7 +426,7 @@ void display_mcast_group_node(server_information_t **server_info, display_show_t
 {
   mcast_group_node_t *group_node = NULL;
   char buf[100];
-  char groupIP[INET_ADDRSTRLEN];
+  char groupIP[INET6_ADDRSTRLEN], moderatorIP[INET6_ADDRSTRLEN];
 
    group_node =     SN_LIST_MEMBER_HEAD(&((*server_info)->server_list->group_node),
                                         mcast_group_node_t,
@@ -438,9 +435,22 @@ void display_mcast_group_node(server_information_t **server_info, display_show_t
    while (group_node)
    {
      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)(&group_node->grp_mcast_addr)), groupIP, INET6_ADDRSTRLEN);
-     sprintf(buf,
-     "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d",
-     group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);
+
+     if (group_node->moderator_client) {
+        inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(group_node->moderator_client->client_addr)), moderatorIP, INET6_ADDRSTRLEN);
+     } else {
+        sprintf(moderatorIP, "None");
+     }
+
+     if(debug_mode) {
+        sprintf(buf,
+        "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d",
+        group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);
+     } else {
+        sprintf(buf,
+        "\n\n\rGroup Name: %s   Client Count: %d   Moderator: %s",
+        group_node->group_name, group_node->number_of_clients, moderatorIP);
+     }
 
      SIMPLE_PRINT(buf);
 
@@ -465,18 +475,30 @@ void display_mcast_group_node(server_information_t **server_info, display_show_t
 void display_mcast_group_node_by_name(server_information_t **server_info, char *grp_name)
 {
   char buf[100];
-  char groupIP[INET_ADDRSTRLEN];
+  char groupIP[INET_ADDRSTRLEN], moderatorIP[INET6_ADDRSTRLEN];
 
   mcast_group_node_t *group_node = NULL;
   get_group_node_by_name(server_info,grp_name,&group_node);
 
    if (group_node)
    {
-      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(group_node->grp_mcast_addr)), groupIP, INET6_ADDRSTRLEN);
+      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)(&group_node->grp_mcast_addr)), groupIP, INET6_ADDRSTRLEN);
 
-      sprintf(buf,
-      "\n\n\rGroup Name: %s \t Group IP: %s   Group Port: %d   Client Count: %d",
-      group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);
+      if (group_node->moderator_client) {
+         inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(group_node->moderator_client->client_addr)), moderatorIP, INET6_ADDRSTRLEN);
+      } else {
+         sprintf(moderatorIP, "None");
+      }
+
+      if(debug_mode) {
+         sprintf(buf,
+         "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d",
+         group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);
+      } else {
+         sprintf(buf,
+         "\n\n\rGroup Name: %s   Client Count: %d   Moderator: %s",
+         group_node->group_name, group_node->number_of_clients, moderatorIP);
+      }
 
       SIMPLE_PRINT(buf);
 

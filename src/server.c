@@ -383,6 +383,14 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
                 PRINT("[UNREACHABLE_ALERT: GRP - %s] Moderator (%s) is unreachable. ", grp_node->group_name, ipaddr);
                 timer_delete(grp_node->timer_id);
 
+                /*Resetting old moderator/client info*/
+                unsigned int clientID = grp_node->moderator_client->client_id;
+                RBT_tree *tree = (RBT_tree*) (*server_info_local)->client_RBT_head;
+                RBT_node *rbNode = RBFindNodeByID(tree, clientID);
+                rbNode->av_status = RB_FREE;
+                rbNode->is_moderator = FALSE;
+               
+                /*Initiate new moderator selection process*/ 
                 grp_node->fsm_state = TASK_IN_PROGRESS_MOD_SEL_PEND;
                 moderator_selection(*server_info_local, grp_node);
             }
@@ -853,7 +861,7 @@ bool activate_moderator_keepalive(server_information_t *server_info,
                                   unsigned int clientID)
 {
     RBT_tree *tree = (RBT_tree*) server_info->client_RBT_head;
-    RBT_node *rbNode = RBFindNodeByID(tree, clientID);;
+    RBT_node *rbNode = RBFindNodeByID(tree, clientID);
     mcast_client_node_t *client_node = NULL;
 
     if(!rbNode)
