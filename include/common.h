@@ -99,6 +99,11 @@ typedef struct grname_ip_mapping{
     unsigned int port_no;
 }grname_ip_mapping_t; 
   
+typedef enum {
+  INVALID_TASK_TYPE = 0,
+  FIND_PRIME_NUMBERS = 1
+} task_type_t;
+ 
 typedef int (*fptr)(int, pdu_t *, ...);
 int create_and_bind(char *machine_addr, char *machine_port, int oper_mode);
 int make_socket_non_blocking (int sfd);

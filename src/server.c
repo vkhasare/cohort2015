@@ -17,7 +17,7 @@ static int handle_join_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...);
-static void assign_task(server_information_t *, char *, int);
+static void assign_task(server_information_t *, char *, int, char *);
 static void moderator_selection(server_information_t *, mcast_group_node_t *);
 
 /* <doc>
@@ -515,11 +515,13 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 unsigned int get_task_count(const char* filename,unsigned int** task_set)
 {
     FILE *fp = NULL, *cmd_line = NULL;
-    uint32_t count, i;
-    char element[16], cmd[256];
+    uint32_t count = 0, i, j = 0;
+    char element[1000], cmd[256];
+    char *ptr;
     
-    strcpy(cmd, "wc -l ");
+    strcpy(cmd, "fgrep -o , ");
     strcat(cmd, filename);
+    strcat(cmd, " | wc -l");
     cmd_line = popen (cmd, "r");
     fscanf(cmd_line, "%i", &count);
     pclose(cmd_line);
@@ -527,11 +529,21 @@ unsigned int get_task_count(const char* filename,unsigned int** task_set)
     *task_set = (unsigned int *) malloc(sizeof(unsigned int) * count);
     
     fp = fopen(filename, "r");
-    for(i = 0; i < count; i++){
+    
+    for(i = 0; i < count/10; i++){
         fscanf(fp, "%s", element);
-        (* task_set)[i] =strtoul(element,NULL,10);
+        ptr = strtok(element,",");
+        j = 0;
+        (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
+        while(j < 9)
+        {
+          ptr = strtok(NULL,",");
+          j++;
+          (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
+        }
     }
-    fclose(fp);
+    if(fp)
+      fclose(fp);
 
   return count;
 }
@@ -564,7 +576,10 @@ void mcast_start_task_distribution(server_information_t *server_info,
     pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
     /* Get the task set for prime numbers */
-    task_count = get_task_count("src/task_set.txt", &task_set);
+    task_count = get_task_count(group_node->task_set_filename, &task_set);
+
+    if(!task_count)
+      return;
 
     req.idv.perform_task_req.group_name= malloc(sizeof(char)*strlen(group_node->group_name));
     strcpy(req.idv.perform_task_req.group_name, group_node->group_name);
@@ -699,6 +714,11 @@ void mcast_handle_task_response(server_information_t *server_info,
   if (group_node->working_clients) {
     free(group_node->working_clients);
   }
+
+  /* Free the filename */
+  free(group_node->task_set_filename);
+
+  group_node->task_type = INVALID_TASK_TYPE;
 }
 
 /* <doc>
@@ -1004,14 +1024,14 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
 
 /* <doc>
  * static
- * void assign_task(server_information_t *server_info, char *grp_name, int task_type)
+ * void assign_task(server_information_t *server_info, char *grp_name, int task_type, char *filename)
  * This function takes parameter as multicast group name and type
  * of task to be done. It then multicasts the task request.
  *
  * </doc>
  */
 static
-void assign_task(server_information_t *server_info, char *grp_name, int task_type)
+void assign_task(server_information_t *server_info, char *grp_name, int task_type, char *filename)
 {
     mcast_group_node_t *group_node = NULL;
 
@@ -1031,6 +1051,9 @@ void assign_task(server_information_t *server_info, char *grp_name, int task_typ
    }
    
    group_node->task_type = task_type;
+
+   group_node->task_set_filename = (char*) malloc(sizeof(char) * strlen(filename)); 
+   strcpy(group_node->task_set_filename, filename);
 
    /*Group is in moderator selection pending state*/
    group_node->fsm_state = MODERATOR_SELECTION_PENDING;
@@ -1164,6 +1187,7 @@ void server_stdin_data(int fd, server_information_t *server_info)
     else if(strncmp(read_buffer,"task",4) == 0)
     {
         int task_type = 0;
+        char filename[100];
         strcpy(read_buffer_copy,read_buffer);
         ptr = strtok(read_buffer_copy," ");
         while(i < 1)
@@ -1173,7 +1197,28 @@ void server_stdin_data(int fd, server_information_t *server_info)
         }
 
         if(ptr)
-          task_type = atoi(ptr);
+        {
+          if(strcmp(ptr,"prime") == 0)
+            task_type = FIND_PRIME_NUMBERS;
+          else
+            task_type = INVALID_TASK_TYPE;
+        }
+
+        /* Fetch the filename */
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        i = 0;
+        while(i < 5)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        if(ptr)
+          strcpy(filename,ptr);
+        else
+          strcpy(filename,"task_set/prime_set1.txt");
+        
+        /* Fetch the group name */
 
         strcpy(read_buffer_copy,read_buffer);
         ptr = strtok(read_buffer_copy," ");
@@ -1188,11 +1233,16 @@ void server_stdin_data(int fd, server_information_t *server_info)
             PRINT("Error: Unrecognized Command.\n");
             return;
         }
-        for(i = 0;i < num_groups; i++)
+        if(task_type)
         {
+          for(i = 0;i < num_groups; i++)
+          {
             if(strcmp(ptr,mapping[i].grname) == 0)
-              assign_task(server_info, mapping[i].grname, task_type);
+              assign_task(server_info, mapping[i].grname, task_type, filename);
+          }
         }
+        else
+          PRINT("Please enter valid task type.\n");
     }
     else if(strncmp(read_buffer,"enable debug\0",12) == 0)
     {
