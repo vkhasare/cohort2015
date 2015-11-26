@@ -33,7 +33,8 @@ typedef enum struct_id{
     moderator_notify_rsp = 41,
     perform_task_req = 42,
     task_response = 43,
-    moderator_update_req = 44
+    moderator_update_req = 44,
+    unknown_msg
 }e_struct_id_t; 
 
 typedef struct string{
