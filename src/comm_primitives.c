@@ -227,9 +227,10 @@ void write_record(int sockfd, struct sockaddr_in *destAddr, pdu_t *pdu){
  * </doc>
  */
 int read_record(int sockfd, pdu_t *pdu){
-    XDR xdrs ;
+    XDR xdrs;
     int res;
-    
+    pdu->msg.id = unknown_msg; /*initializing msg type here*/
+ 
     xdrs.x_op = XDR_DECODE;
 
     char      msgbuf[MAXMSGSIZE];
