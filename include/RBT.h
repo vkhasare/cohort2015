@@ -16,6 +16,7 @@ typedef struct RBT_node {
   struct RBT_node* left;
   struct RBT_node* right;
   struct RBT_node* parent;
+  unsigned int capability;
 } RBT_node;
 
 
@@ -37,7 +38,7 @@ typedef struct RBT_tree {
 RBT_tree* RBTreeCreate(int  (*CompFunc)(unsigned int, unsigned int),
            void (*DestFunc)(unsigned int), 
            void (*PrintFunc)(unsigned int));
-RBT_node * RBTreeInsert(RBT_tree*, unsigned int , struct sockaddr *, unsigned int, avail_state, void *);
+RBT_node * RBTreeInsert(RBT_tree*, unsigned int , struct sockaddr *, unsigned int, avail_state, void *, unsigned int);
 void RBTreePrint(RBT_tree*);
 void RBDelete(RBT_tree* , RBT_node* );
 void RBTreeDestroy(RBT_tree*);

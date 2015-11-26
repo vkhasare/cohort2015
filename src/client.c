@@ -529,6 +529,7 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
  */
 static void send_join_group_req(client_information_t *client_info, char *group_name)
 {
+       unsigned int capability = 1;
 
        /* If client has already joined requested group, then no need to send join request*/
        if (IS_GROUP_IN_CLIENT_LL(&client_info,group_name))
@@ -541,8 +542,11 @@ static void send_join_group_req(client_information_t *client_info, char *group_n
           comm_struct_t *req = &(pdu.msg);
 
           req->id = join_request;
+          
+          capability = generate_random_capability();
+          
           /* Sending join request for 1 group*/
-          populate_join_req(req, &group_name, 1);
+          populate_join_req(req, &group_name, 1, capability);
           write_record(client_info->client_fd, &client_info->server, &pdu);
 
           PRINT("[Join_Request: GRP - %s] Join Group Request sent to Server.", group_name);
@@ -894,6 +898,7 @@ int main(int argc, char * argv[])
     struct sockaddr myIp;
     struct sockaddr_in saa;
     client_information_t *client_info = NULL;
+    unsigned int capability;
 
     /* Allocates client_info */
     allocate_client_info(&client_info);
@@ -1026,7 +1031,10 @@ int main(int argc, char * argv[])
     }
 
     pdu_t pdu;
-    populate_join_req(&(pdu.msg), gr_list, iter);
+    
+    capability = generate_random_capability();
+          
+    populate_join_req(&(pdu.msg), gr_list, iter, capability);
     write_record(client_info->client_fd, &client_info->server, &pdu);
 
     while (TRUE) {

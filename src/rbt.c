@@ -157,7 +157,7 @@ void TreeInsertHelp(RBT_tree* tree, RBT_node* z) {
  *
  * </doc>
  */
-RBT_node * RBTreeInsert(RBT_tree* tree, unsigned int key, struct sockaddr *c_addr, unsigned int port, avail_state status, void *grp_ptr) {
+RBT_node * RBTreeInsert(RBT_tree* tree, unsigned int key, struct sockaddr *c_addr, unsigned int port, avail_state status, void *grp_ptr, unsigned int capability) {
   RBT_node * y;
   RBT_node * x;
   RBT_node * newNode;
@@ -182,6 +182,9 @@ RBT_node * RBTreeInsert(RBT_tree* tree, unsigned int key, struct sockaddr *c_add
   x->av_status = status;
   /*client will be free initially*/
   x->is_moderator = FALSE;
+
+  /* Initialise the capability */
+  x->capability = capability;
 
   TreeInsertHelp(tree,x);
   newNode=x;

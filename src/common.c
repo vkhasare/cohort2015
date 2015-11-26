@@ -296,3 +296,19 @@ void start_recurring_timer(timer_t *timer_id, uint8_t interval, uint32_t sigval)
     if (timer_settime(*timer_id, 0, &its, NULL) == -1)
          errExit("timer_settime");
 }
+
+/* <doc>
+ * unsigned int generate_random_capability(void)
+ * This function returns a random capability between 1-3 for a client
+ * </doc>
+ */
+unsigned int generate_random_capability(void)
+{
+  unsigned int number = 1;
+  
+  srand(time(NULL));
+  number = (rand() % 3) + 1;
+
+  return number;
+}
+

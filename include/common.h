@@ -121,4 +121,5 @@ void get_my_ip(const char *, struct sockaddr *);
 int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name);
 void start_oneshot_timer(timer_t *t, uint8_t interval, uint32_t sigval);
 void start_recurring_timer(timer_t *t, uint8_t interval, uint32_t sigval);
+unsigned int generate_random_capability(void);
 
