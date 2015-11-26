@@ -23,4 +23,21 @@ receiver.c                  -->         Multicast logic of client
 utility/doc-extractor.py    -->       Generates the code documentation
 
 
+***********************************************************
+***************HOW TO EXECUTE SCALE BINARIES***************
+***********************************************************
+Step 1> SSH to any rtp machine. For example, rtppnkvm4-vm4
+
+Step 2> Compile server and client using -
+        make STRIPPED=1
+
+Step 3> Run scale_server on RTP machine
+       ./scale_server --up
+
+Step 4> Run scale_client on same RTP machine
+        ./scale_client -i 32 --num 20
+
+        Step4 will simulate 20 clients. To deconfigure IPs, use
+        ./scale_client -i 32 --num 20 --down
+
 

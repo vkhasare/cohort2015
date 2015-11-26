@@ -572,6 +572,13 @@ bool remove_client_from_mcast_group_node(server_information_t **server_info, mca
                     deallocate_mcast_client_node(group_node, client_node);
 
                     group_node->number_of_clients--;
+
+                    /*deallocate client_info if there are no clients present for the group*/
+                    if (SN_LIST_LENGTH(&group_node->client_info->client_node) == 0)
+                    {
+                        free(group_node->client_info);
+                        group_node->client_info = NULL;
+                    }
                     return TRUE;
                }
                  client_node = SN_LIST_MEMBER_NEXT(client_node,

@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+
+###########################################################
+#               --SCALABLE SERVER--                      ##
+#                                                        ##
+###########################################################
+
+import sys, getopt
+import os, threading
+import re, time
+import smtplib
+from datetime import date, timedelta
+
+serverIP = "30.30.30.1"
+serverPORT = "3490"
+interfaceNumber = 0
+
+#Fire linux command
+def fire(cmd):
+    os.system(cmd)
+
+def deconfigureIP():
+    global serverIP
+    global interfaceNumber
+    cmd = "ifconfig eth0:" + str(interfaceNumber) + " " + serverIP + " netmask 255.255.0.0 down"
+    print(cmd)
+    fire (cmd)
+
+def configureIP():
+    global serverIP
+    global interfaceNumber
+    cmd = "ifconfig eth0:" + str(interfaceNumber) + " " + serverIP + " netmask 255.255.0.0 up"
+    print(cmd)
+    fire (cmd)
+
+def startServer():
+    global serverIP
+    global serverPORT
+    cmd = "./server " + serverIP + " " + serverPORT
+    print(cmd)
+    fire(cmd)
+
+def main(argv):
+    turnDownInterfaces = False
+
+    try:
+        opts, args = getopt.getopt(argv,"h:",["down","help","up"])
+    except getopt.GetoptError:
+        print "\nInvalid Command. Refer utility help."
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt in ("--help"):
+            print("./scale_server [--down]")
+            sys.exit()
+        elif opt in ("--down"):
+            turnDownInterfaces = True
+
+    if turnDownInterfaces:
+       deconfigureIP()
+    else:
+       startServer()
+
+if __name__ == "__main__":
+   if len(sys.argv) > 1:
+       main(sys.argv[1:])
+   else:
+       print "\nInvalid Command. Refer utility help."
+
+

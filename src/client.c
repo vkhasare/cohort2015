@@ -495,7 +495,7 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
 
         /* Register multicast FD with EPOLL for listening events.*/
         event->data.fd = mcast_fd;
-        event->events = EPOLLIN|EPOLLET;
+        event->events = EPOLLIN;
 
         status = epoll_ctl(client_info->epoll_fd, EPOLL_CTL_ADD, mcast_fd, event);
 
@@ -989,7 +989,7 @@ int main(int argc, char * argv[])
     }
 
     event.data.fd = cfd;
-    event.events = EPOLLIN|EPOLLET;
+    event.events = EPOLLIN;
 
     /* Register client FD with epoll*/
     status = epoll_ctl(efd, EPOLL_CTL_ADD, cfd, &event);

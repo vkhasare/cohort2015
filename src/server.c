@@ -1052,7 +1052,7 @@ void assign_task(server_information_t *server_info, char *grp_name, int task_typ
       PRINT("Group %s is currently Busy.", grp_name);
       return;
    } 
-   else if (SN_LIST_LENGTH(&group_node->client_info->client_node) == 0)
+   else if (group_node->client_info == NULL)
    {
       PRINT("No clients present in the group.");
       return;
@@ -1340,7 +1340,7 @@ int main(int argc, char * argv[])
     }
 
     event.data.fd = sfd;
-    event.events = EPOLLIN|EPOLLET;
+    event.events = EPOLLIN;
 
     status = epoll_ctl(efd, EPOLL_CTL_ADD, sfd, &event);
    
