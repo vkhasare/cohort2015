@@ -157,7 +157,7 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
     char *group_name;
     msg_cause cause;
     server_information_t *server_info = NULL;
-    unsigned int clientID = 0;
+    unsigned int clientID = 0, capability = 1;
     char ipaddr[INET6_ADDRSTRLEN];
     RBT_tree *tree = NULL;
     RBT_node *newNode = NULL;
@@ -173,6 +173,8 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
 
     resp->id = join_response;
     join_rsp->num_groups = join_req.num_groups;
+
+    capability = join_req.capability;
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
 
@@ -207,7 +209,7 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
                  newNode = RBFindNodeByID(tree, clientID);
                  /* Add in RBT if it is a new client, else update the grp list of client */
                  if (!newNode) {
-                     newNode = RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, RB_FREE, group_node);
+                     newNode = RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, RB_FREE, group_node, capability);
                  } else {
                     /* Update group_list of the client node */
                     rb_info_t *rb_info_list = (rb_info_t*) newNode->client_grp_list;

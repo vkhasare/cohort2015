@@ -68,6 +68,7 @@ typedef struct echo_response{
 typedef struct join_request{
     unsigned int num_groups;
     string_t* group_ids; 
+    unsigned int capability;
 }join_req_t;
 
 typedef struct join_response{

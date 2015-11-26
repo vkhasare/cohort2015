@@ -63,10 +63,12 @@ void print_join_rsp(join_rsp_t* m){
     return;
 }
 
-void populate_join_req(comm_struct_t* m, char** grnames, int num_groups){
+void populate_join_req(comm_struct_t* m, char** grnames, int num_groups, unsigned int capability){
     m->id=join_request;
     int iter;
     m->idv.join_req.num_groups = num_groups; 
+
+    m->idv.join_req.capability = capability;
 //    m->idv.join_req.group_ids = (string_t*) malloc (sizeof(string_t) * num_groups);
     m->idv.join_req.group_ids = MALLOC_STR_IE(num_groups);
     for(iter = 0; iter < num_groups; iter++){
@@ -347,7 +349,8 @@ bool process_join_req(XDR* xdrs, join_req_t* m){
     return (xdr_u_int(xdrs, &(m->num_groups)) &&
             xdr_array(xdrs, (char **)&(m->group_ids), &(m->num_groups), max_groups,
                              (sizeof(string_t)),
-                             (xdrproc_t )xdr_gname_string));
+                             (xdrproc_t )xdr_gname_string) &&
+            xdr_u_int(xdrs, &(m->capability)));
 }
 
 bool process_leave_req(XDR* xdrs, leave_req_t* m){
