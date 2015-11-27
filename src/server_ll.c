@@ -271,7 +271,8 @@ mcast_group_node_t *allocate_mcast_group_node(server_information_t **server_info
    new_group_node->client_info = NULL;
    new_group_node->number_of_clients = 0;
    new_group_node->group_port = INT_MAX;
-   new_group_node->fsm_state = STATE_NONE; 
+   new_group_node->fsm_state = STATE_NONE;
+   new_group_node->grp_capability = 0;
    SN_LIST_MEMBER_INSERT_HEAD(&((*server_info)->server_list->group_node),
                              new_group_node,
                              list_element);
@@ -444,8 +445,8 @@ void display_mcast_group_node(server_information_t **server_info, display_show_t
 
      if(debug_mode) {
         sprintf(buf,
-        "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d",
-        group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);
+        "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d   Capability: %d",
+        group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients, group_node->grp_capability);
      } else {
         sprintf(buf,
         "\n\n\rGroup Name: %s   Client Count: %d   Moderator: %s",
@@ -492,8 +493,8 @@ void display_mcast_group_node_by_name(server_information_t **server_info, char *
 
       if(debug_mode) {
          sprintf(buf,
-         "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d",
-         group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients);
+         "\n\n\rGroup Name: %s    Group IP: %s    Group Port: %d   Client Count: %d   Capability: %d",
+         group_node->group_name, groupIP, group_node->group_port, group_node->number_of_clients, group_node->grp_capability);
       } else {
          sprintf(buf,
          "\n\n\rGroup Name: %s   Client Count: %d   Moderator: %s",

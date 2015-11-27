@@ -114,6 +114,8 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
               if (remove_rb_grp_node(&rb_info_list,group_name, &ll_grp_node)) {
                   cause = ACCEPTED;
 
+                  ll_grp_node->grp_capability -= rbNode->capability;
+
                   /*remove node from ll list*/
                   remove_client_from_mcast_group_node(&server_info, ll_grp_node, clientID);
 
@@ -193,6 +195,9 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
 
         if (group_node) {
              cause = ACCEPTED;
+
+             /*As client joins a group, re-adjust capability of group*/
+             group_node->grp_capability += capability;
 
              clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
@@ -305,6 +310,8 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
                                             void *fsm_msg)
 {
   mcast_client_node_t *client_node = NULL;
+  RBT_tree *tree = NULL;
+  RBT_node *rbNode = NULL;
   fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
 
   /* fetch the group node pointer from fsm_data */
@@ -327,6 +334,11 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
                   get_in_addr((struct sockaddr *)&cl_addr), 
                   ipaddr, INET6_ADDRSTRLEN);
           PRINT("[UNREACHABLE_ALERT: GRP - %s] Client (%s) is unreachable. ", group_node->group_name, ipaddr);
+
+          /*As client went down, re-adjust the group capability*/
+          tree = (RBT_tree*) server_info->client_RBT_head;
+          rbNode = RBFindNodeByID(tree, echo_req->client_ids[iter]);
+          group_node->grp_capability -= rbNode->capability;
       }
   }
   else
@@ -348,7 +360,7 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
 {
     static server_information_t **server_info_local;
     mcast_group_node_t *grp_node = NULL;
-    
+
     if(init)
     {
         /* Context restoration is possible in very limited context with signals. In order
@@ -391,7 +403,10 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
                 RBT_node *rbNode = RBFindNodeByID(tree, clientID);
                 rbNode->av_status = RB_FREE;
                 rbNode->is_moderator = FALSE;
-               
+
+                /*As client went down, re-adjust the group capability*/
+                grp_node->grp_capability -= rbNode->capability;
+       
                 /*Initiate new moderator selection process*/ 
                 grp_node->fsm_state = TASK_IN_PROGRESS_MOD_SEL_PEND;
                 moderator_selection(*server_info_local, grp_node);
