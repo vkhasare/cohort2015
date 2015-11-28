@@ -72,6 +72,7 @@ typedef struct {
 /*Group Node - This node maintains information related to multicast group.*/
 typedef struct {
   char *group_name;                         /*Multicast group name*/
+  unsigned int grp_capability;                       /*Capability of group = capabilties of all clients in that group*/
   int number_of_clients;                    /*No. of clients under the group*/
   struct sockaddr_in grp_mcast_addr;        /*Group Multicast Address*/
   unsigned int group_port;                  /*Group Multicast Port*/
