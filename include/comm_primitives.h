@@ -5,19 +5,29 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#define MALLOC_STR_IE(count)                        \
- ({                                                 \
-   (string_t*) malloc (sizeof(string_t) * count);   \
+#define MALLOC_STR_IE(count)                                \
+ ({                                                         \
+   (string_t*) malloc (sizeof(string_t) * count);           \
  })
 
-#define MALLOC_UARRAY_IE(count)                       \
- ({                                                 \
-   (uarray_t*) malloc (sizeof(uarray_t) * count);   \
+#define MALLOC_UARRAY_IE(count)                             \
+ ({                                                         \
+   (uarray_t*) malloc (sizeof(uarray_t) * count);           \
  })
 
-#define MALLOC_STR                                  \
- ({                                                 \
-   (char*) malloc(sizeof(char) * max_gname_len);    \
+#define MALLOC_STR                                          \
+ ({                                                         \
+   (char*) malloc(sizeof(char) * max_gname_len);            \
+ })
+
+#define MALLOC_UINT(count)                                  \
+ ({                                                         \
+   (unsigned int*) malloc (sizeof(unsigned int) * count);   \
+ })
+
+#define MALLOC_CHAR(count)                                  \
+ ({                                                         \
+   (char*) malloc (sizeof(char) * count);                   \
  })
 
 typedef enum struct_id{

@@ -472,11 +472,11 @@ void send_new_moderator_info(server_information_t *server_info,
     mod_update_req->moderator_port = addr_in->sin_port;
     mod_update_req->group_name = group_node->group_name;
 
-    mod_update_req->client_id_count = group_node->number_of_working_clients;
-    mod_update_req->client_ids = (unsigned int *) malloc(sizeof(unsigned int) * mod_update_req->client_id_count);
+    mod_update_req->client_id_count = group_node->task_set_details.number_of_working_clients;
+    mod_update_req->client_ids = MALLOC_UINT(mod_update_req->client_id_count);
 
-    memcpy(mod_update_req->client_ids, group_node->working_clients, 
-           group_node->number_of_working_clients * sizeof(group_node->working_clients[0]));
+    memcpy(mod_update_req->client_ids, group_node->task_set_details.working_clients, 
+           group_node->task_set_details.number_of_working_clients * sizeof(group_node->task_set_details.working_clients[0]));
 
     /*Send to multicast group*/
     write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &mod_update_pdu);
@@ -551,7 +551,7 @@ unsigned int get_task_count(const char* filename,unsigned int** task_set)
     fscanf(cmd_line, "%i", &count);
     pclose(cmd_line);
 
-    *task_set = (unsigned int *) malloc(sizeof(unsigned int) * count);
+    *task_set = MALLOC_UINT(count);
     
     fp = fopen(filename, "r");
     
@@ -574,11 +574,19 @@ unsigned int get_task_count(const char* filename,unsigned int** task_set)
 }
 
 /* <doc>
- * void get_data_set_for_client_based_on_capability(server_information_t *server_info, mcast_group_node_t *group_node, int num_of_clients, unsigned int *client_ids, unsigned int task_count)
+ * void get_data_set_for_client_based_on_capability(server_information_t *server_info,
+ *                                                  mcast_group_node_t *group_node,
+ *                                                  int num_of_clients,
+ *                                                  unsigned int *client_ids,
+ *                                                  unsigned int task_count)
  * This function divides the data set into multiple files based on client capability
  * </doc>
  */
-void get_data_set_for_client_based_on_capability(server_information_t *server_info,mcast_group_node_t *group_node, int num_of_clients, unsigned int *client_ids, unsigned int task_count)
+void get_data_set_for_client_based_on_capability(server_information_t *server_info,
+                                                 mcast_group_node_t *group_node,
+                                                 int num_of_clients,
+                                                 unsigned int *client_ids,
+                                                 unsigned int task_count)
 {
    RBT_tree *tree = NULL;
    RBT_node *rbNode = NULL;
@@ -592,12 +600,13 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
    char * line = NULL;
    size_t len = 0;
    ssize_t read;
+   mcast_task_set_t *task_set = &group_node->task_set_details;
 
    tree = (RBT_tree*) server_info->client_RBT_head;
 
    /*Initialise the group node with client list */
-   group_node->task_set_details.capability = (unsigned int *) malloc(sizeof(unsigned int) * num_of_clients);
-   group_node->task_set_details.task_filename = (char **) malloc(sizeof(char*) * num_of_clients);
+   task_set->capability = MALLOC_UINT(num_of_clients);
+   task_set->task_filename = (char **) malloc(sizeof(char*) * num_of_clients);
 
    for(i = 0; i < num_of_clients; i++)
    {
@@ -606,7 +615,7 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
      if(rbNode)
      {
        capability_total = capability_total + rbNode->capability;
-       group_node->task_set_details.capability[i] = rbNode->capability;
+       task_set->capability[i] = rbNode->capability;
      }
    }
 
@@ -624,8 +633,8 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
      strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
      strcat(buffer,buffer2);
    
-     group_node->task_set_details.task_filename[i] = (char*)malloc(sizeof(char) * (strlen(buffer) + 1));
-     strcpy(group_node->task_set_details.task_filename[i],buffer);
+     task_set->task_filename[i] = MALLOC_CHAR(strlen(buffer) + 1);
+     strcpy(task_set->task_filename[i],buffer);
      
      /* open the file in write mode */
      fptr=(fopen(buffer,"w"));
@@ -633,7 +642,7 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
        return;
      }
      
-     data_count = (group_node->task_set_details.capability[i] * task_count)/ capability_total;
+     data_count = (task_set->capability[i] * task_count)/ capability_total;
      counter = 0;
      while ((read = getline(&line, &len, fp)) != -1) {
        counter += 10;
@@ -679,7 +688,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
     if(!task_count)
       return;
 
-    req.idv.perform_task_req.group_name= malloc(sizeof(char)*strlen(group_node->group_name));
+    req.idv.perform_task_req.group_name= MALLOC_CHAR(strlen(group_node->group_name));
     strcpy(req.idv.perform_task_req.group_name, group_node->group_name);
     req.idv.perform_task_req.task_id = server_info->task_id;
     (server_info->task_id)++;  
@@ -690,7 +699,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
     if (pdu->msg.idv.moderator_notify_rsp.client_id_count)
     {
         req.idv.perform_task_req.client_id_count = pdu->msg.idv.moderator_notify_rsp.client_id_count;
-        req.idv.perform_task_req.client_ids = (unsigned int *) malloc(sizeof(unsigned int) * pdu->msg.idv.moderator_notify_rsp.client_id_count);
+        req.idv.perform_task_req.client_ids = MALLOC_UINT(pdu->msg.idv.moderator_notify_rsp.client_id_count);
     }
 
     for(count = 0; count < pdu->msg.idv.moderator_notify_rsp.client_id_count; count++)
@@ -702,15 +711,15 @@ void mcast_start_task_distribution(server_information_t *server_info,
     get_data_set_for_client_based_on_capability(server_info, group_node,req.idv.perform_task_req.client_id_count,req.idv.perform_task_req.client_ids, task_count);
 
     /*Copy list of working clients in group node*/
-    group_node->number_of_working_clients = pdu->msg.idv.moderator_notify_rsp.client_id_count;
+    group_node->task_set_details.number_of_working_clients = pdu->msg.idv.moderator_notify_rsp.client_id_count;
 
-    group_node->working_clients = (unsigned int *) malloc(sizeof(unsigned int) * group_node->number_of_working_clients);
-    memcpy(group_node->working_clients,
+    group_node->task_set_details.working_clients = MALLOC_UINT(group_node->task_set_details.number_of_working_clients);
+    memcpy(group_node->task_set_details.working_clients,
            pdu->msg.idv.moderator_notify_rsp.client_ids,
-           group_node->number_of_working_clients * (sizeof(pdu->msg.idv.moderator_notify_rsp.client_ids[0])));
+           group_node->task_set_details.number_of_working_clients * (sizeof(pdu->msg.idv.moderator_notify_rsp.client_ids[0])));
 
     req.idv.perform_task_req.task_count = task_count;
-    req.idv.perform_task_req.task_set = (unsigned int *) malloc(sizeof(unsigned int) * task_count);
+    req.idv.perform_task_req.task_set = MALLOC_UINT(task_count);
 
     for(count = 0; count < task_count; count++)
     {
@@ -813,8 +822,8 @@ void mcast_handle_task_response(server_information_t *server_info,
   group_node->moderator_client = NULL;
 
   /*Free if group node has maintained array list of working clients*/
-  if (group_node->working_clients) {
-    free(group_node->working_clients);
+  if (group_node->task_set_details.working_clients) {
+    free(group_node->task_set_details.working_clients);
   }
 
   /* Free the filename */
@@ -823,7 +832,7 @@ void mcast_handle_task_response(server_information_t *server_info,
   /*Free task related details*/
   free(group_node->task_set_details.capability);
   
-  for(i = 0; i < group_node->number_of_working_clients; i++)
+  for(i = 0; i < group_node->task_set_details.number_of_working_clients; i++)
   {
     free(group_node->task_set_details.task_filename[i]);
   }
@@ -1163,7 +1172,7 @@ void assign_task(server_information_t *server_info, char *grp_name, int task_typ
    
    group_node->task_type = task_type;
 
-   group_node->task_set_filename = (char*) malloc(sizeof(char) * strlen(filename)); 
+   group_node->task_set_filename = MALLOC_CHAR(strlen(filename)); 
    strcpy(group_node->task_set_filename, filename);
 
    /*Group is in moderator selection pending state*/

@@ -65,14 +65,16 @@ typedef struct {
 } mcast_group_t;
 
 typedef struct {
-  unsigned int *capability; /* capabilities of the clients working on task */
-  char **task_filename; /* filenames of the data set's for the clients */
+  int number_of_working_clients;            /*Number of working clients on a task*/
+  unsigned int *working_clients;            /*List of client ids working on task*/
+  unsigned int *capability;                 /* capabilities of the clients working on task */
+  char **task_filename;                     /* filenames of the data set's for the clients */
 } mcast_task_set_t;
 
 /*Group Node - This node maintains information related to multicast group.*/
 typedef struct {
   char *group_name;                         /*Multicast group name*/
-  unsigned int grp_capability;                       /*Capability of group = capabilties of all clients in that group*/
+  unsigned int grp_capability;              /*Capability of group = capabilties of all clients in that group*/
   int number_of_clients;                    /*No. of clients under the group*/
   struct sockaddr_in grp_mcast_addr;        /*Group Multicast Address*/
   unsigned int group_port;                  /*Group Multicast Port*/
@@ -80,8 +82,6 @@ typedef struct {
   mcast_client_node_t *moderator_client;    /*Points to client which is moderator*/
   timer_t timer_id;                         /*Timer for monitoring moderator when task is in progress*/
   uint8_t heartbeat_remaining;              /*Non-zero count represents active moderator */
-  int number_of_working_clients;            /*Number of working clients on a task*/
-  unsigned int* working_clients;            /*List of client ids working on task*/
   server_state_t fsm_state;                 /*Current state of group in FSM, to be used by server*/
   sn_list_element_t list_element;
   int task_type;                            /* A group can perform only one task at a time. Maintaining the task type */
