@@ -559,6 +559,79 @@ unsigned int get_task_count(const char* filename,unsigned int** task_set)
 }
 
 /* <doc>
+ * void get_data_set_for_client_based_on_capability(server_information_t *server_info, mcast_group_node_t *group_node, int num_of_clients, unsigned int *client_ids, unsigned int task_count)
+ * This function divides the data set into multiple files based on client capability
+ * </doc>
+ */
+void get_data_set_for_client_based_on_capability(server_information_t *server_info,mcast_group_node_t *group_node, int num_of_clients, unsigned int *client_ids, unsigned int task_count)
+{
+   RBT_tree *tree = NULL;
+   RBT_node *rbNode = NULL;
+   int i = 0;
+   unsigned int capability_total = 0;
+   FILE *fptr,* fp;
+   time_t rawtime;
+   struct tm * timeinfo;
+   char buffer[1000], buffer2[40];
+   unsigned int counter = 0, data_count = 0;
+   char * line = NULL;
+   size_t len = 0;
+   ssize_t read;
+
+   tree = (RBT_tree*) server_info->client_RBT_head;
+
+   /*Initialise the group node with client list */
+   group_node->task_set_details.capability = (unsigned int *) malloc(sizeof(unsigned int) * num_of_clients);
+   group_node->task_set_details.task_filename = (char **) malloc(sizeof(char*) * num_of_clients);
+
+   for(i = 0; i < num_of_clients; i++)
+   {
+     rbNode = RBFindNodeByID(tree, client_ids[i]);
+
+     if(rbNode)
+     {
+       capability_total = capability_total + rbNode->capability;
+       group_node->task_set_details.capability[i] = rbNode->capability;
+     }
+   }
+
+   /* Open the data set file to read */
+   fp = fopen(group_node->task_set_filename,"r");
+   if (fp == NULL)
+     return;
+
+   for(i = 0; i < num_of_clients; i++)
+   {
+     /* generate the file name for the client */
+     time ( &rawtime );
+     timeinfo = localtime ( &rawtime );
+     sprintf(buffer,"task_set/Task_Set_%s_%u", group_node->group_name, client_ids[i]);
+     strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
+     strcat(buffer,buffer2);
+   
+     group_node->task_set_details.task_filename[i] = (char*)malloc(sizeof(char) * (strlen(buffer) + 1));
+     strcpy(group_node->task_set_details.task_filename[i],buffer);
+     
+     /* open the file in write mode */
+     fptr=(fopen(buffer,"w"));
+     if(fptr==NULL){                                                             
+       return;
+     }
+     
+     data_count = (group_node->task_set_details.capability[i] * task_count)/ capability_total;
+     counter = 0;
+     while ((read = getline(&line, &len, fp)) != -1) {
+       counter += 10;
+       fputs(line,fptr);
+       if( counter >= data_count)
+        break;
+     }
+
+     fclose(fptr);
+   }
+}
+
+/* <doc>
  * void mcast_start_task_distribution(server_information_t *server_info,
  *                                    void *fsm_msg)
  * Function to send task request to the multicast group. It takes 
@@ -609,6 +682,9 @@ void mcast_start_task_distribution(server_information_t *server_info,
     {
         req.idv.perform_task_req.client_ids[count] = pdu->msg.idv.moderator_notify_rsp.client_ids[count];
     }
+
+    /* Fetch the data set for each client based on capability */
+    get_data_set_for_client_based_on_capability(server_info, group_node,req.idv.perform_task_req.client_id_count,req.idv.perform_task_req.client_ids, task_count);
 
     /*Copy list of working clients in group node*/
     group_node->number_of_working_clients = pdu->msg.idv.moderator_notify_rsp.client_id_count;
@@ -692,6 +768,7 @@ void mcast_handle_task_response(server_information_t *server_info,
                                    void *fsm_msg)
 {
   char ipaddr[INET6_ADDRSTRLEN], filename[80];
+  int i = 0;
   
   int count = 0;
   comm_struct_t req;
@@ -727,6 +804,15 @@ void mcast_handle_task_response(server_information_t *server_info,
 
   /* Free the filename */
   free(group_node->task_set_filename);
+  
+  /*Free task related details*/
+  free(group_node->task_set_details.capability);
+  
+  for(i = 0; i < group_node->number_of_working_clients; i++)
+  {
+    free(group_node->task_set_details.task_filename[i]);
+  }
+  free(group_node->task_set_details.task_filename);
 
   group_node->task_type = INVALID_TASK_TYPE;
 }

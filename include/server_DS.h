@@ -64,6 +64,11 @@ typedef struct {
   sn_list_t group_node;
 } mcast_group_t;
 
+typedef struct {
+  unsigned int *capability; /* capabilities of the clients working on task */
+  char **task_filename; /* filenames of the data set's for the clients */
+} mcast_task_set_t;
+
 /*Group Node - This node maintains information related to multicast group.*/
 typedef struct {
   char *group_name;                         /*Multicast group name*/
@@ -80,6 +85,7 @@ typedef struct {
   sn_list_element_t list_element;
   int task_type;                            /* A group can perform only one task at a time. Maintaining the task type */
   char *task_set_filename;                  /* A group can perform only one task at a time. Maintaining the task set filename */
+  mcast_task_set_t task_set_details;        /* List of clients and corresponding data set */
 } mcast_group_node_t;
 
 /* Declaration of Server Info - Main Data structure on Server*/
