@@ -1154,11 +1154,36 @@ static
 void assign_task(server_information_t *server_info, char *grp_name, int task_type, char *filename)
 {
     mcast_group_node_t *group_node = NULL;
+    struct stat st;
+
+    /*Validate file existence*/
+    if (stat(filename, &st))
+    {
+      PRINT("%s is Non-existent file.", filename);
+      return;
+    }
 
     /*fetch the group information whose clients are supposed to work on task*/
-    get_group_node_by_name(&server_info, grp_name, &group_node); 
+    if (grp_name)
+    {
+       get_group_node_by_name(&server_info, grp_name, &group_node); 
+    }
+    else
+    {
+       /*If no group is given, then find the group to work on this task, as per best-fit policy*/
+       get_group_node_by_best_fit(&server_info, st.st_size, &group_node);
 
+       if (group_node)
+       {
+           PRINT("-------------[NOTIFICATION] Group %s has been auto-selected for task  ---------------", group_node->group_name);
+       }
+    }
    /*If group node has moderator, that means group is currently busy working on a task*/
+   if (!group_node)
+   {
+      PRINT("Error: This is a non-existent group.");
+      return;
+   }
    if (group_node->moderator_client) 
    {
       PRINT("Group %s is currently Busy.", grp_name);
@@ -1334,12 +1359,15 @@ void server_stdin_data(int fd, server_information_t *server_info)
             i++;
         }
         if(ptr)
+        {
           strcpy(filename,ptr);
+        }
         else
-          strcpy(filename,"task_set/prime_set1.txt");
-        
-        /* Fetch the group name */
+        {
+          strcpy(filename,"task_set/prime_set1.txt");        
+        }
 
+        /* Fetch the group name */
         strcpy(read_buffer_copy,read_buffer);
         ptr = strtok(read_buffer_copy," ");
         i = 0;
@@ -1348,18 +1376,8 @@ void server_stdin_data(int fd, server_information_t *server_info)
             ptr = strtok(NULL," ");
             i++;
         }
-        if (!ptr)
-        {
-            PRINT("Error: Unrecognized Command.\n");
-            return;
-        }
-        if(task_type)
-        {
-          for(i = 0;i < num_groups; i++)
-          {
-            if(strcmp(ptr,mapping[i].grname) == 0)
-              assign_task(server_info, mapping[i].grname, task_type, filename);
-          }
+        if(task_type) {
+           assign_task(server_info, ptr, task_type, filename);
         }
         else
           PRINT("Please enter valid task type.\n");

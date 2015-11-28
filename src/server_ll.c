@@ -319,8 +319,50 @@ void deallocate_mcast_group_list(server_information_t *server_info)
 }
 */
 
+
 /* <doc>
- * mcast_group_node_t* get_group_node_by_name(server_information_t **server_info, char *exp_grp_name)
+ * void  get_group_node_by_best_fit(server_information_t **server_info, unsigned int filesize, mcast_group_node_t **grp_node)
+ * Traverses server_info list and returns the group node pointer which is best fit for a task as per its capability.
+ * Best fit logic -
+ * Select group which has high processing clients or large number of clients with good processing power.
+ *
+ * </doc>
+ */
+void get_group_node_by_best_fit(server_information_t **server_info, unsigned int task_size, mcast_group_node_t **grp_node)
+{
+   mcast_group_node_t *group_node;
+   char groupIP[INET_ADDRSTRLEN];
+   int min_subtask_size = INT_MAX, subtask_size = INT_MAX;
+
+   group_node =     SN_LIST_MEMBER_HEAD(&((*server_info)->server_list->group_node),
+                                        mcast_group_node_t,
+                                        list_element);
+
+   /*Scan over all groups which are free. if any group has moderator_client, that means it is busy.*/
+   while (group_node && !group_node->moderator_client)
+   {
+       /*
+       Choosing whichever group gives minimum subtask_size.
+       Assuming parallel nature of tasks i.e. no recomputations required.
+       */
+       if (group_node->grp_capability)
+          subtask_size = task_size / group_node->grp_capability;
+
+       if (subtask_size < min_subtask_size )
+       {
+          *grp_node = group_node;
+          min_subtask_size = subtask_size;
+       }
+
+       group_node =     SN_LIST_MEMBER_NEXT(group_node,
+                                            mcast_group_node_t,
+                                            list_element);
+   }
+}
+
+/* <doc>
+ * void  get_group_node_by_name(server_information_t **server_info, char *exp_grp_name,
+ *                              mcast_group_node_t **grp_node)
  * Traverses server_info list and returns the group node pointer which is required.
  * exp_grp_name - is group name expected.
  *
