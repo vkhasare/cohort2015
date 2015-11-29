@@ -59,6 +59,7 @@ def main(argv):
     if turnDownInterfaces:
        deconfigureIP()
     else:
+       configureIP()
        startServer()
 
 if __name__ == "__main__":

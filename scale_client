@@ -10,39 +10,66 @@ import os, threading
 import re, time
 import smtplib
 from datetime import date, timedelta
+from random import randint
 
+#IPs from 30.30.30.1 - 30.30.30.4 are reserved for server purpose
 serverIP = "30.30.30.1"
 serverPORT = "3490"
+#Client IPs will start from 30.30.30.5
+clientIP = "30.30."
 interfaceNumber = 1
+thirdOctet = 30
+fouthOctet = 5
 
 #Fire linux command
 def fire(cmd):
     os.system(cmd)
 
-def deconfigureIP(ipStart):
-    global interfaceNumber
-    IP = "30.30.30."
-    IP = IP + str(ipStart)
-    cmd = "ifconfig eth0:" + str(interfaceNumber) + " " + IP + " netmask 255.255.0.0 down"
-    print(cmd)
-    fire (cmd)
-    interfaceNumber = interfaceNumber + 1
 
-def configureIP(ipStart):
-    global interfaceNumber
-    IP = "30.30.30."
-    IP = IP + str(ipStart)
-    cmd = "ifconfig eth0:" + str(interfaceNumber) + " " + IP + " netmask 255.255.0.0 up"
-    print(cmd)
-    fire (cmd)
-    interfaceNumber = interfaceNumber + 1
+def makeIP():
+    global thirdOctet
+    global fouthOctet
+
+    if fouthOctet > 254:
+        fouthOctet = 0
+        thirdOctet = thirdOctet + 1
+    IP = clientIP + str(thirdOctet) + "." + str(fouthOctet)
+    fouthOctet = fouthOctet + 1
     return IP
+
+def randomGroups():
+    grp1 = randint(1,4)
+    grp2 = randint(1,4)
+    grplist = "G" + str(grp1) + ",G" + str(grp2)
+    return grplist
+
+def deconfigureIP(count):
+    global interfaceNumber
+    for num in range(count):
+        IP = makeIP()
+        cmd = "ifconfig eth0:" + str(interfaceNumber) + " " + IP + " netmask 255.255.0.0 down"
+        print(cmd)
+        fire (cmd)
+        interfaceNumber = interfaceNumber + 1
 
 def startClient(clientIP):
     global serverIP
-    cmd = "nohup ./client " + serverIP + " " + serverPORT + " G1,G2 " + str(clientIP) + " &"
+    grpList = randomGroups()
+    #Uncomment this for hardcoded group list
+    #grpList = "G1,G2"
+    cmd = "nohup ./client " + serverIP + " " + serverPORT + " " + grpList + " " + str(clientIP) + " &"
     print(cmd)
     fire(cmd)
+
+def configureIP(count):
+    global interfaceNumber
+    for num in range(count):
+        IP = makeIP()
+        cmd = "ifconfig eth0:" + str(interfaceNumber) + " " + IP + " netmask 255.255.0.0 up"
+        print(cmd)
+        fire (cmd)
+        startClient(IP)
+        interfaceNumber = interfaceNumber + 1
 
 def main(argv):
     turnDownInterfaces = False
@@ -55,21 +82,17 @@ def main(argv):
 
     for opt, arg in opts:
         if opt in ("--help"):
-            print("./scale_client --num <num_of_clients> -i <starting_octet_of_ip> [--down]")
+            print("./scale_client --num <num_of_clients>[--down]")
             sys.exit()
         elif opt in ("--num"):
             numberOfClients = int(arg)
-        elif opt in ("-i"):
-            ipStart = int(arg)
         elif opt in ("--down"):
             turnDownInterfaces = True
 
-    for count in range(numberOfClients):
-        if turnDownInterfaces:
-            deconfigureIP(ipStart + count)
-        else:
-            IP = configureIP(ipStart + count)
-            startClient(IP)
+    if turnDownInterfaces:
+        deconfigureIP(numberOfClients)
+    else:
+        configureIP(numberOfClients)
 
 if __name__ == "__main__":
    if len(sys.argv) > 1:

@@ -35,9 +35,12 @@ Step 3> Run scale_server on RTP machine
        ./scale_server --up
 
 Step 4> Run scale_client on same RTP machine
-        ./scale_client -i 32 --num 20
+        ./scale_client --num 20
 
         Step4 will simulate 20 clients. To deconfigure IPs, use
-        ./scale_client -i 32 --num 20 --down
+        ./scale_client --num 20 --down
 
+Note - 
+IPs from 30.30.30.1 - 30.30.30.4 are reserved for server purpose
+Client IPs will start from 30.30.30.5
 
