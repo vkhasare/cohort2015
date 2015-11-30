@@ -28,6 +28,7 @@ static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
 static void send_moderator_notify_response(client_information_t *client_info);
 static int handle_perform_task_req(const int, pdu_t *pdu, ...);
+static int handle_new_server_notification(const int, pdu_t *pdu, ...);
 static void send_task_results_to_moderator(client_information_t *, char*, unsigned int,rsp_type_t, result_t *,unsigned int);
 void moderator_send_task_response_to_server(client_information_t *);
 void* find_prime_numbers(void *args);
@@ -69,6 +70,9 @@ fptr client_func_handler(unsigned int msgType)
         break;
     case perform_task_req:
         func_name = handle_perform_task_req;
+        break;
+    case new_server_notify:
+        func_name = handle_new_server_notification;
         break;
     default:
         PRINT("Invalid msg type of type - %d.", msgType);
@@ -302,6 +306,30 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
        }
       PRINT("Moderator is working with clients - %s", str);
     }
+}
+
+/* <doc>
+ * static
+ * int handle_new_server_notification(const int sockfd, pdu_t *pdu, ...)
+ * This function handles the new_server_notify request from server and
+ * updates its server address.
+ *
+ * </doc>
+ */
+static
+int handle_new_server_notification(const int sockfd, pdu_t *pdu, ...)
+{
+    client_information_t *client_info;
+    comm_struct_t *req = &(pdu->msg);
+    new_server_notify_t new_server_update = req->idv.new_server_notify;
+
+    PRINT("[new_server_notify] New Server Notify Request Received.");
+
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, client_information_t*, client_info);
+
+    /*Update with new server address*/
+    client_info->server.sin_addr.s_addr = new_server_update.new_server_id;
 }
 
 /* <doc>

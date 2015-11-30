@@ -49,6 +49,8 @@ typedef enum struct_id{
     perform_task_req = 42,
     task_response = 43,
     moderator_update_req = 44,
+    checkpoint_req = 45,
+    new_server_notify = 46,
     unknown_msg
 }e_struct_id_t; 
 
@@ -91,6 +93,13 @@ typedef struct join_response{
     l_saddr_in_t* group_ips; 
 //  int* group_ips; 
 }join_rsp_t;
+
+typedef struct checkpoint_req{
+    unsigned int chkpoint_type;
+    unsigned int num_groups;
+    l_saddr_in_t* group_ips;
+    unsigned int capability;
+} checkpoint_req_t;
 
 typedef struct leave_request{
     unsigned int num_groups;
@@ -163,6 +172,10 @@ typedef struct task_response{
    result_t * result;
 }task_rsp_t;
 
+typedef struct new_server_notify{
+   unsigned int new_server_id; 
+}new_server_notify_t;
+
 typedef struct common_struct{
     e_struct_id_t id;
     union{
@@ -177,6 +190,8 @@ typedef struct common_struct{
         moderator_update_req_t moderator_update_req;
         task_rsp_t task_rsp;
         perform_task_req_t perform_task_req;
+        checkpoint_req_t checkpoint_req;
+        new_server_notify_t new_server_notify;
     }idv;
 }comm_struct_t;
 

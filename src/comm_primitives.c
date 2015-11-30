@@ -404,6 +404,18 @@ bool xdr_l_saddr_in(XDR* xdrs, l_saddr_in_t* m){
     return short_res && ushort_res && ulong_res && string_res && uint_cause && uint_res;
 }
 
+bool process_checkpoint_req(XDR* xdrs, checkpoint_req_t* m){
+   if(xdrs->x_op == XDR_DECODE){
+        m->group_ips = NULL;
+    }
+
+  int uint_type = xdr_u_int(xdrs, &(m->chkpoint_type));
+    int uint_capability = xdr_u_int(xdrs, &(m->capability));
+    int arr_res = xdr_array(xdrs, (char**) &(m->group_ips),
+            &(m->num_groups), max_groups, sizeof(l_saddr_in_t),(xdrproc_t )xdr_l_saddr_in);
+    return uint_type && uint_capability && arr_res;
+}
+
 bool process_join_resp(XDR* xdrs, join_rsp_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->group_ips = NULL;
@@ -472,6 +484,14 @@ bool process_task_resp(XDR* xdrs, task_rsp_t* m){
     return string_res && task_id_res && typ_res  && num_client_res && client_id_res && arr_res;
 }
 
+bool process_new_server_notify(XDR* xdrs, new_server_notify_t* m) {
+    if(xdrs->x_op == XDR_DECODE){
+    }
+
+    bool uint_id = xdr_u_int(xdrs, &(m->new_server_id));
+    return uint_id;
+}
+
 bool process_comm_struct(XDR* xdrs, void* msg, ...){
     comm_struct_t* m = (comm_struct_t*) msg;
     struct xdr_discrim comm_discrim[] = {
@@ -486,6 +506,8 @@ bool process_comm_struct(XDR* xdrs, void* msg, ...){
         {moderator_update_req,  (xdrproc_t)process_moderator_update_req},
         {perform_task_req,      (xdrproc_t)process_perform_task_req},
         {task_response,         (xdrproc_t)process_task_resp},
+        {checkpoint_req,        (xdrproc_t)process_checkpoint_req},
+        {new_server_notify,     (xdrproc_t)process_new_server_notify},
         { __dontcare__,         NULL }
     };
     int enum_res = xdr_enum(xdrs, (enum_t *)(&(m->id)));

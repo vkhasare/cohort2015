@@ -239,9 +239,11 @@ void display_server_clis()
 {
   PRINT("show groups                                          --  Displays list of groups");
   PRINT("show group info <group_name|all>                     --  Displays group - client association");
-  PRINT("enable msg group <group_name>                        --  Enables display of messages for a specific group.");
-  PRINT("no msg group <group_name>                            --  Disables display of messages for a specific group.");
+  //PRINT("enable msg group <group_name>                        --  Enables display of messages for a specific group.");
+  //PRINT("no msg group <group_name>                            --  Disables display of messages for a specific group.");
   PRINT("task <task_type> group <group_name> file <filename>  --  Assigns a specific task to the specified Group. filename is optional. Default Value: task_set/prime_set1.txt");
+  PRINT("server backup <backup_server_ip>                     --  Configures IP of secondary server");
+  PRINT("switch                                               --  Switches to secondary server");
   PRINT("enable debug                                         --  Enables the debug mode");
   PRINT("disable debug                                        --  Disables the debug mode");
   PRINT("cls                                                  --  Clears the screen");

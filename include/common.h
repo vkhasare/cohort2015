@@ -82,6 +82,17 @@ typedef enum {
 } msg_cause;
 
 /* <doc>
+ * enum chkpoint_type
+ * Tells about the type of checkpoint
+ *
+ * </doc>
+ */
+typedef enum {
+ ADD_CHECKPOINT = 67,
+ DEL_CHECKPOINT = 68
+} chkpoint_type;
+
+/* <doc>
  * enum client_state
  * determines the state of client.
  *

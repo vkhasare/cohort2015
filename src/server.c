@@ -17,6 +17,7 @@ static int handle_join_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_leave_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...);
+static int handle_checkpoint_req(const int sockfd, pdu_t *pdu, ...);
 static void assign_task(server_information_t *, char *, int, char *);
 static void moderator_selection(server_information_t *, mcast_group_node_t *);
 
@@ -52,12 +53,249 @@ fptr server_func_handler(unsigned int msgType)
     case task_response:
         func_name = handle_moderator_task_response;
         break;
+    case checkpoint_req:
+        func_name = handle_checkpoint_req;
+        break;
     default:
         PRINT("Invalid msg type of type - %d.", msgType);
         func_name = NULL;
   }
 
   return func_name;
+}
+
+/* <doc>
+ * void send_new_server_info_to_all_groups(server_information_t *server_info)
+ * This functions sends update to all the groups about new server IP.
+ *
+ * </doc>
+ */
+void send_new_server_info_to_all_groups(server_information_t *server_info)
+{
+    mcast_group_node_t *group_node = NULL;
+    pdu_t pdu;
+    comm_struct_t *msg = &(pdu.msg);
+    msg->id = new_server_notify;
+    new_server_notify_t *new_server_msg = &(msg->idv.new_server_notify);
+
+    /*Fill New server ID in new_server_notify message*/
+    new_server_msg->new_server_id = calc_key((struct sockaddr*) &server_info->secondary_server);
+
+    group_node =     SN_LIST_MEMBER_HEAD(&(server_info->server_list->group_node),
+                                           mcast_group_node_t,
+                                           list_element);
+
+    /*Send new_server_notify to all the multicast groups*/
+    while (group_node)
+    {
+        PRINT("[New_Server_Notify] Sent new Server info to %s", group_node->group_name);
+
+        write_record(server_info->server_fd, &group_node->grp_mcast_addr, &pdu);
+
+        group_node =     SN_LIST_MEMBER_NEXT(group_node,
+                                             mcast_group_node_t,
+                                             list_element);
+    }
+}
+
+/* <doc>
+ * void send_checkpoint(unsigned int chkpoint_type, server_information_t *server_info, struct sockaddr_in *clientAddr, char *group_name, int capability)
+ * This functions takes arguments as
+ *    - checkpoint type - ADD_CHECKPOINT/DEL_CHECKPOINT
+ *    - client address
+ *    - Client's group Name
+ *    - Client's capability
+ * This function sends above checkpointed information to backup server.
+ * </doc>
+ */
+void send_checkpoint(unsigned int chkpoint_type, server_information_t *server_info, struct sockaddr_in *clientAddr, char *group_name, int capability)
+{
+             pdu_t chkpoint_pdu;
+             comm_struct_t *cpmsg = &(chkpoint_pdu.msg);
+             cpmsg->id = checkpoint_req;
+             checkpoint_req_t *chkpoint_msg = &(cpmsg->idv.checkpoint_req);
+
+             chkpoint_msg->chkpoint_type = chkpoint_type;
+             chkpoint_msg->capability = capability;
+
+             chkpoint_msg->group_ips = (l_saddr_in_t *) calloc (1, sizeof(l_saddr_in_t));
+             chkpoint_msg->group_ips[0].sin_family =
+                     clientAddr->sin_family;
+             chkpoint_msg->group_ips[0].sin_port   =
+                     clientAddr->sin_port;
+             chkpoint_msg->group_ips[0].s_addr     =
+                     clientAddr->sin_addr.s_addr;
+            chkpoint_msg->group_ips[0].group_name = MALLOC_STR;
+            strcpy(chkpoint_msg->group_ips[0].group_name, group_name);
+            chkpoint_msg->num_groups = 1;
+
+            /*Send checkpoint msg to backup server*/
+            write_record(server_info->server_fd, &server_info->secondary_server, &chkpoint_pdu);
+}
+
+/* <doc>
+ * void insert_client_info_in_server_DS(server_information_t *server_info, mcast_group_node_t *group_node,
+ *                                      struct sockaddr_in *clientAddr, int capability)
+ * Function to add client information in group data structure of Server.
+ *
+ * </doc>
+ */
+void insert_client_info_in_server_DS(server_information_t *server_info, mcast_group_node_t *group_node,
+                                     struct sockaddr_in *clientAddr, int capability)
+{
+        RBT_tree *tree = NULL;
+        RBT_node *newNode = NULL;
+        unsigned int clientID;
+
+        if (group_node) {
+             /*As client joins a group, re-adjust capability of group*/
+             group_node->grp_capability += capability;
+
+             clientID = calc_key((struct sockaddr*) clientAddr);
+
+             /*Purge the client if already existing in the group list*/
+             remove_client_from_mcast_group_node(&server_info, group_node, clientID);
+             /*Add client in group link list*/
+             ADD_CLIENT_IN_GROUP(&group_node, (struct sockaddr*) clientAddr, clientID);
+
+             /*Add in Client RBT*/
+             tree = (RBT_tree*) server_info->client_RBT_head;
+
+             if (clientID > 0) {
+                 /*search the RB node by clientID*/
+                 newNode = RBFindNodeByID(tree, clientID);
+                 /* Add in RBT if it is a new client, else update the grp list of client */
+                 if (!newNode) {
+                     newNode = RBTreeInsert(tree, clientID, (struct sockaddr*) clientAddr, 0, RB_FREE, group_node, capability);
+                 } else {
+                    /* Update group_list of the client node */
+                    rb_info_t *rb_info_list = (rb_info_t*) newNode->client_grp_list;
+                    rb_cl_grp_node_t *rb_grp_node = allocate_rb_cl_node(&rb_info_list);
+                    /* storing grp node pointer in RB group list*/
+                    rb_grp_node->grp_addr = group_node;
+
+                    /* Uncomment to display rb group list for client
+                     * display_rb_group_list(&rb_info_list);
+                     */
+                 }
+
+                /*Uncomment for printing RBT node keys
+                 *RBTreePrint(tree);
+                 */
+
+                 /*If backup server is available, then send checkpoint information*/
+                 if (server_info->is_stdby_available) {
+                    send_checkpoint(ADD_CHECKPOINT, server_info, clientAddr, group_node->group_name, capability);
+                 }
+             }
+        }
+}
+
+/* <doc>
+ * bool remove_client_info_from_server_DS(server_information_t *server_info, struct sockaddr_in *clientAddr, char *group_name)
+ * Function to remove client information from group data structure of Server.
+ *
+ * </doc>
+ */
+bool remove_client_info_from_server_DS(server_information_t *server_info, struct sockaddr_in *clientAddr, char *group_name)
+{
+      RBT_tree *tree = NULL;
+      RBT_node *rbNode = NULL;
+      unsigned int clientID;
+
+
+      clientID = calc_key((struct sockaddr*) clientAddr);
+
+      if (clientID > 0) {
+        tree = (RBT_tree*) server_info->client_RBT_head;
+        rbNode = RBFindNodeByID(tree, clientID);
+
+        if (rbNode) {
+            mcast_group_node_t *ll_grp_node;
+            rb_info_t *rb_info_list = (rb_info_t*) rbNode->client_grp_list;
+
+            /*remove node from rbnode list.*/
+            if (remove_rb_grp_node(&rb_info_list,group_name, &ll_grp_node)) {
+                /*As client leaves a group, re-adjust capability of group*/
+                ll_grp_node->grp_capability -= rbNode->capability;
+                /*remove node from ll list*/
+                remove_client_from_mcast_group_node(&server_info, ll_grp_node, clientID);
+                /*Remove RBnode from tree if group count is zero.*/
+                if (SN_LIST_LENGTH(&rb_info_list->cl_list->group_node) == 0) {
+                  RBDelete(tree, rbNode);
+                }
+
+               /* Uncomment to display rb group list for client
+                *   display_rb_group_list(&rb_info_list);
+                */
+               /*If backup server is available, then send checkpoint information*/
+               if (server_info->is_stdby_available) {
+                  send_checkpoint(DEL_CHECKPOINT, server_info, clientAddr, group_name, rbNode->capability);
+               }
+
+                return true;
+             }
+         }
+      }
+
+ return false;
+}
+
+
+/* <doc>
+ * static
+ * int handle_checkpoint_req(const int sockfd, pdu_t *pdu, ...)
+ * This function is for backup server where it handles the 
+ * checkpoint request sent by primary server.
+ * Depending upon checkpoint type - Add/Del, it updates its 
+ * data structures.
+ *
+ * </doc>
+ */
+static
+int handle_checkpoint_req(const int sockfd, pdu_t *pdu, ...)
+{
+    struct sockaddr_in client_ip;
+    int iter;
+    char* group_name;
+    chkpoint_type chkpoint_type;
+    unsigned int capability;
+    mcast_group_node_t *group_node = NULL;
+
+    comm_struct_t *chkpoint_msg = &(pdu->msg);
+
+    server_information_t *server_info = NULL;
+
+    /* Extracting client_info from variadic args*/
+    EXTRACT_ARG(pdu, server_information_t*, server_info);
+
+    checkpoint_req_t chkpoint_req = chkpoint_msg->idv.checkpoint_req;
+
+    chkpoint_type = chkpoint_req.chkpoint_type;
+    capability = chkpoint_req.capability;
+
+    group_name = chkpoint_req.group_ips[0].group_name;
+    client_ip.sin_family = chkpoint_req.group_ips[0].sin_family;
+    client_ip.sin_port = chkpoint_req.group_ips[0].sin_port;
+    client_ip.sin_addr.s_addr = chkpoint_req.group_ips[0].s_addr;
+    memset(&client_ip.sin_zero,0,sizeof(client_ip.sin_zero));
+ 
+    if (chkpoint_type == ADD_CHECKPOINT)
+    {
+        /*Add into the data structure*/
+        get_group_node_by_name(&server_info, group_name, &group_node);
+        insert_client_info_in_server_DS(server_info, group_node, (struct sockaddr_in *) &client_ip, capability);
+     }
+     else if (chkpoint_type == DEL_CHECKPOINT)
+     {
+        /*Remove from data structure*/
+        remove_client_info_from_server_DS(server_info, (struct sockaddr_in *) &client_ip, group_name);
+     }
+
+     /*If backup server also have back server configured, then send checkpointed information to it as well.*/
+     if (server_info->is_stdby_available) {
+       send_checkpoint(chkpoint_type, server_info, (struct sockaddr_in*) &client_ip, group_name, capability);
+     }
 }
 
 /* <doc>
@@ -78,10 +316,9 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
     char ipaddr[INET6_ADDRSTRLEN];
     server_information_t *server_info = NULL;
     unsigned int clientID = 0;
-    RBT_tree *tree = NULL;
-    RBT_node *rbNode = NULL;
     pdu_t rsp_pdu;
     comm_struct_t *resp = &rsp_pdu.msg;
+    bool delete_status = false;
 
     /* Extracting server_info from variadic args*/
     EXTRACT_ARG(pdu, server_information_t*, server_info);
@@ -101,37 +338,13 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 
     PRINT("[Leave_Request: GRP - %s, Client - %s] Leave Request Received.", group_name, ipaddr);
 
-    tree = (RBT_tree*) server_info->client_RBT_head;
+    delete_status = remove_client_info_from_server_DS(server_info, (struct sockaddr_in *) &pdu->peer_addr, group_name);
 
-    if (clientID > 0) {
-         rbNode = RBFindNodeByID(tree, clientID);
-
-         if (rbNode) {
-              mcast_group_node_t *ll_grp_node;
-              rb_info_t *rb_info_list = (rb_info_t*) rbNode->client_grp_list;
-
-              /*remove node from rbnode list.*/
-              if (remove_rb_grp_node(&rb_info_list,group_name, &ll_grp_node)) {
-                  cause = ACCEPTED;
-
-                  ll_grp_node->grp_capability -= rbNode->capability;
-
-                  /*remove node from ll list*/
-                  remove_client_from_mcast_group_node(&server_info, ll_grp_node, clientID);
-
-                  /*Remove RBnode from tree if group count is zero.*/
-                  if (SN_LIST_LENGTH(&rb_info_list->cl_list->group_node) == 0) {
-                    RBDelete(tree, rbNode);
-                  }
-              }
+    if (delete_status)
+    {
+       cause = ACCEPTED;
+    }
  
-             /* Uncomment to display rb group list for client
-              *   display_rb_group_list(&rb_info_list);
-              */
-               
-         }
-}
-
     leave_rsp->group_ids[0].str = MALLOC_STR;
     strcpy(leave_rsp->group_ids[0].str,group_name);
 
@@ -143,6 +356,7 @@ int handle_leave_req(const int sockfd, pdu_t *pdu, ...)
 
     return 0;
 }
+
 
 /* <doc>
  * static
@@ -196,41 +410,8 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
         if (group_node) {
              cause = ACCEPTED;
 
-             /*As client joins a group, re-adjust capability of group*/
-             group_node->grp_capability += capability;
-
-             clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
-
-             /*Purge the client if already existing in the group list*/
-             remove_client_from_mcast_group_node(&server_info, group_node, clientID);
-             /*Add client in group link list*/
-             ADD_CLIENT_IN_GROUP(&group_node, (struct sockaddr*) &pdu->peer_addr, clientID);
-
-             /*Add in Client RBT*/
-             tree = (RBT_tree*) server_info->client_RBT_head;
-
-             if (clientID > 0) {
-                 /*search the RB node by clientID*/
-                 newNode = RBFindNodeByID(tree, clientID);
-                 /* Add in RBT if it is a new client, else update the grp list of client */
-                 if (!newNode) {
-                     newNode = RBTreeInsert(tree, clientID, (struct sockaddr*) &pdu->peer_addr, 0, RB_FREE, group_node, capability);
-                 } else {
-                    /* Update group_list of the client node */
-                    rb_info_t *rb_info_list = (rb_info_t*) newNode->client_grp_list;
-                    rb_cl_grp_node_t *rb_grp_node = allocate_rb_cl_node(&rb_info_list);
-                    /* storing grp node pointer in RB group list*/
-                    rb_grp_node->grp_addr = group_node;
-
-                    /* Uncomment to display rb group list for client
-                     * display_rb_group_list(&rb_info_list);
-                     */                    
-                 }
-             }
-
-             /*Uncomment for printing RBT node keys
-              *RBTreePrint(tree);
-              */
+             /*Add into Data Structure*/
+             insert_client_info_in_server_DS(server_info, group_node, (struct sockaddr_in*) &pdu->peer_addr, capability);
 
              /* Add ip addr as response and break to search for next group. */
              join_rsp->group_ips[cl_iter].sin_family =
@@ -567,11 +748,12 @@ unsigned int get_task_count(const char* filename,long** task_set)
  * void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,char *memblock)
  * This function creates files per client
  */
-void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,char *memblock, unsigned int num_of_clients, unsigned int task_count, unsigned int capability_total)
+void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,char *memblock,
+                                 unsigned int num_of_clients, unsigned int task_count, unsigned int capability_total)
 {
    time_t rawtime;
    struct tm * timeinfo;
-   unsigned int j, i;
+   unsigned int i;
    char buffer[1000], buffer2[40];
    unsigned int counter = 0, data_count = 0;
    FILE *fptr;
@@ -599,16 +781,20 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
      data_count = (task_set->capability[i] * task_count)/ capability_total;
      counter = 0;
 
+     /*write data count into the file. Once written, break from loop.*/
      while(counter < task_count)
      {
        char num[15];
+       int j = 0;
+       /*Assumption - Number can be max 15 digit long*/
        while(*memblock !='\n')
        {
-         *num = *memblock;
-         memblock++;
+         num[j] = *memblock++;
+         j++;
        }
        counter++;
        fputs(num,fptr);
+       /*If complete data set for that client is written, break.*/
        if( counter >= data_count)
         break;
      }
@@ -696,6 +882,7 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
    cmd_line = popen (cmd, "w");
    pclose(cmd_line);
    
+   /*Create tas set file for each client on which it is required to work.*/
    create_task_sets_per_client(group_node,client_ids,task_set,memblock, num_of_clients,task_count,capability_total);
 
    munmap(memblock, sb.st_size);
@@ -889,6 +1076,7 @@ void mcast_handle_task_response(server_information_t *server_info,
 
   group_node->task_type = INVALID_TASK_TYPE;
 
+  /*Remove the task set file for the group once task response has been received by Server*/
   strcpy(cmd,"rm -rf task_set/");
   strcat(cmd,group_node->group_name);
   cmd_line = popen (cmd, "w");
@@ -1303,6 +1491,38 @@ void server_stdin_data(int fd, server_information_t *server_info)
     if (0 == strncmp(read_buffer,"show help",9))
     {
         display_server_clis();
+    }
+    else if(strncmp(read_buffer,"server backup",13) == 0)
+    {
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        while(i < 2)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        if (!ptr)
+        {
+            PRINT("Error: Unrecognized Command.\n");
+            return;
+        }
+
+        server_info->secondary_server.sin_family = AF_INET;
+        server_info->secondary_server.sin_port = htons(atoi(PORT));
+        server_info->secondary_server.sin_addr.s_addr = inet_addr(ptr);
+
+        server_info->is_stdby_available = true;
+    }
+    else if(strncmp(read_buffer,"switch",5) == 0)
+    {
+        if (server_info->is_stdby_available)
+        {
+           send_new_server_info_to_all_groups(server_info); 
+        }
+        else
+        {
+           PRINT("No Backup Server available.");
+        }
     }
     else if(strncmp(read_buffer,"enable msg group",16) == 0)
     {
