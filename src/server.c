@@ -602,9 +602,10 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
      while(counter < task_count)
      {
        char num[15];
-       while(memblock[j] !='\n')
+       while(*memblock !='\n')
        {
-         strcat(num,memblock[j]);
+         *num = *memblock;
+         memblock++;
        }
        counter++;
        fputs(num,fptr);
