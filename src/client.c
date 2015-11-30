@@ -1261,7 +1261,8 @@ void send_task_results(thread_args *args){
  */
 void* find_prime_numbers(void *args)
 {
-    unsigned int i,j,flag;
+    long i,j;
+    bool flag = FALSE;
 
     thread_args *t_args = (thread_args *)args;
 
@@ -1270,12 +1271,12 @@ void* find_prime_numbers(void *args)
     /* Loop for prime number's in given data set */
     for(i = 0; i < t_args->data_count; i++)
     {
-        flag = 0;
+        flag = FALSE;
         for (j = 2; j < t_args->data[i]; j++)
         {
             if ((t_args->data[i] % j) == 0)
             {
-                flag = 1;
+                flag = TRUE;
                 break;
             }
         }
@@ -1309,7 +1310,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     comm_struct_t *req = &(pdu->msg);
     struct sockaddr myIp;
     int count = 0, i = 0, result;
-    unsigned int client_task_set[MAX_TASK_COUNT] = {0};
+    long client_task_set[MAX_TASK_COUNT] = {0};
     unsigned int start_index = 0, stop_index = 0, client_task_count = 0;
     client_information_t * client_info;
     pthread_t thread;

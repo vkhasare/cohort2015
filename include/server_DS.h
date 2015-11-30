@@ -1,6 +1,11 @@
 #include "header.h"
 //#include "common.h"
 #include "sn_ll.h"
+#include <stdint.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define MOD_SEL_TIMEOUT SIGUSR1
 #define MOD_RSP_TIMEOUT SIGUSR2

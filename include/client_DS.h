@@ -76,9 +76,9 @@ typedef struct
 
 typedef struct {
   unsigned int data_count;
-  unsigned int data[MAX_TASK_COUNT];
+  long data[MAX_TASK_COUNT];
   unsigned int result_count;
-  unsigned int result[MAX_TASK_COUNT];
+  long result[MAX_TASK_COUNT];
   client_information_t *client_info;
   char * group_name;
   unsigned int task_id;

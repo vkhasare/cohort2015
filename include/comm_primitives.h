@@ -25,6 +25,11 @@
    (unsigned int*) malloc (sizeof(unsigned int) * count);   \
  })
 
+#define MALLOC_LONG(count)                                  \
+ ({                                                         \
+   (long*) malloc (sizeof(long) * count);   \
+ })
+
 #define MALLOC_CHAR(count)                                  \
  ({                                                         \
    (char*) malloc (sizeof(char) * count);                   \
@@ -126,7 +131,7 @@ typedef struct perform_task_req {
     unsigned int client_id_count;
     unsigned int* client_ids; 
     unsigned int task_count;
-    unsigned int* task_set;
+    long* task_set;
     int task_type;
 }perform_task_req_t;
 

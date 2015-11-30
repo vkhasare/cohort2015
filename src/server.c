@@ -537,40 +537,86 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     return 0;
 }
 
-unsigned int get_task_count(const char* filename,unsigned int** task_set)
+unsigned int get_task_count(const char* filename,long** task_set)
 {
     FILE *fp = NULL, *cmd_line = NULL;
-    uint32_t count = 0, i, j = 0;
-    char element[1000], cmd[256];
+    uint32_t count, i;
+    char element[16], cmd[256];
     char *ptr;
     
-    strcpy(cmd, "fgrep -o , ");
+    strcpy(cmd, "wc -l ");
     strcat(cmd, filename);
-    strcat(cmd, " | wc -l");
     cmd_line = popen (cmd, "r");
     fscanf(cmd_line, "%i", &count);
     pclose(cmd_line);
 
-    *task_set = MALLOC_UINT(count);
+    *task_set = MALLOC_LONG(count);
     
     fp = fopen(filename, "r");
     
-    for(i = 0; i < count/10; i++){
+    for(i = 0; i < count; i++){
         fscanf(fp, "%s", element);
-        ptr = strtok(element,",");
-        j = 0;
-        (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
-        while(j < 9)
-        {
-          ptr = strtok(NULL,",");
-          j++;
-          (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
-        }
+        (* task_set)[i] =strtoul(element,NULL,10);
     }
     if(fp)
       fclose(fp);
 
   return count;
+}
+/* <doc>
+ * void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,char *memblock)
+ * This function creates files per client
+ */
+void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,char *memblock, unsigned int num_of_clients, unsigned int task_count, unsigned int capability_total)
+{
+   time_t rawtime;
+   struct tm * timeinfo;
+   unsigned int j, i;
+   char buffer[1000], buffer2[40];
+   unsigned int counter = 0, data_count = 0;
+   FILE *fptr;
+
+   for(i = 0; i < num_of_clients; i++)
+   {
+     /* generate the file name for the client */
+     time ( &rawtime );
+     timeinfo = localtime ( &rawtime );
+
+     sprintf(buffer,"task_set/%s/Task_Set_%u", group_node->group_name,client_ids[i]);
+     strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
+     strcat(buffer,buffer2);
+   
+     task_set->task_filename[i] = MALLOC_CHAR(strlen(buffer) + 1);
+     strcpy(task_set->task_filename[i],buffer);
+     
+     /* open the file in write mode */
+     fptr=(fopen(buffer,"w"));
+     if(fptr==NULL){                                                             
+       return;
+     }
+     
+     /* Find the data count to be written to the file for a client based on the task_count and total capability */
+     data_count = (task_set->capability[i] * task_count)/ capability_total;
+     counter = 0;
+
+     while(counter < task_count)
+     {
+       char num[15];
+       while(memblock[j] !='\n')
+       {
+         strcat(num,memblock[j]);
+       }
+       counter++;
+       fputs(num,fptr);
+       if( counter >= data_count)
+        break;
+     }
+     if((i + 1) == num_of_clients)
+       continue;
+
+     fclose(fptr);
+   }
+
 }
 
 /* <doc>
@@ -590,69 +636,68 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
 {
    RBT_tree *tree = NULL;
    RBT_node *rbNode = NULL;
-   int i = 0;
-   unsigned int capability_total = 0;
-   FILE *fptr,* fp;
-   time_t rawtime;
-   struct tm * timeinfo;
-   char buffer[1000], buffer2[40];
-   unsigned int counter = 0, data_count = 0;
+   struct stat sb; 
+   FILE * fp, *cmd_line=NULL;
    char * line = NULL;
    size_t len = 0;
    ssize_t read;
+   int num_of_clients_modified, fd, i;
+   bool client_list_changed = FALSE;
+   char element[16], cmd[256], *memblock;
+   unsigned int capability_total;
    mcast_task_set_t *task_set = &group_node->task_set_details;
 
    tree = (RBT_tree*) server_info->client_RBT_head;
 
-   /*Initialise the group node with client list */
-   task_set->capability = MALLOC_UINT(num_of_clients);
-   task_set->task_filename = (char **) malloc(sizeof(char*) * num_of_clients);
-
+   if(num_of_clients >= task_count)
+   {
+     /*In case where task set is smaller as compared to the number of clients, choose few clients from the list */
+     client_list_changed = TRUE;
+     num_of_clients_modified = task_count/2;
+     
+     /*Initialise the group node with client list */
+     task_set->capability = MALLOC_UINT(num_of_clients_modified);
+     task_set->task_filename = (char **) malloc(sizeof(char*) * num_of_clients_modified);
+   }
+   else
+   {
+     /*Initialise the group node with client list */
+     task_set->capability = MALLOC_UINT(num_of_clients);
+     task_set->task_filename = (char **) malloc(sizeof(char*) * num_of_clients);
+   }
+   
+   /* If client list is shorter */
+   if(client_list_changed)
+     num_of_clients = num_of_clients_modified;
+   
    for(i = 0; i < num_of_clients; i++)
    {
      rbNode = RBFindNodeByID(tree, client_ids[i]);
 
      if(rbNode)
      {
+       /* Find the addition ofcapabilities of all the applicable client nodes, to find the percentage */
        capability_total = capability_total + rbNode->capability;
        task_set->capability[i] = rbNode->capability;
      }
    }
 
+   PRINT("Creating the task sets . .. ");
    /* Open the data set file to read */
-   fp = fopen(group_node->task_set_filename,"r");
-   if (fp == NULL)
-     return;
-
-   for(i = 0; i < num_of_clients; i++)
-   {
-     /* generate the file name for the client */
-     time ( &rawtime );
-     timeinfo = localtime ( &rawtime );
-     sprintf(buffer,"task_set/Task_Set_%s_%u", group_node->group_name, client_ids[i]);
-     strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
-     strcat(buffer,buffer2);
+   fd = open(group_node->task_set_filename, O_RDONLY);
+   fstat(fd, &sb);
    
-     task_set->task_filename[i] = MALLOC_CHAR(strlen(buffer) + 1);
-     strcpy(task_set->task_filename[i],buffer);
-     
-     /* open the file in write mode */
-     fptr=(fopen(buffer,"w"));
-     if(fptr==NULL){                                                             
-       return;
-     }
-     
-     data_count = (task_set->capability[i] * task_count)/ capability_total;
-     counter = 0;
-     while ((read = getline(&line, &len, fp)) != -1) {
-       counter += 10;
-       fputs(line,fptr);
-       if( counter >= data_count)
-        break;
-     }
+   memblock = mmap(NULL, sb.st_size, PROT_WRITE, MAP_PRIVATE, fd, 0);
+   if (memblock == MAP_FAILED) printf("mmap"); 
 
-     fclose(fptr);
-   }
+   strcpy(cmd,"mkdir task_set/");
+   strcat(cmd,group_node->group_name);
+   cmd_line = popen (cmd, "w");
+   pclose(cmd_line);
+   
+   create_task_sets_per_client(group_node,client_ids,task_set,memblock, num_of_clients,task_count,capability_total);
+
+   munmap(memblock, sb.st_size);
 }
 
 /* <doc>
@@ -672,7 +717,8 @@ void mcast_start_task_distribution(server_information_t *server_info,
     comm_struct_t req;
     fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
     pdu_t req_pdu;
-    unsigned int* task_set,task_count;
+    long* task_set;
+    unsigned int task_count;
 
     /* fetch the group node pointer from fsm_data */
     mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
@@ -719,7 +765,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
            group_node->task_set_details.number_of_working_clients * (sizeof(pdu->msg.idv.moderator_notify_rsp.client_ids[0])));
 
     req.idv.perform_task_req.task_count = task_count;
-    req.idv.perform_task_req.task_set = MALLOC_UINT(task_count);
+    req.idv.perform_task_req.task_set = MALLOC_LONG(task_count);
 
     for(count = 0; count < task_count; count++)
     {
@@ -799,6 +845,8 @@ void mcast_handle_task_response(server_information_t *server_info,
   fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
   pdu_t rsp_pdu;
   unsigned int* task_set,task_count;
+  FILE *cmd_line;
+  char element[16], cmd[256];
 
   /* fetch the group node pointer from fsm_data */
   mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
@@ -839,6 +887,12 @@ void mcast_handle_task_response(server_information_t *server_info,
   free(group_node->task_set_details.task_filename);
 
   group_node->task_type = INVALID_TASK_TYPE;
+
+  strcpy(cmd,"rm -rf task_set/");
+  strcat(cmd,group_node->group_name);
+  cmd_line = popen (cmd, "w");
+  pclose(cmd_line); 
+
 }
 
 /* <doc>
