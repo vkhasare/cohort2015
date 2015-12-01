@@ -1477,10 +1477,7 @@ void server_stdin_data(int fd, server_information_t *server_info)
     char read_buffer_copy[100];
     char *ptr;
     
-    int cnt=0, i = 0, msfd;
-    int group_msg[1000] = {0};
-    
-    struct sockaddr_in maddr;
+    int cnt = 0, i = 0;
     
     cnt=read(fd, read_buffer, 99);
 
@@ -1522,54 +1519,6 @@ void server_stdin_data(int fd, server_information_t *server_info)
         else
         {
            PRINT("No Backup Server available.");
-        }
-    }
-    else if(strncmp(read_buffer,"enable msg group",16) == 0)
-    {
-        PRINT("<Cli is not supported as of now.>");
-        return;
-
-        strcpy(read_buffer_copy,read_buffer);
-        ptr = strtok(read_buffer_copy," ");
-        while(i < 3)
-        {
-            ptr = strtok(NULL," ");
-            i++;
-        }
-        if (!ptr)
-        {
-            PRINT("Error: Unrecognized Command.\n");
-            return;
-        }
-        for(i = 0;i < num_groups; i++)
-        {
-            if(strcmp(ptr,mapping[i].grname) == 0)
-            {
-                group_msg[i] = 1;
-            }
-        }
-    }
-    else if(strncmp(read_buffer,"no msg group",12) == 0)
-    {
-        PRINT("<Cli is not supported as of now.>");
-        return;
-
-        strcpy(read_buffer_copy,read_buffer);
-        ptr = strtok(read_buffer_copy," ");
-        while(i < 3)
-        {
-            ptr = strtok(NULL," ");
-            i++;
-        }
-        if (!ptr)
-        {
-            PRINT("Error: Unrecognized Command.\n");
-            return;
-        }
-        for(i = 0;i < num_groups; i++)
-        {
-            if(strcmp(ptr,mapping[i].grname) == 0)
-                group_msg[i] = 0;
         }
     }
     else if (0 == strcmp(read_buffer,"show groups"))
