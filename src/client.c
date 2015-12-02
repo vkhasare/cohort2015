@@ -31,7 +31,7 @@ static void send_task_results_to_moderator(client_information_t *, char*, unsign
 void moderator_send_task_response_to_server(client_information_t *);
 void* execute_task(void *t_args);
 char* find_prime_numbers(thread_args *, unsigned int count, unsigned int *task_set);
-char * fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name);
+void fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name, unsigned int);
 void fill_thread_args(client_information_t *, perform_task_req_t *, thread_args *, int);
 
 /* <doc>
@@ -1173,7 +1173,7 @@ void moderator_send_task_response_to_server(client_information_t *client_info) {
         int num_clients=rsp_pdu->msg.idv.task_rsp.num_clients;
         task_rsp_t *task_resp= &(rsp_pdu->msg.idv.task_rsp);
         for(i=0;i<num_clients;i++){
-           fetch_task_response_from_client(task_resp->client_ids[i], task_resp->result[i].str, task_resp->group_name);
+           fetch_task_response_from_client(task_resp->client_ids[i], task_resp->result[i].str, task_resp->group_name, client_info->client_id);
         }
         write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
   
@@ -1266,6 +1266,14 @@ char * fetch_file_from_server(client_information_t * client_info, char * file_fo
 
    return fetch_file(src, dest); 
 }
+
+void copy_file(char *src, char *dest){
+   char cmd[200];
+   sprintf(cmd,"cp %s %s", src, dest);
+   system(cmd);
+}
+
+
 /* <doc>
  * fetch_task_response_from_client(client_information_t * client_info, char * file_path)
  * fetch file from client to the group moderator
