@@ -79,6 +79,8 @@ fptr client_func_handler(unsigned int msgType)
         func_name = NULL;
   }
 
+  LOGGING_INFO("Received message of type %d", msgType);
+
   return func_name;
 }
 
@@ -115,6 +117,8 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
              char ipaddr[INET6_ADDRSTRLEN];
              inet_ntop(AF_INET, get_in_addr(&mod_node->peer_client_addr), ipaddr, INET6_ADDRSTRLEN);
              PRINT("[WARNING] Client %s is down.", ipaddr);
+
+             LOGGING_WARNING("Client %s went down.", ipaddr);
 
              /*Send to Server if all clients, except this have responded with their task response*/
              moderator_send_task_response_to_server(client_info_local);
@@ -197,7 +201,8 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
               /*If moderator fsm state is other than MODERATOR_NOTIFY_RSP_PENDING or MODERATOR_TASK_RSP_PENDING,
                *then assert. */
 //              assert(0);
-              /*add logging warning mentioning fsm state of moderator*/
+              LOGGING_WARNING("moderator fsm state is other than MODERATOR_NOTIFY_RSP_PENDING or MODERATOR_TASK_RSP_PENDING. \
+                               Current FSM state is %d", client_info_local->moderator_info->fsm_state);
             }
         }
         else if(signal == CLIENT_TIMEOUT)
@@ -261,6 +266,8 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(mod)), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Moderator_Update_Req: GRP - %s] New Moderator IP is %s", mod_update_req.group_name, ipaddr);
 
+    LOGGING_INFO("New moderator has beem selected for group %s and is %s", mod_update_req.group_name, ipaddr);
+
     /*Start the recurring timer*/
     if (client_info->client_id != mod_update_req.moderator_id)
     {
@@ -270,6 +277,7 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
     {
        /*IT IS THE MODERATOR BLOCK.. UPDATE MODERATOR DATA STRUCTURES*/
        PRINT("THIS CLIENT IS RE-SELECTED AS MODERATOR FOR GROUP %s", mod_update_req.group_name);
+       LOGGING_INFO("This client has been selected as moderator for group %s", mod_update_req.group_name);
 
        /*Allocate the moderator info*/
        allocate_moderator_info(&client_info);
@@ -282,6 +290,8 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
 
        /*Number of clients in group, to be monitored by moderator*/
        mod_info->active_client_count = mod_update_req.client_id_count;
+
+       LOGGING_INFO("Number of clients working in group %s on task are %d", mod_info->group_name, mod_info->active_client_count);
 
        /**Register the moderator fsm handler and set the fsm state*/
        mod_info->fsm = moderator_main_fsm;
@@ -305,6 +315,8 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
           memcpy(&mod_node->peer_client_addr, &ipAddr, sizeof(ipAddr));
           mod_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
           i++;
+
+          LOGGING_INFO("Added client %s in moderator pending list", ipAddress);
        }
       PRINT("Moderator is working with clients - %s", str);
     }
@@ -333,6 +345,8 @@ int handle_new_server_notification(const int sockfd, pdu_t *pdu, ...)
 
     /*Update with new server address*/
     client_info->server.sin_addr.s_addr = new_server_update.new_server_id;
+
+    LOGGING_WARNING("New server is working and Server ID is %u", client_info->server.sin_addr.s_addr);
 
     FREE_INCOMING_PDU(pdu->msg);
 }
@@ -370,6 +384,8 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(mod)), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Moderator_Notify_Req: GRP - %s] Moderator IP is %s", mod_notify_req.group_name, ipaddr);
 
+    LOGGING_INFO("Moderator Notification received for group %s. Moderator IP is %s", mod_notify_req.group_name, ipaddr);
+
     /*After moderator information, inform moderator about the self presence by sending echo request msg.*/
     if (client_info->client_id != mod_notify_req.moderator_id && client_info->client_status == FREE) 
     {
@@ -380,7 +396,9 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
     {
        /*IT IS THE MODERATOR BLOCK.. UPDATE MODERATOR DATA STRUCTURES*/
        PRINT("THIS CLIENT IS SELECTED AS MODERATOR FOR GROUP %s", mod_notify_req.group_name);
-       
+
+       LOGGING_INFO("This client has been selected as moderator for group %s", mod_notify_req.group_name);
+
        /*Allocate the moderator info*/
        allocate_moderator_info(&client_info);
        /*mark client node as moderator*/
@@ -393,6 +411,8 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
        /*Number of clients in group, to be monitored by moderator*/
        mod_info->active_client_count = mod_notify_req.num_of_clients_in_grp;
 
+       LOGGING_INFO("Waiting for echo request from %d peer clients", mod_info->active_client_count);
+
        /**Register the moderator fsm handler and set the fsm state*/
        mod_info->fsm = moderator_main_fsm;
        mod_info->fsm_state = MODERATOR_NOTIFY_RSP_PENDING;
@@ -403,11 +423,13 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
        /*If only 1 client in the group, then send moderator notify response for moderator right away.*/
        if (1 == mod_info->active_client_count) 
        {
+           LOGGING_INFO("Only 1 client in the group %s. Sending mod notify response.", mod_info->group_name);
            send_moderator_notify_response(client_info);
            start_recurring_timer(&(client_info->moderator_info->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
        } 
        else 
        {
+           LOGGING_INFO("Timer started. Waiting for all clients to send echo request.");
           /* Start the timer on Moderator to get echo requests from all its peer clients */
            start_oneshot_timer(&(client_info->moderator_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
        }
@@ -443,6 +465,7 @@ int handle_leave_response(const int sockfd, pdu_t *pdu, ...)
             enum_cause = leave_rsp.cause;
 
             PRINT("[Leave_Response: GRP - %s] Cause : %s.", group_name, enum_to_str(enum_cause));
+            LOGGING_INFO("Leave response for group %s received with cause %s", group_name, enum_to_str(enum_cause));
 
             /* if cause other than ACCEPTED, ignore the response */
             if (enum_cause == ACCEPTED)
@@ -453,10 +476,12 @@ int handle_leave_response(const int sockfd, pdu_t *pdu, ...)
                 if (TRUE == multicast_leave(client_grp_node->mcast_fd, client_grp_node->group_addr)) 
                 {
                     PRINT("Client has left multicast group %s.", group_name);
+                    LOGGING_INFO("Client has left multicast group %s.", group_name);
                 } 
                 else 
                 {
                     PRINT("[Error] Error in leaving multicast group %s.", group_name);
+                    LOGGING_ERROR("Client couldnot leave the multicast group %s.", group_name);
                 }
 
                 /* Removing group association from list */
@@ -504,6 +529,8 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
         enum_cause = join_response.group_ips[iter].cause;
         group_name = join_response.group_ips[iter].group_name;
 
+        LOGGING_INFO("Join Response received for group %s with cause %s", group_name, enum_to_str(enum_cause));
+
         if (enum_cause == REJECTED)
         {
             PRINT("[Join_Response: GRP - %s] Cause : %s. (Reason : Non-existent Group)", group_name, enum_to_str(enum_cause));
@@ -524,7 +551,8 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
         int mcast_fd = multicast_join(group_ip,m_port);
         
         PRINT("Listening to group %s\n", group_name);
-        
+        LOGGING_INFO("Started listening on group %s", group_name);
+
         if(mcast_fd <= 0) return;
 
         memset(&node,0,sizeof(node));
@@ -538,6 +566,7 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
         if (status == -1)
         {
             perror("\nError while adding FD to epoll event.");
+            LOGGING_ERROR("Error in registering multicast fd in epoll");
             exit(0);
         }
 
@@ -551,6 +580,7 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
         if (ADD_CLIENT_IN_LL(&client_info, &node) == FALSE)
         {
             multicast_leave(mcast_fd, group_ip);
+            LOGGING_ERROR("Unable to add client in group %s in client DS. Leaving multicast group.", group_name);
         }
     }
     FREE_INCOMING_PDU(pdu->msg);
@@ -572,6 +602,7 @@ static void send_join_group_req(client_information_t *client_info, char *group_n
        if (IS_GROUP_IN_CLIENT_LL(&client_info,group_name))
        {
           PRINT("Error: Client is already member of group %s.",group_name);
+          LOGGING_WARNING("Client is already member of group %s.",group_name);
        }
        else
        {
@@ -584,9 +615,11 @@ static void send_join_group_req(client_information_t *client_info, char *group_n
           
           /* Sending join request for 1 group*/
           populate_join_req(req, &group_name, 1, capability);
-          write_record(client_info->client_fd, &client_info->server, &pdu);
 
           PRINT("[Join_Request: GRP - %s] Join Group Request sent to Server.", group_name);
+          LOGGING_INFO("Sending Join request for group %s, having capability %u", group_name, capability);
+
+          write_record(client_info->client_fd, &client_info->server, &pdu);
        }
 }
 
@@ -603,6 +636,7 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
 
        if (client_info->client_status == BUSY) {
           PRINT("[Error] Client cannot leave group %s as it is working on a task.", group_name);
+          LOGGING_WARNING("Client is busy. So, cannot leave the group %s", group_name);
           return;
        }
 
@@ -617,9 +651,11 @@ static void send_leave_group_req(client_information_t *client_info, char *group_
            write_record(client_info->client_fd, &client_info->server, &pdu);
 
            PRINT("[Leave_Request: GRP - %s] Leave Group Request sent to Server.", group_name);
+           LOGGING_INFO("Leave Group Request sent to Server.", group_name);
        } else {
            /* client is not member of request group */
            PRINT("Error: Client is not member of group %s.", group_name);
+           LOGGING_WARNING("Client is not member of group %s.", group_name);
        }
 
 }
@@ -672,6 +708,9 @@ static void send_moderator_notify_response(client_information_t *client_info)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_info->server)), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Moderator_Notify_Rsp: GRP - %s] Moderator Notify Response sent to server %s", moderator_notify_rsp->group_name, ipaddr);
 
+    LOGGING_INFO("Sending mod notify response to server for group %s, with client's count as %d",
+                  moderator_notify_rsp->group_name, clnt_notify_alive_list.client_rsp_cntr);
+
     write_record(client_info->client_fd, &client_info->server, &pdu);
 
     /*Reset variables related to mod notify response*/
@@ -706,10 +745,13 @@ void moderator_echo_req_notify_rsp_pending_state(client_information_t *client_in
   /*Updating list of clients who have responded during moderator notify duration*/
   clnt_notify_alive_list.client_rsp_list[clnt_notify_alive_list.client_rsp_cntr++] = calc_key(&pdu->peer_addr);
 
+  LOGGING_INFO("Client %u has responded echo request in moderator notify rsp pending state.", calc_key(&pdu->peer_addr));
+
   /* Send notification response to server if all the clients have responded with echo req or TIMEOUT happened
    * This is the case where all clients have responded.*/
   if (echo_req_rcvd_in_notify_rsp_pending == (client_info->moderator_info->active_client_count) - 1) 
   {
+     LOGGING_INFO("All the clients have responded with echo req in moderator notify rsp pending state. Sending notify rsp to server");
      send_moderator_notify_response(client_info);
   }
 }
@@ -736,6 +778,7 @@ void moderator_echo_req_task_rsp_pending_state(client_information_t *client_info
 
   if (client_node) {
      client_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
+     LOGGING_INFO("Echo req from client %u in task rsp pending state", client_node->peer_client_id);
   }
 }
 
@@ -944,7 +987,7 @@ int main(int argc, char * argv[])
     unsigned int capability;
 
     /*Start logging on client*/
-    //enable_logging(argv[0]);
+    enable_logging(argv[0]);
 
     /* Allocates client_info */
     allocate_client_info(&client_info);
@@ -987,7 +1030,7 @@ int main(int argc, char * argv[])
         exit(0);
     }
 
-    //LOGGING_INFO("Client started on %s on port %s", clientAddress, client_port);
+    LOGGING_INFO("Client started on %s", clientAddress);
 
     /* Socket is made non-blocking */
     status = make_socket_non_blocking(cfd);
@@ -996,7 +1039,7 @@ int main(int argc, char * argv[])
     client_info->server.sin_family = AF_INET;
     client_info->server.sin_port = htons(atoi(port));
     client_info->server.sin_addr.s_addr = inet_addr(serverAddr); 
-
+    memset(&client_info->server.sin_zero,0,sizeof(client_info->server.sin_zero));
 
     if (status == -1)
     {
@@ -1074,7 +1117,8 @@ int main(int argc, char * argv[])
     char * gr_list[max_groups];
     int iter = 0;
 
-    while(gname!=NULL){ 
+    while(gname!=NULL){
+      LOGGING_INFO("Sending join request for %s", gname); 
       gr_list[iter++] = gname;
       gname=strtok(NULL,",");
     }
@@ -1082,6 +1126,8 @@ int main(int argc, char * argv[])
     pdu_t pdu;
     
     capability = generate_random_capability();
+
+    LOGGING_INFO("Client has capability as %u", capability);
 
     populate_join_req(&(pdu.msg), gr_list, iter, capability);
     write_record(client_info->client_fd, &client_info->server, &pdu);
@@ -1152,6 +1198,7 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
          }
          client_info->client_status = FREE;
      }
+     LOGGING_INFO("Client is done with its task for group %s and is now free. Sending task rsp notify to moderator", group_name);
      PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Req sent to Moderator. ", group_name);
 }
 
@@ -1179,6 +1226,7 @@ void moderator_send_task_response_to_server(client_information_t *client_info) {
       }
 
       PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
+      LOGGING_INFO("Task response for group %s is sent to server, client worked - %d", moderator_info->group_name, moderator_info->active_client_count);
 
       /* Free the moderator, since moderator job is done now.
        * and mark the client free
@@ -1234,18 +1282,22 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
         if (mod_node) {
             /*If response received from peer clients of group*/ 
             if(moderator_info->moderator_resp_msg != NULL) {
+                LOGGING_INFO("Task response notify req for group %s is received from %s", task_response->group_name, ipaddr);
                 update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
             } else {
                 /*If response received from moderator*/
+                LOGGING_INFO("Moderator has completed its own task for group %s", task_response->group_name);
                 moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
             }
 
             /*Move client from pending to done list.*/
             move_moderator_node_pending_to_done_list(client_info, mod_node);
         } else {
-          /* Add logging warning, as some client who is not expected to work on this task
+          /* Some client who is not expected to work on this task
            * has responded to moderator with task rsp notify req
            */
+            LOGGING_WARNING("Client %s who is not expected to work on group %s task, has responded to moderator with task rsp notify req",  \
+                            ipaddr, task_response->group_name);
         }
 
         /*Send to Server if all clients have responded with their task response*/
@@ -1259,6 +1311,9 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
           In this case, we should ignore the result sent by client, which moderator
           is not expecting.
         */
+        LOGGING_WARNING("Task response notify request received for case, either                 \
+                        - Result is received from a client, who was declared dead previously.   \
+                        - Result from moderator has already been sent to Server.");
     }
     FREE_INCOMING_PDU(pdu->msg);
 }
@@ -1300,6 +1355,7 @@ void send_task_results(thread_args *args){
     result_t *answer = copy_result_from_args(args); 
 
     if(answer !=NULL) {
+          LOGGING_INFO("Client task execution is done by thread for group %s and is ready to send to moderator", args->group_name);
           send_task_results_to_moderator(args->client_info,args->group_name, args->task_id, TYPE_INT, answer, args->client_info->client_id);
           free(answer->value);
           free(answer);
@@ -1321,6 +1377,7 @@ void* find_prime_numbers(void *args)
     thread_args *t_args = (thread_args *)args;
 
     PRINT("[INFO] Started working on prime numbers for data set count : %d", t_args->data_count);
+    LOGGING_INFO("Started working on prime numbers for data set count : %d", t_args->data_count);
 
     /* Loop for prime number's in given data set */
     for(i = 0; i < t_args->data_count; i++)
@@ -1378,6 +1435,8 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
  
     PRINT("[Task_Request: GRP - %s] Task Request Received for group %s.", perform_task.group_name, perform_task.group_name);
 
+    LOGGING_INFO("Task request is received for group %s", perform_task.group_name);
+
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
 
@@ -1406,6 +1465,8 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
             ipAddr.sin_port = htons(atoi(PORT));
             inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET_ADDRSTRLEN);
 
+            LOGGING_INFO("Client %s is working on task in group %", ipAddress, perform_task.group_name);
+
             (i == 0) ? sprintf(str, "%s", ipAddress) : sprintf(str, "%s , %s", str, ipAddress);
 
             memcpy(&mod_node->peer_client_addr, &ipAddr, sizeof(ipAddr));
@@ -1425,6 +1486,8 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
              * start_index : the index of the original task set from where this clients starts performing task
              * stop_index : the index of the original task set to which this client perform's the task
              */
+            LOGGING_INFO("Client started working on group %s task - prime numbers", perform_task.group_name);
+
             start_index = ((perform_task.task_count/perform_task.client_id_count) * count);
             /* client_task_count is the count of total number's which client has to work upon */
             client_task_count = (perform_task.task_count/perform_task.client_id_count);
@@ -1459,6 +1522,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
             if(result)
             {
               PRINT("Could not create thread to perform task");
+              LOGGING_ERROR("Failure in creating thread to perform task");
             }
             break;
         }
@@ -1466,7 +1530,10 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
    }
 
    if (count >= perform_task.client_id_count)
-      PRINT("[INFO] Task Request is not intended for this client.");
+   {
+      PRINT("[INFO] Task Request for group %s is not intended for this client.", perform_task.group_name);
+      LOGGING_INFO("Task Request for group %s is not intended for this client.", perform_task.group_name);
+   }
 
    FREE_INCOMING_PDU(pdu->msg);
 }
