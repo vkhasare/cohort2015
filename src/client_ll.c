@@ -13,11 +13,11 @@ extern int MAX_ALLOWED_KA_MISSES;
  *
  * </doc>
  */
-void get_client_from_moderator_pending_list(client_information_t *client_info, unsigned int clientID, mod_client_node_t **client_node)
+void get_client_from_moderator_pending_list(moderator_information_t *moderator_info, unsigned int clientID, mod_client_node_t **client_node)
 {
   mod_client_node_t *mod_node = NULL;
 
-      mod_node =     SN_LIST_MEMBER_HEAD(&((client_info)->moderator_info->pending_client_list->client_grp_node),
+      mod_node =     SN_LIST_MEMBER_HEAD(&(moderator_info->pending_client_list->client_grp_node),
                                            mod_client_node_t,
                                            list_element);
 
@@ -192,7 +192,7 @@ void deallocate_moderator_list(client_information_t **client_info)
 void move_moderator_node_pending_to_done_list(client_information_t *client_info, mod_client_node_t *mod_node)
 {
    moderator_information_t *mod_info = client_info->moderator_info;
-
+   if(mod_info){
    /*Remove from pending list*/
    SN_LIST_MEMBER_REMOVE(&((mod_info)->pending_client_list->client_grp_node),
                          mod_node,
@@ -202,6 +202,7 @@ void move_moderator_node_pending_to_done_list(client_information_t *client_info,
    SN_LIST_MEMBER_INSERT_HEAD(&((mod_info)->done_client_list->client_grp_node),
                               mod_node,
                               list_element);
+   }
 }
 
 /* <doc>

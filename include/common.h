@@ -22,6 +22,10 @@
 #include <net/if.h>
 #include "comm_primitives.h"
 #include "print.h"
+#include <sys/stat.h>
+#include<dirent.h>
+#include <libgen.h>
+#include <pthread.h>
 
 #define PORT "3490"
 #define TIMEOUT_SECS 5
@@ -134,6 +138,10 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name);
 void start_oneshot_timer(timer_t *t, uint8_t interval, uint32_t sigval);
 void start_recurring_timer(timer_t *t, uint8_t interval, uint32_t sigval);
 unsigned int generate_random_capability(void);
+unsigned int get_task_count(const char*, unsigned int** );
+char * fetch_file(char *, char *);
+void inline create_folder(char * path);
+void inline check_and_create_folder(char * path);
 
 
 #define LOGGING_WARNING(...)                \

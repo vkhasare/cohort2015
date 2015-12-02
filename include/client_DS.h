@@ -64,6 +64,7 @@ typedef struct {
   struct sockaddr_in group_addr;      /* Address of multicast group*/
   int group_port;                     /* Multicast group port*/
   unsigned int mcast_fd;              /* Multicast FD associated with every group*/
+  char * last_task_result_path;       /* File path for last executed task*/
   sn_list_element_t list_element;
 } client_grp_node_t;
 
@@ -75,12 +76,10 @@ typedef struct
 }fsm_data_t;
 
 typedef struct {
-  unsigned int data_count;
-  long data[MAX_TASK_COUNT];
-  unsigned int result_count;
-  long result[MAX_TASK_COUNT];
   client_information_t *client_info;
   char * group_name;
+  char * task_filename;
+  char * task_folder_path;
   unsigned int task_id;
 } thread_args;
   

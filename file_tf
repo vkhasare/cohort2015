@@ -1,0 +1,21 @@
+#!/usr/bin/expect -f
+
+#echo "This is first $1"
+#echo "This is second $2"
+
+# connect via scp
+set source [lindex $argv 0];
+set dest [lindex $argv 1];
+
+spawn scp $source $dest 
+#######################
+expect {
+  -re ".*es.*o.*" {
+    exp_send "yes\r"
+    exp_continue
+  }
+  -re ".*sword.*" {
+    exp_send "starent\r"
+  }
+}
+interact
