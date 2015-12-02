@@ -1,6 +1,5 @@
 #include "common.h"
 #include "client_DS.h"
-#include <pthread.h>
 
 const int MAX_ALLOWED_KA_MISSES = 5;
 
@@ -617,7 +616,8 @@ static void send_moderator_notify_response(client_information_t *client_info)
     moderator_notify_rsp_t *moderator_notify_rsp = &(rsp->idv.moderator_notify_rsp);
 
     /*Filling group name and moderator id*/
-    moderator_notify_rsp->group_name = mod_info->group_name;
+    moderator_notify_rsp->group_name = MALLOC_STR;
+    strcpy(moderator_notify_rsp->group_name, mod_info->group_name);
     moderator_notify_rsp->moderator_id = client_info->client_id;    
 
     /*remove this line in future if you dont see any issues in this code*/
@@ -1132,6 +1132,7 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
 {
 
      pdu_t pdu;
+     client_grp_node_t * active_group; 
      /* Sending task response for 1 group*/
      populate_task_rsp(&(pdu.msg),task_id, group_name, rtype ,file_path, my_id);
      moderator_information_t * moderator_info = client_info->moderator_info;
@@ -1267,19 +1268,16 @@ char * fetch_file_from_server(client_information_t * client_info, char * file_fo
 }
 /* <doc>
  * fetch_task_response_from_client(client_information_t * client_info, char * file_path)
- * fetch file from server to the client.
+ * fetch file from client to the group moderator
  *
  * </doc>
  */
-
-char * fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name){
+void fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name, unsigned int mod_id){
 
    struct in_addr ip_addr;
    ip_addr.s_addr = client_id;
    char src[100];
    char dest[100];
-
-   sprintf(src, "%s:%s", inet_ntoa(ip_addr),  file_path);
 
    sprintf(dest, "/tmp/client/moderator/%s/", group_name);
 
@@ -1287,7 +1285,13 @@ char * fetch_task_response_from_client(unsigned int client_id, char * file_path,
 
    strcat(dest, (char *)basename(file_path));
 
-   return fetch_file(src, dest);
+   if(mod_id != client_id){
+     sprintf(src, "%s:%s", inet_ntoa(ip_addr),  file_path);
+     fetch_file(src, dest);
+   }
+   else{
+     copy_file(file_path, dest);
+   }
 }
 
 /* <doc>
@@ -1472,10 +1476,10 @@ void fill_thread_args(client_information_t * client_info, perform_task_req_t * p
         args->client_info=client_info;
         args->task_id = perform_task->task_id;
 
-        args->group_name=malloc(sizeof(char)*strlen(perform_task->group_name));
+        args->group_name=malloc(sizeof(char)*(strlen(perform_task->group_name)+1));
         strcpy(args->group_name, perform_task->group_name);
 
-        args->task_filename=malloc(sizeof(char)*strlen(perform_task->task_filename[index].str));
+        args->task_filename=malloc(sizeof(char)*(strlen(perform_task->task_filename[index].str+1)));
         strcpy(args->task_filename, perform_task->task_filename[index].str);
 
         args->task_folder_path=malloc(sizeof(char)*strlen(perform_task->task_folder_path));

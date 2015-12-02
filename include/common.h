@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include<dirent.h>
 #include <libgen.h>
+#include <pthread.h>
 
 #define PORT "3490"
 #define TIMEOUT_SECS 5

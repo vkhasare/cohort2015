@@ -64,6 +64,7 @@ typedef struct {
   struct sockaddr_in group_addr;      /* Address of multicast group*/
   int group_port;                     /* Multicast group port*/
   unsigned int mcast_fd;              /* Multicast FD associated with every group*/
+  char * last_task_result_path;       /* File path for last executed task*/
   sn_list_element_t list_element;
 } client_grp_node_t;
 
