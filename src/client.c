@@ -28,9 +28,12 @@ static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
 static void send_moderator_notify_response(client_information_t *client_info);
 static int handle_perform_task_req(const int, pdu_t *pdu, ...);
-static void send_task_results_to_moderator(client_information_t *, char*, unsigned int,rsp_type_t, result_t *,unsigned int);
+static void send_task_results_to_moderator(client_information_t *, char*, unsigned int,rsp_type_t, char*,unsigned int);
 void moderator_send_task_response_to_server(client_information_t *);
-void* find_prime_numbers(void *args);
+void* execute_task(void *t_args);
+char* find_prime_numbers(thread_args *, unsigned int count, unsigned int *task_set);
+char * fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name);
+void fill_thread_args(client_information_t *, perform_task_req_t *, thread_args *, int);
 
 /* <doc>
  * fptr client_func_handler(unsigned int msgType)
@@ -1079,6 +1082,44 @@ int main(int argc, char * argv[])
 #endif
 
 /* <doc>
+ * void update_moderator_info_with_task_response(client_information_t *client_info, task_rsp_t *task_response, unsigned int peer_id)
+ * Update moderator information with task response. Reads the task response PDU, and appends the moderator
+ * Response message with the new received response.
+ *
+ * </doc>
+ */
+void update_moderator_info_with_task_response(client_information_t *client_info, task_rsp_t *task_response, unsigned int peer_id){
+        moderator_information_t *moderator_info = client_info->moderator_info;
+        mod_client_node_t *mod_node = NULL; 
+
+
+        /*Since response from client is received, fetch client node from pending list.*/
+        get_client_from_moderator_pending_list(moderator_info, peer_id, &mod_node);
+
+        /*Process task response notify req only if it is expected by moderator, else ignore.*/ 
+        if (mod_node) {
+            /*If moderator response msg has been allocated for the group*/ 
+            if(moderator_info->moderator_resp_msg != NULL) {
+                update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result->str, peer_id);
+            } else {
+                /*Allocate and populate moderator response*/
+                moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
+            }
+            /*Move client from pending to done list.*/
+            move_moderator_node_pending_to_done_list(client_info, mod_node);
+        } else {
+          /* Add logging warning, as some client who is not expected to work on this task
+           * has responded to moderator with task rsp notify req
+           */
+        }
+
+        /*Send to Server if all clients have responded with their task response*/
+        moderator_send_task_response_to_server(client_info);
+
+
+}
+
+/* <doc>
  * static void send_task_results_to_moderator(client_information_t *client_info, rsp_type_t, result_t *)
  * This function creates Group Task Response message and sends to moderator. It accepts
  * results as input and relays message on client fd.
@@ -1087,14 +1128,20 @@ int main(int argc, char * argv[])
  * </doc>
  */
 static
-void send_task_results_to_moderator(client_information_t *client_info, char* group_name, unsigned int task_id,  rsp_type_t rtype, result_t *result, unsigned int my_id)
+void send_task_results_to_moderator(client_information_t *client_info, char* group_name, unsigned int task_id,  rsp_type_t rtype, char* file_path, unsigned int my_id)
 {
 
      pdu_t pdu;
      /* Sending task response for 1 group*/
-     populate_task_rsp(&(pdu.msg),task_id, group_name, rtype ,result, my_id);
-     write_record(client_info->client_fd, &(client_info->active_group->moderator) , &pdu);
-     
+     populate_task_rsp(&(pdu.msg),task_id, group_name, rtype ,file_path, my_id);
+     moderator_information_t * moderator_info = client_info->moderator_info;
+     if(!(moderator_info != NULL && MATCH_STRING(moderator_info->group_name, group_name))){ 
+       write_record(client_info->client_fd, &(client_info->active_group->moderator) , &pdu);
+     } 
+     else {
+       task_rsp_t *task_response=&(pdu.msg.idv.task_rsp);
+       update_moderator_info_with_task_response(client_info, task_response, client_info->client_id);
+     } 
      /* Deactivate timer for this group on client node. Not deleting for
       * moderator since it makes no sense to run task collection timer for self*/
      if(client_info->is_moderator == false) {
@@ -1118,31 +1165,36 @@ void moderator_send_task_response_to_server(client_information_t *client_info) {
   /*client_info->moderator_info will always be valid here*/
   moderator_information_t * moderator_info = client_info->moderator_info;
   pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
-
-  /*If response from all the clients is received, then send the collated result to Server.*/
-  if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count) {
-      write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
-
-      if (moderator_info->timer_id) {
-          timer_delete(moderator_info->timer_id);
-      }
-
-      PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
-
-      /* Free the moderator, since moderator job is done now.
-       * and mark the client free
-       */
-      deallocate_moderator_list(&client_info);
-      client_info->is_moderator = FALSE;
-      client_info->client_status = FREE;
-   }
+  if(rsp_pdu != NULL){
+    /*If response from all the clients is received, then send the collated result to Server.*/
+    if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count) {
+        int i;
+        int num_clients=rsp_pdu->msg.idv.task_rsp.num_clients;
+        task_rsp_t *task_resp= &(rsp_pdu->msg.idv.task_rsp);
+        for(i=0;i<num_clients;i++){
+           fetch_task_response_from_client(task_resp->client_ids[i], task_resp->result[i].str, task_resp->group_name);
+        }
+        write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
+  
+        if (moderator_info->timer_id) {
+            timer_delete(moderator_info->timer_id);
+        }
+  
+        PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
+  
+        /* Free the moderator, since moderator job is done now.
+         * and mark the client free
+         */
+        deallocate_moderator_list(&client_info);
+        client_info->is_moderator = FALSE;
+        client_info->client_status = FREE;
+     }
+  }
 }
-
-
 /* <doc>
  * int handle_task_response(const int sockfd, const comm_struct_t const resp, ...)
- * Join Group Response Handler. Reads the join response PDU, and fetches the
- * IP for required multicast group. Joins the multicast group.
+ * Task Response Handler. Reads the task response PDU, and updates the moderator
+ * information for the received message.
  *
  * </doc>
  */
@@ -1170,36 +1222,13 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
 
     /*Response from peer clients should only be processed by the moderator*/
     if(moderator_info != NULL && MATCH_STRING(moderator_info->group_name, task_response->group_name)){
-        mod_client_node_t *mod_node = NULL; 
         unsigned int peer_id = calc_key(&(pdu->peer_addr));
         char ipaddr[INET6_ADDRSTRLEN];
 
         inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN); 
         PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Request received from client %s", task_response->group_name, ipaddr);
-
-        /*Since response from client is received, fetch client node from pending list.*/
-        get_client_from_moderator_pending_list(client_info, peer_id, &mod_node);
-
-        /*Process task response notify req only if it is expected by moderator, else ignore.*/ 
-        if (mod_node) {
-            /*If response received from peer clients of group*/ 
-            if(moderator_info->moderator_resp_msg != NULL) {
-                update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, task_response->type, task_response->result, peer_id);
-            } else {
-                /*If response received from moderator*/
-                moderator_info->moderator_resp_msg = populate_moderator_task_rsp(moderator_info->active_client_count, task_response, peer_id);
-            }
-
-            /*Move client from pending to done list.*/
-            move_moderator_node_pending_to_done_list(client_info, mod_node);
-        } else {
-          /* Add logging warning, as some client who is not expected to work on this task
-           * has responded to moderator with task rsp notify req
-           */
-        }
-
-        /*Send to Server if all clients have responded with their task response*/
-        moderator_send_task_response_to_server(client_info);
+       
+        update_moderator_info_with_task_response(client_info, task_response, peer_id);
     } else{
         /*PRINT("Error case : Moderator received a wrong input");
           We should add logging warning here.
@@ -1213,67 +1242,110 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
 }
 
 /* <doc>
- * result_t* copy_result_from_args(thread_args * args)
- * Miscellaneous function to copy result data set from 
- * thread_args to result_t.
+ * fetch_file_from_server(client_information_t * client_info, char * file_path)
+ * fetch file from server to the client.
  *
  * </doc>
  */
-result_t* copy_result_from_args(thread_args * args)
+
+char * fetch_file_from_server(client_information_t * client_info, char * file_folder, char * file_name, char * group_name){
+   
+   char src[100];
+   char *dest=malloc(sizeof(char)*80);
+   char ipaddr[INET6_ADDRSTRLEN];
+
+   inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_info->server)), ipaddr, INET6_ADDRSTRLEN);
+   sprintf(src, "%s:%s/%s", ipaddr, file_folder, file_name);
+
+   sprintf(dest, "/tmp/client/%s/", group_name);
+
+   check_and_create_folder(dest);
+
+   strcat(dest, file_name);
+
+   return fetch_file(src, dest); 
+}
+/* <doc>
+ * fetch_task_response_from_client(client_information_t * client_info, char * file_path)
+ * fetch file from server to the client.
+ *
+ * </doc>
+ */
+
+char * fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name){
+
+   struct in_addr ip_addr;
+   ip_addr.s_addr = client_id;
+   char src[100];
+   char dest[100];
+
+   sprintf(src, "%s:%s", inet_ntoa(ip_addr),  file_path);
+
+   sprintf(dest, "/tmp/client/moderator/%s/", group_name);
+
+   check_and_create_folder(dest);
+
+   strcat(dest, (char *)basename(file_path));
+
+   return fetch_file(src, dest);
+}
+
+/* <doc>
+ * void* execute_task(void *args)
+ * Execute Task on client.
+ *
+ * </doc>
+ */
+
+void* execute_task(void *args)
 {
-    result_t * result=NULL;
-    int i;
-    result = malloc(sizeof(result_t));
-    result->value=NULL; 
-    result->size=0;
+    unsigned int task_count, *task_set;
 
-    if(args->result_count>0)
-    {
-        result->size=args->result_count;
-        result->value=malloc(sizeof(int)*result->size);
-        for(i=0;i<result->size;i++)
-            result->value[i]=args->result[i];
+    thread_args *t_args = (thread_args *)args;
+    /*Making thread detached.*/
+    pthread_t self = pthread_self();
+    pthread_detach(self);
+
+    char * dest=fetch_file_from_server(t_args->client_info, t_args->task_folder_path, t_args->task_filename, t_args->group_name);
+
+    if(dest !=NULL){
+       task_count = get_task_count(dest, &task_set);
+
+       char * file_path=find_prime_numbers(t_args, task_count, task_set);
+
+       if(file_path !=NULL){
+         send_task_results_to_moderator(t_args->client_info, t_args->group_name, t_args->task_id, TYPE_INT, file_path, t_args->client_info->client_id);
+       }
+       if(task_set)
+          free(task_set);
     }
-    return result;
+    else{
+      PRINT("failed to open the task set");
+    } 
+
+    return NULL;
 }
-
 /* <doc>
- * void send_task_results(thread_args *args)
- * This function is called when task is processed by the client and
- * results are ready to send to moderator.
- *
- * </doc>
- */
-void send_task_results(thread_args *args){
-        
-    result_t *answer = copy_result_from_args(args); 
-
-    if(answer !=NULL) {
-          send_task_results_to_moderator(args->client_info,args->group_name, args->task_id, TYPE_INT, answer, args->client_info->client_id);
-    }
-}
-
-/* <doc>
- * void* find_prime_numbers(void *args)
+ * void* find_prime_numbers(thread_args *args)
  * Read's the sub set of data and prints prime numbers
  *
  * </doc>
  */
-void* find_prime_numbers(void *args)
+char * find_prime_numbers(thread_args *t_args, unsigned int count, unsigned int *task_set)
 {
     unsigned int i,j,flag;
+    unsigned int result[count];
+    unsigned int result_count=0;
 
-    thread_args *t_args = (thread_args *)args;
-
-    PRINT("[INFO] Started working on prime numbers for data set count : %d", t_args->data_count);
+    PRINT("[INFO] Started working on prime numbers for data set count : %d", count);
 
     /* Loop for prime number's in given data set */
-    for(i = 0; i < t_args->data_count; i++)
+    for(i = 0; i < count; i++)
     {
         flag = 0;
-        for (j = 2; j < t_args->data[i]; j++)
+        for (j = 2; j < task_set[i]; j++)
         {
-            if ((t_args->data[i] % j) == 0)
+            if ((task_set[i] % j) == 0)
             {
                 flag = 1;
                 break;
@@ -1281,19 +1353,40 @@ void* find_prime_numbers(void *args)
         }
         if(!flag)
         {
-            t_args->result[t_args->result_count] = t_args->data[i];
+            result[result_count] = task_set[i];
             /*PRINT("Prime number %d",t_args->result[t_args->result_count]);*/
 
             /* Total count of prime numbers */
-            t_args->result_count++;
+            result_count++;
         }
     }
-    if(t_args->result_count == 0)
+    if(result_count == 0)
         PRINT("No prime numbers found..");
 
-    send_task_results(args);
+    char folder_path[120];
 
-    return NULL;
+    sprintf(folder_path, "/tmp/client/task_result/%s", t_args->group_name);
+
+    check_and_create_folder(folder_path);
+
+    char *file_path=malloc(sizeof(char)*180);
+
+    sprintf(file_path,"%s/%s", folder_path, t_args->task_filename);
+
+    FILE*fptr=(fopen(file_path,"w"));
+
+    if(fptr==NULL){
+       free(file_path);
+       return NULL;
+    }
+
+    fprintf(fptr, "%u", result_count);
+    for(i=0;i<result_count;i++){
+      fprintf(fptr, ", %u", result[i]);
+    }
+    fclose(fptr);
+
+    return file_path;
 }
 
 /* <doc>
@@ -1314,10 +1407,10 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     client_information_t * client_info;
     pthread_t thread;
 
-    perform_task_req_t perform_task = req->idv.perform_task_req;
+    perform_task_req_t * perform_task = &(req->idv.perform_task_req);
     thread_args *args = malloc(sizeof(thread_args));
  
-    PRINT("[Task_Request: GRP - %s] Task Request Received for group %s.", perform_task.group_name, perform_task.group_name);
+    PRINT("[Task_Request: GRP - %s] Task Request Received for group %s.", perform_task->group_name, perform_task->group_name);
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
@@ -1329,7 +1422,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     if (client_info->moderator_info) {
         client_info->moderator_info->fsm_state = MODERATOR_TASK_RSP_PENDING;
         /*Number of clients working on this task*/
-        client_info->moderator_info->active_client_count = perform_task.client_id_count;
+        client_info->moderator_info->active_client_count = perform_task->client_id_count;
 
         /*allocate the moderator client node and store the information about the working active clients*/
         int i = 0;
@@ -1337,12 +1430,12 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         struct sockaddr_in ipAddr;
         char ipAddress[INET_ADDRSTRLEN];
 
-        while (i < perform_task.client_id_count) {
+        while (i < perform_task->client_id_count) {
             mod_client_node_t *mod_node = (mod_client_node_t *) allocate_clnt_moderator_node(&client_info->moderator_info);
   
-            mod_node->peer_client_id = perform_task.client_ids[i];
+            mod_node->peer_client_id = perform_task->client_ids[i];
 
-            ipAddr.sin_addr.s_addr = perform_task.client_ids[i];
+            ipAddr.sin_addr.s_addr = perform_task->client_ids[i];
             ipAddr.sin_family = AF_INET;
             ipAddr.sin_port = htons(atoi(PORT));
             inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET_ADDRSTRLEN);
@@ -1353,54 +1446,40 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         PRINT("Working clients are - %s", str);
     }
 
-    switch(perform_task.task_type)
+    for(count = 0; count < perform_task->client_id_count; count++)
     {
-      case FIND_PRIME_NUMBERS:
-        for(count = 0; count < perform_task.client_id_count; count++)
-        {
-          if(client_info->client_id == perform_task.client_ids[count]) /*This client needs to perform the task */
-          {
-            /* assumption client_id_count < num of task count 
-             * start_index : the index of the original task set from where this clients starts performing task
-             * stop_index : the index of the original task set to which this client perform's the task
-             */
-            start_index = ((perform_task.task_count/perform_task.client_id_count) * count);
-            /* client_task_count is the count of total number's which client has to work upon */
-            client_task_count = (perform_task.task_count/perform_task.client_id_count);
-
-            if((count +1) == perform_task.client_id_count) /* last client */
-            {
-              /* Consider rest all elements of task set */
-              stop_index = perform_task.task_count - 1;
-              client_task_count = stop_index - start_index + 1;
-            }
-            else
-              stop_index = start_index + client_task_count;
-
-            while(i != client_task_count)
-            {
-              /* Derive the task set for client */
-              client_task_set[i] = perform_task.task_set[(start_index + i)];
-              args->data[i] = client_task_set[i];
-              i++;
-            }
-
-            args->data_count = client_task_count;
-            
-            args->client_info=client_info;
-            args->task_id = perform_task.task_id;
-            args->group_name=malloc(sizeof(char)*strlen(perform_task.group_name));
-            strcpy(args->group_name, perform_task.group_name);
-            
-            /* Create a thread to perform the task */
-            result = pthread_create(&thread, NULL, find_prime_numbers ,args);
+      if(client_info->client_id == perform_task->client_ids[count]) /*This client needs to perform the task */
+      {
+        /* assumption client_id_count < num of task count 
+         * start_index : the index of the original task set from where this clients starts performing task
+         * stop_index : the index of the original task set to which this client perform's the task
+         */
         
-            if(result)
-            {
-              PRINT("Could not create thread to perform task");
-            }
+        fill_thread_args(client_info, perform_task, args, count); 
+        /* Create a thread to perform the task */
+        result = pthread_create(&thread, NULL, execute_task ,args);
+    
+        if(result)
+        {
+          PRINT("Could not create thread to perform task");
         }
       }
-   }
+    }
+}
+
+void fill_thread_args(client_information_t * client_info, perform_task_req_t * perform_task, thread_args * args, int index){
+
+        args->client_info=client_info;
+        args->task_id = perform_task->task_id;
+
+        args->group_name=malloc(sizeof(char)*strlen(perform_task->group_name));
+        strcpy(args->group_name, perform_task->group_name);
+
+        args->task_filename=malloc(sizeof(char)*strlen(perform_task->task_filename[index].str));
+        strcpy(args->task_filename, perform_task->task_filename[index].str);
+
+        args->task_folder_path=malloc(sizeof(char)*strlen(perform_task->task_folder_path));
+        strcpy(args->task_folder_path, perform_task->task_folder_path);
+  
 }
 

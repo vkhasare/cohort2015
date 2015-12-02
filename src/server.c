@@ -537,42 +537,6 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     return 0;
 }
 
-unsigned int get_task_count(const char* filename,unsigned int** task_set)
-{
-    FILE *fp = NULL, *cmd_line = NULL;
-    uint32_t count = 0, i, j = 0;
-    char element[1000], cmd[256];
-    char *ptr;
-    
-    strcpy(cmd, "fgrep -o , ");
-    strcat(cmd, filename);
-    strcat(cmd, " | wc -l");
-    cmd_line = popen (cmd, "r");
-    fscanf(cmd_line, "%i", &count);
-    pclose(cmd_line);
-
-    *task_set = MALLOC_UINT(count);
-    
-    fp = fopen(filename, "r");
-    
-    for(i = 0; i < count/10; i++){
-        fscanf(fp, "%s", element);
-        ptr = strtok(element,",");
-        j = 0;
-        (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
-        while(j < 9)
-        {
-          ptr = strtok(NULL,",");
-          j++;
-          (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
-        }
-    }
-    if(fp)
-      fclose(fp);
-
-  return count;
-}
-
 /* <doc>
  * void get_data_set_for_client_based_on_capability(server_information_t *server_info,
  *                                                  mcast_group_node_t *group_node,
@@ -595,11 +559,13 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
    FILE *fptr,* fp;
    time_t rawtime;
    struct tm * timeinfo;
-   char buffer[1000], buffer2[40];
+   char folder_path[100], buffer2[40], file_name[100];
+   char file_path[200];
    unsigned int counter = 0, data_count = 0;
    char * line = NULL;
    size_t len = 0;
    ssize_t read;
+   int status;
    mcast_task_set_t *task_set = &group_node->task_set_details;
 
    tree = (RBT_tree*) server_info->client_RBT_head;
@@ -624,20 +590,25 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
    if (fp == NULL)
      return;
 
+   sprintf(folder_path,"/tmp/server/task_set/%s", group_node->group_name);
+   task_set->task_folder_path = MALLOC_CHAR(strlen(folder_path) + 1);
+   strcpy(task_set->task_folder_path,folder_path);
+   check_and_create_folder(folder_path);
+   
    for(i = 0; i < num_of_clients; i++)
    {
      /* generate the file name for the client */
      time ( &rawtime );
      timeinfo = localtime ( &rawtime );
-     sprintf(buffer,"task_set/Task_Set_%s_%u", group_node->group_name, client_ids[i]);
      strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
-     strcat(buffer,buffer2);
+     sprintf(file_name,"%u_%s",client_ids[i], buffer2);
+     sprintf(file_path, "%s/%s", folder_path, file_name);
    
-     task_set->task_filename[i] = MALLOC_CHAR(strlen(buffer) + 1);
-     strcpy(task_set->task_filename[i],buffer);
+     task_set->task_filename[i] = MALLOC_CHAR(strlen(file_name) + 1);
+     strcpy(task_set->task_filename[i],file_name);
      
      /* open the file in write mode */
-     fptr=(fopen(buffer,"w"));
+     fptr=(fopen(file_path,"w"));
      if(fptr==NULL){                                                             
        return;
      }
@@ -688,7 +659,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
     if(!task_count)
       return;
 
-    req.idv.perform_task_req.group_name= MALLOC_CHAR(strlen(group_node->group_name));
+    req.idv.perform_task_req.group_name= MALLOC_CHAR(strlen(group_node->group_name)+1);
     strcpy(req.idv.perform_task_req.group_name, group_node->group_name);
     req.idv.perform_task_req.task_id = server_info->task_id;
     (server_info->task_id)++;  
@@ -700,13 +671,13 @@ void mcast_start_task_distribution(server_information_t *server_info,
     {
         req.idv.perform_task_req.client_id_count = pdu->msg.idv.moderator_notify_rsp.client_id_count;
         req.idv.perform_task_req.client_ids = MALLOC_UINT(pdu->msg.idv.moderator_notify_rsp.client_id_count);
-    }
+    
 
     for(count = 0; count < pdu->msg.idv.moderator_notify_rsp.client_id_count; count++)
     {
         req.idv.perform_task_req.client_ids[count] = pdu->msg.idv.moderator_notify_rsp.client_ids[count];
     }
-
+    }
     /* Fetch the data set for each client based on capability */
     get_data_set_for_client_based_on_capability(server_info, group_node,req.idv.perform_task_req.client_id_count,req.idv.perform_task_req.client_ids, task_count);
 
@@ -718,13 +689,15 @@ void mcast_start_task_distribution(server_information_t *server_info,
            pdu->msg.idv.moderator_notify_rsp.client_ids,
            group_node->task_set_details.number_of_working_clients * (sizeof(pdu->msg.idv.moderator_notify_rsp.client_ids[0])));
 
-    req.idv.perform_task_req.task_count = task_count;
-    req.idv.perform_task_req.task_set = MALLOC_UINT(task_count);
+    req.idv.perform_task_req.task_filename = (string_t *)(group_node->task_set_details.task_filename); 
+    req.idv.perform_task_req.task_folder_path = group_node->task_set_details.task_folder_path; 
+//    req.idv.perform_task_req.task_count = task_count;
+//    req.idv.perform_task_req.task_set = MALLOC_UINT(task_count);
 
-    for(count = 0; count < task_count; count++)
+/*    for(count = 0; count < task_count; count++)
     {
         req.idv.perform_task_req.task_set[count] = task_set[count];
-    }
+    }*/
 
     req.idv.perform_task_req.task_type = group_node->task_type;
     req_pdu.msg = req;
@@ -735,23 +708,93 @@ void mcast_start_task_distribution(server_information_t *server_info,
     PRINT("[Task_Request: GRP - %s] Task Request Sent.", group_node->group_name);
 }
 
+void free_thread_args(thread_args * t_args){
+
+   free(t_args->source_folder);
+   free(t_args->task_filename);
+   free(t_args->dest_folder);
+   free(t_args);
+
+
+}
+
+void* fetch_task_response_files_from_moderator(void *args)
+{
+
+    thread_args *t_args = (thread_args *)args;
+    /*Making thread detached.*/
+//    pthread_t self = pthread_self();
+//    pthread_detach(self);
+
+    unsigned int file_count = t_args->file_count;
+    char path[200];
+    unsigned int i;
+    for(i=0; i<file_count;i++){
+       sprintf(path, "%s/%s", t_args->source_folder, t_args->task_filename[i]);
+       fetch_file(path, t_args->dest_folder);
+    }
+    free_thread_args(t_args);
+    return NULL;
+}
+
+
+
+void collect_task_results(task_rsp_t * task_resp, char *result_folder, unsigned int client_id){
+
+   char *src_folder=malloc(sizeof(char)*100);
+   struct in_addr ip_addr;
+   ip_addr.s_addr = client_id;
+   sprintf(src_folder, "%s:/tmp/client/moderator/%s", inet_ntoa(ip_addr), task_resp->group_name);
+   int i, pthread_status;
+   char * filename;
+   int num_clients=task_resp->num_clients;
+   thread_args * t_args = malloc(sizeof(thread_args));
+   t_args->file_count=num_clients;
+   t_args->source_folder = src_folder;
+   t_args->task_filename = malloc(sizeof(char *)*num_clients);
+   t_args->dest_folder = result_folder;
+
+   for(i=0;i<num_clients;i++){
+     filename = basename(task_resp->result[i].str);
+     t_args->task_filename[i] = malloc(sizeof(filename)+1);
+     strcpy(t_args->task_filename[i], filename);
+   }
+  
+   pthread_t thread; 
+   pthread_status = pthread_create(&thread, NULL, fetch_task_response_files_from_moderator ,t_args);
+   if(pthread_status)
+   {
+     PRINT("Could not create thread to perform task");
+   }
+  
+}
+
+
+
 /* <doc>
- * void get_task_response_file_name(char * gname, uint8_t task_id, char * buffer)
- * This function returns the file name for result file
+ * void get_task_result_folder_path(char * gname, uint8_t task_id, char * buffer)
+ * This function returns the folder where task results are stored
  *
  * </doc>
  */
-void get_task_response_file_name(char * gname, uint8_t task_id, char * buffer){
+char * get_task_result_folder_path(char * gname, uint8_t task_id){
      time_t rawtime;
      struct tm * timeinfo;
      char buffer2[40];
- 
+     char * buffer = malloc(sizeof(char)*140);
+
      time ( &rawtime );
      timeinfo = localtime ( &rawtime );
-     sprintf(buffer,"task_result/Resp_%s_%d_", gname , task_id);
-     strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
+     strftime(buffer2,80,"%d%m%y_%H%M%S",timeinfo);
+
+     sprintf(buffer,"/tmp/server/task_result/%s/", gname);
      strcat(buffer,buffer2);
+
+     create_folder(buffer);
+
      PRINT("[INFO] The Response from %s for task %d is written in %s",gname, task_id,  buffer);
+
+     return buffer;
 }
 
 
@@ -762,7 +805,7 @@ void get_task_response_file_name(char * gname, uint8_t task_id, char * buffer){
  *
  * </doc>
  */ 
-void
+/*void
 write_task_response_file(task_rsp_t * task_rsp, char* fname){
   uint32_t i, j;
   FILE *fp=NULL;
@@ -777,7 +820,7 @@ write_task_response_file(task_rsp_t * task_rsp, char* fname){
     fprintf(fp, "\n");
   }
   fclose(fp);
-}
+}*/
 
 /* <doc>
  * void mcast_handle_task_response(server_information_t *server_info,
@@ -791,7 +834,7 @@ write_task_response_file(task_rsp_t * task_rsp, char* fname){
 void mcast_handle_task_response(server_information_t *server_info,
                                    void *fsm_msg)
 {
-  char ipaddr[INET6_ADDRSTRLEN], filename[80];
+  char ipaddr[INET6_ADDRSTRLEN], * result_folder;
   int i = 0;
   
   int count = 0;
@@ -810,11 +853,11 @@ void mcast_handle_task_response(server_information_t *server_info,
   task_rsp_t *task_response= &(pdu->msg.idv.task_rsp);
   
   /* Get the file name based on current time stamp */ 
-  get_task_response_file_name(group_node->group_name, task_response->task_id, filename); 
+  result_folder = get_task_result_folder_path(group_node->group_name, task_response->task_id); 
   
   /* Write the response  to file */  
-  write_task_response_file(task_response, filename);
-     
+  collect_task_results(task_response, result_folder, calc_key(&(pdu->peer_addr))); 
+ 
   /*Disarming the keepalive for this mod since task is complete.*/
   timer_delete(group_node->timer_id);
   

@@ -312,3 +312,71 @@ unsigned int generate_random_capability(void)
   return number;
 }
 
+unsigned int get_task_count(const char* filename,unsigned int** task_set)
+{
+    FILE *fp = NULL, *cmd_line = NULL;
+    uint32_t count = 0, i, j = 0;
+    char element[1000], cmd[256];
+    char *ptr;
+    
+    strcpy(cmd, "fgrep -o , ");
+    strcat(cmd, filename);
+    strcat(cmd, " | wc -l");
+    cmd_line = popen (cmd, "r");
+    fscanf(cmd_line, "%i", &count);
+    pclose(cmd_line);
+
+    *task_set = MALLOC_UINT(count);
+    
+    fp = fopen(filename, "r");
+    
+    for(i = 0; i < count/10; i++){
+        fscanf(fp, "%s", element);
+        ptr = strtok(element,",");
+        j = 0;
+        (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
+        while(j < 9)
+        {
+          ptr = strtok(NULL,",");
+          j++;
+          (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
+        }
+    }
+    if(fp)
+      fclose(fp);
+
+  return count;
+}
+
+char * fetch_file(char * src, char *dest){
+     char cmd[180];
+     sprintf(cmd,"./file_tf %s %s >>/tmp/file_tf.logs", src, dest);
+  //   sprintf(cmd,"./file_tf root@%s %s >>/tmp/file_tf.logs", src, dest); //for rtp machines
+     PRINT("fetching file from %s", src);
+     int status = system(cmd);
+     if(status == -1)
+       PRINT("some error is occured in that shell command");
+     else if (WEXITSTATUS(status) == 127)
+       PRINT("That shell command is not found");
+     else{
+       PRINT("system call return succesfull with  %d",WEXITSTATUS(status));
+       return dest;
+     } 
+   free(dest);
+   return NULL;
+}  
+
+void inline create_folder(char * path){
+  int len=strlen(path);
+  char cmd[len+10];
+  sprintf(cmd,"mkdir -p %s",path);
+  system(cmd);
+}
+
+void inline check_and_create_folder(char * path){
+  struct stat st={0};
+  if(stat(path, &st)==-1){
+   create_folder(path);
+  }
+}
+

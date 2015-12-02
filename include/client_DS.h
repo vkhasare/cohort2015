@@ -75,12 +75,10 @@ typedef struct
 }fsm_data_t;
 
 typedef struct {
-  unsigned int data_count;
-  unsigned int data[MAX_TASK_COUNT];
-  unsigned int result_count;
-  unsigned int result[MAX_TASK_COUNT];
   client_information_t *client_info;
   char * group_name;
+  char * task_filename;
+  char * task_folder_path;
   unsigned int task_id;
 } thread_args;
   

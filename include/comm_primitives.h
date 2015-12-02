@@ -125,8 +125,10 @@ typedef struct perform_task_req {
     unsigned int task_id;
     unsigned int client_id_count;
     unsigned int* client_ids; 
-    unsigned int task_count;
-    unsigned int* task_set;
+    string_t * task_filename;
+    char * task_folder_path;
+//    unsigned int task_count;
+//    unsigned int* task_set;
     int task_type;
 }perform_task_req_t;
 
@@ -155,7 +157,7 @@ typedef struct task_response{
    rsp_type_t type;
    unsigned int num_clients;
    unsigned int * client_ids;
-   result_t * result;
+   string_t * result;
 }task_rsp_t;
 
 typedef struct common_struct{
