@@ -1465,7 +1465,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
             ipAddr.sin_port = htons(atoi(PORT));
             inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET_ADDRSTRLEN);
 
-            LOGGING_INFO("Client %s is working on task in group %", ipAddress, perform_task.group_name);
+            LOGGING_INFO("Client %s is working on task in group %s", ipAddress, perform_task.group_name);
 
             (i == 0) ? sprintf(str, "%s", ipAddress) : sprintf(str, "%s , %s", str, ipAddress);
 
