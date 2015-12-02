@@ -137,6 +137,8 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
      echo_request->client_ids  = iter ? id_arr : NULL;
 
      write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
+
+     free(id_arr);
 }
 
 /* <doc>
@@ -306,6 +308,7 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
        }
       PRINT("Moderator is working with clients - %s", str);
     }
+    FREE_INCOMING_PDU(pdu->msg);
 }
 
 /* <doc>
@@ -330,6 +333,8 @@ int handle_new_server_notification(const int sockfd, pdu_t *pdu, ...)
 
     /*Update with new server address*/
     client_info->server.sin_addr.s_addr = new_server_update.new_server_id;
+
+    FREE_INCOMING_PDU(pdu->msg);
 }
 
 /* <doc>
@@ -407,6 +412,8 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
            start_oneshot_timer(&(client_info->moderator_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
        }
     }
+
+    FREE_INCOMING_PDU(pdu->msg);
 }
 
 /* <doc>
@@ -457,6 +464,7 @@ int handle_leave_response(const int sockfd, pdu_t *pdu, ...)
             }
 
         }
+    FREE_INCOMING_PDU(pdu->msg);
 }
 
 /* <doc>
@@ -545,6 +553,7 @@ int handle_join_response(const int sockfd, pdu_t *pdu, ...)
             multicast_leave(mcast_fd, group_ip);
         }
     }
+    FREE_INCOMING_PDU(pdu->msg);
 }
 
 /* <doc>
@@ -642,7 +651,8 @@ static void send_moderator_notify_response(client_information_t *client_info)
     moderator_notify_rsp_t *moderator_notify_rsp = &(rsp->idv.moderator_notify_rsp);
 
     /*Filling group name and moderator id*/
-    moderator_notify_rsp->group_name = mod_info->group_name;
+    moderator_notify_rsp->group_name = MALLOC_STR;
+    strcpy(moderator_notify_rsp->group_name, mod_info->group_name);
     moderator_notify_rsp->moderator_id = client_info->client_id;    
 
     /*remove this line in future if you dont see any issues in this code*/
@@ -659,6 +669,9 @@ static void send_moderator_notify_response(client_information_t *client_info)
     /*Filling actual alive clients count*/
     moderator_notify_rsp->client_id_count = clnt_notify_alive_list.client_rsp_cntr;
 
+    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_info->server)), ipaddr, INET6_ADDRSTRLEN);
+    PRINT("[Moderator_Notify_Rsp: GRP - %s] Moderator Notify Response sent to server %s", moderator_notify_rsp->group_name, ipaddr);
+
     write_record(client_info->client_fd, &client_info->server, &pdu);
 
     /*Reset variables related to mod notify response*/
@@ -667,9 +680,6 @@ static void send_moderator_notify_response(client_information_t *client_info)
     /* Start timer for maintaining client's keepalive*/
     if (1 < mod_info->active_client_count)
       start_recurring_timer(&(mod_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
-
-    inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_info->server)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("[Moderator_Notify_Rsp: GRP - %s] Moderator Notify Response sent to server %s", moderator_notify_rsp->group_name, ipaddr);
 
 }
 
@@ -747,6 +757,8 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
 
+    FREE_INCOMING_PDU(pdu->msg);
+
     return 0;
 }
 
@@ -779,12 +791,13 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 
     /*filling echo rsp pdu*/
     echo_response->status    = client_info->client_status;
-    echo_response->group_name = echo_req.group_name;
-    
-    write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
-
+    echo_response->group_name = MALLOC_STR;
+    strcpy(echo_response->group_name, echo_req.group_name);
+   
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
+ 
+    write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
     /*If moderator, then run the moderator fsm*/
     if (client_info->moderator_info) {
@@ -795,6 +808,8 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
         /*run the fsm*/
         client_info->moderator_info->fsm(client_info, MOD_ECHO_REQ_RCVD_EVENT, &fsm_msg);
     }
+
+    FREE_INCOMING_PDU(pdu->msg);
 
     return 0;
 }
@@ -928,6 +943,9 @@ int main(int argc, char * argv[])
     client_information_t *client_info = NULL;
     unsigned int capability;
 
+    /*Start logging on client*/
+    //enable_logging(argv[0]);
+
     /* Allocates client_info */
     allocate_client_info(&client_info);
 
@@ -969,6 +987,8 @@ int main(int argc, char * argv[])
         exit(0);
     }
 
+    //LOGGING_INFO("Client started on %s on port %s", clientAddress, client_port);
+
     /* Socket is made non-blocking */
     status = make_socket_non_blocking(cfd);
 
@@ -976,6 +996,7 @@ int main(int argc, char * argv[])
     client_info->server.sin_family = AF_INET;
     client_info->server.sin_port = htons(atoi(port));
     client_info->server.sin_addr.s_addr = inet_addr(serverAddr); 
+
 
     if (status == -1)
     {
@@ -1061,7 +1082,7 @@ int main(int argc, char * argv[])
     pdu_t pdu;
     
     capability = generate_random_capability();
-          
+
     populate_join_req(&(pdu.msg), gr_list, iter, capability);
     write_record(client_info->client_fd, &client_info->server, &pdu);
 
@@ -1151,6 +1172,8 @@ void moderator_send_task_response_to_server(client_information_t *client_info) {
   if(rsp_pdu->msg.idv.task_rsp.num_clients == moderator_info->active_client_count) {
       write_record(client_info->client_fd, &(client_info->server) ,rsp_pdu);
 
+      FREE_INCOMING_PDU(rsp_pdu);
+
       if (moderator_info->timer_id) {
           timer_delete(moderator_info->timer_id);
       }
@@ -1169,8 +1192,7 @@ void moderator_send_task_response_to_server(client_information_t *client_info) {
 
 /* <doc>
  * int handle_task_response(const int sockfd, const comm_struct_t const resp, ...)
- * Join Group Response Handler. Reads the join response PDU, and fetches the
- * IP for required multicast group. Joins the multicast group.
+ * Handles the task response from peer clients.
  *
  * </doc>
  */
@@ -1238,6 +1260,7 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
           is not expecting.
         */
     }
+    FREE_INCOMING_PDU(pdu->msg);
 }
 
 /* <doc>
@@ -1278,6 +1301,9 @@ void send_task_results(thread_args *args){
 
     if(answer !=NULL) {
           send_task_results_to_moderator(args->client_info,args->group_name, args->task_id, TYPE_INT, answer, args->client_info->client_id);
+          free(answer->value);
+          free(answer);
+          free(args->group_name);
     }
 }
 
@@ -1322,6 +1348,10 @@ void* find_prime_numbers(void *args)
 
     send_task_results(args);
 
+    free(args);
+
+    /*Free the detached thread*/
+    pthread_detach(pthread_self());
     return NULL;
 }
 
@@ -1375,13 +1405,15 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
             ipAddr.sin_family = AF_INET;
             ipAddr.sin_port = htons(atoi(PORT));
             inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET_ADDRSTRLEN);
-            sprintf(str, "%s , %s", str, ipAddress);
+
+            (i == 0) ? sprintf(str, "%s", ipAddress) : sprintf(str, "%s , %s", str, ipAddress);
+
             memcpy(&mod_node->peer_client_addr, &ipAddr, sizeof(ipAddr));
             i++;
         }
         PRINT("Working clients are - %s", str);
     }
-
+    
     switch(perform_task.task_type)
     {
       case FIND_PRIME_NUMBERS:
@@ -1418,7 +1450,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
             
             args->client_info=client_info;
             args->task_id = perform_task.task_id;
-            args->group_name=malloc(sizeof(char)*strlen(perform_task.group_name));
+            args->group_name=malloc((sizeof(char)*strlen(perform_task.group_name))+1);
             strcpy(args->group_name, perform_task.group_name);
             
             /* Create a thread to perform the task */
@@ -1428,8 +1460,14 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
             {
               PRINT("Could not create thread to perform task");
             }
+            break;
         }
       }
    }
+
+   if (count >= perform_task.client_id_count)
+      PRINT("[INFO] Task Request is not intended for this client.");
+
+   FREE_INCOMING_PDU(pdu->msg);
 }
 

@@ -135,3 +135,40 @@ void start_oneshot_timer(timer_t *t, uint8_t interval, uint32_t sigval);
 void start_recurring_timer(timer_t *t, uint8_t interval, uint32_t sigval);
 unsigned int generate_random_capability(void);
 
+
+#define LOGGING_WARNING(...)                \
+do {                                        \
+char *str = SPRINTF(__VA_ARGS__);           \
+logging_warning(str, __FILE__, __LINE__);   \
+} while(0)
+
+#define LOGGING_INFO(...)               \
+do {                                    \
+char *str = SPRINTF(__VA_ARGS__);       \
+logging_info(str, __FILE__, __LINE__);  \
+} while(0)
+
+#define LOGGING_ERROR(...)                  \
+do {                                        \
+char *str = SPRINTF(__VA_ARGS__);           \
+logging_info(str, __FILE__, __LINE__);      \
+} while(0)
+
+#define LOGGING_WARNING_IF(cond, ...)             \
+do {                                              \
+char *str = SPRINTF(__VA_ARGS__);                 \
+logging_warning_if(cond, str, __FILE__, __LINE__);\
+} while(0)
+
+#define LOGGING_INFO_IF(cond, ...)                  \
+do {                                                \
+char *str = SPRINTF(__VA_ARGS__);                   \
+logging_info_if(cond, str, __FILE__, __LINE__);     \
+} while(0)
+
+#define LOGGING_ERROR_IF(cond, ...)                 \
+do {                                                \
+char *str = SPRINTF(__VA_ARGS__);                   \
+logging_error_if(cond, str, __FILE__, __LINE__);    \
+} while(0)
+

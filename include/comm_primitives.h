@@ -35,6 +35,9 @@
    (char*) malloc (sizeof(char) * count);                   \
  })
 
+#define FREE_INCOMING_PDU(msg)                              \
+  xdr_free((xdrproc_t)process_comm_struct, (void *) &(msg));
+
 typedef enum struct_id{
     join_request    = 32,
     join_response   = 33,

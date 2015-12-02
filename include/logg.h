@@ -3,12 +3,12 @@ extern "C" {
 #endif
     void initialize_logging(int argc, char * argv[]);
 
-    void LOGGING_WARNING(char *);
-    void LOGGING_INFO(char *);
-    void LOGGING_ERROR(char *);
-    void LOGGING_WARNING_IF(int , char *);
-    void LOGGING_INFO_IF(int , char *);
-    void LOGGING_ERROR_IF(int , char *);
+    void logging_warning(char *, char*, int);
+    void logging_info(char *, char*, int);
+    void logging_error(char *, char*, int);
+    void logging_warning_if(int , char *, char*, int);
+    void logging_info_if(int , char *, char*, int);
+    void logging_error_if(int , char *, char*, int);
 
     void cease_logging();
 #ifdef __cplusplus

@@ -106,16 +106,11 @@ void populate_leave_rsp(comm_struct_t* m, char** grnames, unsigned int cause, in
     m->idv.leave_rsp.cause = cause;
 
     for(iter = 0; iter < num_groups; iter++){
-#define MALLOC_STRING(x)    \
-m->idv.leave_rsp.group_ids[(x)].str = MALLOC_STR;
-
+#define MALLOC_STRING(x)    m->idv.leave_rsp.group_ids[(x)].str = MALLOC_STR
         MALLOC_STRING(iter);
-
 #undef MALLOC_STRING
 
 #define SUBS_TXT(x) (m->idv.leave_rsp.group_ids[(x)].str)
-
-
         strcpy(SUBS_TXT(iter),grnames[iter]);
 #undef SUBS_TXT
     }
@@ -220,6 +215,8 @@ void write_record(int sockfd, struct sockaddr_in *destAddr, pdu_t *pdu){
     sendto(sockfd, msgbuf, msglen, MSG_DONTWAIT,
                      (struct sockaddr *) destAddr, sizeof(*destAddr));
 
+    /*Free the xdr after sending packet on wire*/
+    xdr_free((xdrproc_t)process_comm_struct, (void *) m);
 }
 
 /* <doc>
@@ -543,7 +540,7 @@ void populate_task_rsp(comm_struct_t* m, unsigned int task_id,char* group_name, 
     m->id=task_response;
     m->idv.task_rsp.type = r_type;
     m->idv.task_rsp.task_id = task_id;
-    m->idv.task_rsp.group_name = malloc(sizeof(char)*strlen(group_name));
+    m->idv.task_rsp.group_name = malloc((sizeof(char)*strlen(group_name))+1);
     strcpy(m->idv.task_rsp.group_name, group_name); 
     m->idv.task_rsp.task_id = task_id;
     m->idv.task_rsp.result = (result_t *)malloc(sizeof(result_t)); 
@@ -559,7 +556,7 @@ void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsig
     task_rsp_t * task_rsp = &(m->idv.task_rsp);
     task_rsp->type = resp->type;
     task_rsp->task_id = resp->task_id;
-    task_rsp->group_name = malloc(sizeof(char)*strlen(resp->group_name));
+    task_rsp->group_name = malloc((sizeof(char)*strlen(resp->group_name))+1);
     strcpy(task_rsp->group_name, resp->group_name); 
     task_rsp->result = (result_t *)(l_saddr_in_t *) calloc (num_clients, sizeof(result_t));
     task_rsp->client_ids = (unsigned int *)calloc(num_clients, sizeof(unsigned int *));

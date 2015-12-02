@@ -202,7 +202,8 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
 {
     pdu_t pdu;
     char ipaddr[INET6_ADDRSTRLEN];
-    
+    int j = 0;
+
     comm_struct_t *req = &(pdu.msg);
     req->id = echo_req;
     
@@ -210,11 +211,13 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
     initialize_echo_request(echo_request);
 
     /*Create the echo request pdu*/
-    echo_request->group_name = grp_name;
-    write_record(sockfd, addr, &pdu);
+    echo_request->group_name = MALLOC_STR;
+    strcpy(echo_request->group_name, grp_name);
 
     inet_ntop(AF_INET, get_in_addr(addr), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
+
+    write_record(sockfd, addr, &pdu);
 
     return 0;
 }
@@ -312,3 +315,25 @@ unsigned int generate_random_capability(void)
   return number;
 }
 
+/* <doc>
+ * void enable_logging(char *prog_name)
+ * This just enables the logging functionality.
+ *
+ * </doc>
+ */
+void enable_logging(char *prog_name)
+{
+    int dummy_argc = 4;
+
+    /*LOGGING PARAMETERS*/
+    mkdir("./execution_logs", S_IRWXU);   /*create dir read/write/search user privilages*/
+    char* dummy_argv[] =
+    {
+        prog_name,                        /*substituted as executing binary name*/
+        "--v=1",                          /*log anything that has verbosity level higher than 1*/
+        "--log_dir=./execution_logs",     /*specifying directory where we want logs to be generated.*/
+        "--logtostderr=0"                 /*mildly sticky/inconvenient. Would dump all allowed logs onto terminal as well.*/
+    };
+    /*start logging*/
+    initialize_logging(dummy_argc, dummy_argv);
+}
