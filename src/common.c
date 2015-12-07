@@ -359,7 +359,7 @@ unsigned int get_task_count(const char* filename, unsigned long** task_set)
      fp = fopen(filename, "r");
 
      for(i = 0; i < count; i++){
-         fscanf(fp, "%s", element);
+         fscanf(fp, "%s\n", element);
          (* task_set)[i] =strtoul(element,NULL,10);
      }
      if(fp)

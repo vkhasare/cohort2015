@@ -250,6 +250,7 @@ void allocate_moderator_info(client_information_t **client_info)
    moderator_information_t *mod_info = (moderator_information_t *) malloc(sizeof(moderator_information_t));
    mod_info->fsm_state = STATE_NONE;
    mod_info->moderator_resp_msg = NULL;
+   mod_info->timer_id = 0;
    (*client_info)->moderator_info = mod_info;
    allocate_moderator_list(&(*client_info)->moderator_info);
 }
@@ -273,6 +274,8 @@ void allocate_client_info(client_information_t **client_info)
    (*client_info)->client_fd = INT_MAX;
    (*client_info)->epoll_fd = INT_MAX;
    (*client_info)->epoll_evt = NULL;
+   (*client_info)->moderator_info = NULL;
+   (*client_info)->active_group = NULL;
    allocate_client_grp_list(client_info);
 }
 

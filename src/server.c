@@ -768,7 +768,7 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
    struct tm * timeinfo;
    unsigned int i;
    char file_name[100], file_path[200], buffer2[40];
-   unsigned int counter = 0, data_count = 0;
+   unsigned int start_index=0, counter = 0, data_count = 0;
    FILE *fptr, *fp;
    char * line[10];
    size_t len = 0;
@@ -798,7 +798,7 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
      
      /* Find the data count to be written to the file for a client based on the task_count and total capability */
      data_count = (task_set->capability[i] * task_count)/ capability_total;
-     counter = 0;
+
      PRINT("The data count for client %u is %u", i, data_count);
      /*write data count into the file. Once written, break from loop.*/
      while(counter < task_count)
@@ -812,23 +812,21 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
 //         j++;
 //       }
 //       if(fscanf(fp, "%s\n", ) != -1){
-       counter++;
 //       sprintf(temp,"line %u is %s",counter,line); 
        fprintf( fptr,"%u\n", original_task_set[counter]);
+       counter++;
 //       if(counter == task_count/2){
          fflush(fptr);
 //       }
        /*If complete data set for that client is written, break.*/
-       if( counter >= data_count){
-        PRINT("Task counter %u  is bigger then data_count %u", counter, data_count);
+       if( (i!= num_of_clients-1) && counter-start_index >= data_count){
+//        PRINT("Task counter %u  is bigger then data_count %u", counter, data_count);
         break;}
 //       }
      }
+     start_index=counter;
 
      LOGGING_INFO("Group %s : Created task set of size %d for client %u", group_node->group_name, counter, client_ids[i]);
-
-     if((i + 1) == num_of_clients)
-       continue;
 
      fclose(fptr);
    }
@@ -937,7 +935,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
                                    void *fsm_msg)
 {
     char ipaddr[INET6_ADDRSTRLEN];
-    int count = 0;
+    int count = 0, index;
     comm_struct_t req;
     fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
     pdu_t req_pdu;
@@ -992,8 +990,13 @@ void mcast_start_task_distribution(server_information_t *server_info,
            pdu->msg.idv.moderator_notify_rsp.client_ids,
            group_node->task_set_details.number_of_working_clients * (sizeof(pdu->msg.idv.moderator_notify_rsp.client_ids[0])));
 
-    req.idv.perform_task_req.task_filename = (string_t *)(group_node->task_set_details.task_filename); 
-    req.idv.perform_task_req.task_folder_path = group_node->task_set_details.task_folder_path; 
+    req.idv.perform_task_req.task_filename = malloc(sizeof(string_t *)*group_node->task_set_details.number_of_working_clients);
+    for(index=0;index < group_node->task_set_details.number_of_working_clients; index++){
+       req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(group_node->task_set_details.task_filename[index])+1);
+       strcpy(req.idv.perform_task_req.task_filename[index].str, group_node->task_set_details.task_filename[index]);
+    }
+    req.idv.perform_task_req.task_folder_path = MALLOC_CHAR(strlen(group_node->task_set_details.task_folder_path)+1);
+    strcpy(req.idv.perform_task_req.task_folder_path , group_node->task_set_details.task_folder_path);
 //    req.idv.perform_task_req.task_count = task_count;
 //    req.idv.perform_task_req.task_set = MALLOC_UINT(task_count);
 
@@ -1015,12 +1018,14 @@ void mcast_start_task_distribution(server_information_t *server_info,
 }
 
 void free_thread_args(thread_args * t_args){
+   int i;
 
    free(t_args->source_folder);
+   for(i=0;i<t_args->file_count; i++)
+     free(t_args->task_filename[i]);
    free(t_args->task_filename);
    free(t_args->dest_folder);
    free(t_args);
-
 
 }
 
@@ -1186,11 +1191,13 @@ void mcast_handle_task_response(server_information_t *server_info,
   /*Free task related details*/
   free(group_node->task_set_details.capability);
   
-/*  for(i = 0; i < group_node->task_set_details.number_of_working_clients; i++)
+  for(i = 0; i < group_node->task_set_details.number_of_working_clients; i++)
   {
     free(group_node->task_set_details.task_filename[i]);
   }
-  free(group_node->task_set_details.task_filename);*/
+  free(group_node->task_set_details.task_filename);
+
+  free(group_node->task_set_details.task_folder_path);
 
   group_node->task_type = INVALID_TASK_TYPE;
 
