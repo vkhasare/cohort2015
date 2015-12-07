@@ -22,10 +22,6 @@
 #include <net/if.h>
 #include "comm_primitives.h"
 #include "print.h"
-#include <sys/stat.h>
-#include<dirent.h>
-#include <libgen.h>
-#include <pthread.h>
 
 #define PORT "3490"
 #define TIMEOUT_SECS 5
@@ -86,17 +82,6 @@ typedef enum {
 } msg_cause;
 
 /* <doc>
- * enum chkpoint_type
- * Tells about the type of checkpoint
- *
- * </doc>
- */
-typedef enum {
- ADD_CHECKPOINT = 67,
- DEL_CHECKPOINT = 68
-} chkpoint_type;
-
-/* <doc>
  * enum client_state
  * determines the state of client.
  *
@@ -138,45 +123,4 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name);
 void start_oneshot_timer(timer_t *t, uint8_t interval, uint32_t sigval);
 void start_recurring_timer(timer_t *t, uint8_t interval, uint32_t sigval);
 unsigned int generate_random_capability(void);
-unsigned int get_task_count(const char*, unsigned int** );
-char * fetch_file(char *, char *);
-void inline create_folder(char * path);
-void inline check_and_create_folder(char * path);
-
-
-#define LOGGING_WARNING(...)                \
-do {                                        \
-char *str = SPRINTF(__VA_ARGS__);           \
-logging_warning(str, __FILE__, __LINE__);   \
-} while(0)
-
-#define LOGGING_INFO(...)               \
-do {                                    \
-char *str = SPRINTF(__VA_ARGS__);       \
-logging_info(str, __FILE__, __LINE__);  \
-} while(0)
-
-#define LOGGING_ERROR(...)                  \
-do {                                        \
-char *str = SPRINTF(__VA_ARGS__);           \
-logging_info(str, __FILE__, __LINE__);      \
-} while(0)
-
-#define LOGGING_WARNING_IF(cond, ...)             \
-do {                                              \
-char *str = SPRINTF(__VA_ARGS__);                 \
-logging_warning_if(cond, str, __FILE__, __LINE__);\
-} while(0)
-
-#define LOGGING_INFO_IF(cond, ...)                  \
-do {                                                \
-char *str = SPRINTF(__VA_ARGS__);                   \
-logging_info_if(cond, str, __FILE__, __LINE__);     \
-} while(0)
-
-#define LOGGING_ERROR_IF(cond, ...)                 \
-do {                                                \
-char *str = SPRINTF(__VA_ARGS__);                   \
-logging_error_if(cond, str, __FILE__, __LINE__);    \
-} while(0)
 

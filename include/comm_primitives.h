@@ -35,9 +35,6 @@
    (char*) malloc (sizeof(char) * count);                   \
  })
 
-#define FREE_INCOMING_PDU(msg)                              \
-  xdr_free((xdrproc_t)process_comm_struct, (void *) &(msg));
-
 typedef enum struct_id{
     join_request    = 32,
     join_response   = 33,
@@ -52,8 +49,6 @@ typedef enum struct_id{
     perform_task_req = 42,
     task_response = 43,
     moderator_update_req = 44,
-    checkpoint_req = 45,
-    new_server_notify = 46,
     unknown_msg
 }e_struct_id_t; 
 
@@ -97,13 +92,6 @@ typedef struct join_response{
 //  int* group_ips; 
 }join_rsp_t;
 
-typedef struct checkpoint_req{
-    unsigned int chkpoint_type;
-    unsigned int num_groups;
-    l_saddr_in_t* group_ips;
-    unsigned int capability;
-} checkpoint_req_t;
-
 typedef struct leave_request{
     unsigned int num_groups;
     string_t* group_ids;
@@ -142,8 +130,8 @@ typedef struct perform_task_req {
     unsigned int task_id;
     unsigned int client_id_count;
     unsigned int* client_ids; 
-    string_t * task_filename;
-    char * task_folder_path;
+    unsigned int task_count;
+    long* task_set;
     int task_type;
 }perform_task_req_t;
 
@@ -172,12 +160,8 @@ typedef struct task_response{
    rsp_type_t type;
    unsigned int num_clients;
    unsigned int * client_ids;
-   string_t * result;
+   result_t * result;
 }task_rsp_t;
-
-typedef struct new_server_notify{
-   unsigned int new_server_id; 
-}new_server_notify_t;
 
 typedef struct common_struct{
     e_struct_id_t id;
@@ -193,8 +177,6 @@ typedef struct common_struct{
         moderator_update_req_t moderator_update_req;
         task_rsp_t task_rsp;
         perform_task_req_t perform_task_req;
-        checkpoint_req_t checkpoint_req;
-        new_server_notify_t new_server_notify;
     }idv;
 }comm_struct_t;
 

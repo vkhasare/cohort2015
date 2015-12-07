@@ -236,7 +236,6 @@ void allocate_mcast_group_list(server_information_t **server_info)
    SN_LIST_INIT(&(mcast_group->group_node));
    (*server_info)->server_list = mcast_group;
    (*server_info)->task_id =1;
-   (*server_info)->is_stdby_available = false;
 }
 
 /* <doc>
@@ -381,7 +380,7 @@ void  get_group_node_by_name(server_information_t **server_info, char *exp_grp_n
 
    while (group_node)
    {
-     if (strncmp(group_node->group_name, exp_grp_name, 2) == 0)
+     if (strncmp(group_node->group_name,exp_grp_name,2) == 0)
      {
         /* Return on finding the node */
         *grp_node = group_node;

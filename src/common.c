@@ -202,8 +202,7 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
 {
     pdu_t pdu;
     char ipaddr[INET6_ADDRSTRLEN];
-    int j = 0;
-
+    
     comm_struct_t *req = &(pdu.msg);
     req->id = echo_req;
     
@@ -211,13 +210,11 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
     initialize_echo_request(echo_request);
 
     /*Create the echo request pdu*/
-    echo_request->group_name = MALLOC_STR;
-    strcpy(echo_request->group_name, grp_name);
+    echo_request->group_name = grp_name;
+    write_record(sockfd, addr, &pdu);
 
     inet_ntop(AF_INET, get_in_addr(addr), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
-
-    write_record(sockfd, addr, &pdu);
 
     return 0;
 }
@@ -242,9 +239,9 @@ void display_server_clis()
 {
   PRINT("show groups                                          --  Displays list of groups");
   PRINT("show group info <group_name|all>                     --  Displays group - client association");
+  PRINT("enable msg group <group_name>                        --  Enables display of messages for a specific group.");
+  PRINT("no msg group <group_name>                            --  Disables display of messages for a specific group.");
   PRINT("task <task_type> group <group_name> file <filename>  --  Assigns a specific task to the specified Group. filename is optional. Default Value: task_set/prime_set1.txt");
-  PRINT("server backup <backup_server_ip>                     --  Configures IP of secondary server");
-  PRINT("switch                                               --  Switches to secondary server");
   PRINT("enable debug                                         --  Enables the debug mode");
   PRINT("disable debug                                        --  Disables the debug mode");
   PRINT("cls                                                  --  Clears the screen");
@@ -313,101 +310,5 @@ unsigned int generate_random_capability(void)
   number = (rand() % 3) + 1;
 
   return number;
-}
-
-/* <doc>
- * void enable_logging(char *prog_name)
- * This just enables the logging functionality.
- *
- * </doc>
- */
-void enable_logging(char *prog_name)
-{
-    int dummy_argc = 4;
-
-    /*LOGGING PARAMETERS*/
-    mkdir("./execution_logs", S_IRWXU);   /*create dir read/write/search user privilages*/
-    char* dummy_argv[] =
-    {
-        prog_name,                        /*substituted as executing binary name*/
-        "--v=1",                          /*log anything that has verbosity level higher than 1*/
-        "--log_dir=./execution_logs",     /*specifying directory where we want logs to be generated.*/
-        "--logtostderr=0"                 /*mildly sticky/inconvenient. Would dump all allowed logs onto terminal as well.*/
-    };
-    /*start logging*/
-    initialize_logging(dummy_argc, dummy_argv);
-}
-/* <doc>
- * unsigned int get_task_count(const char* filename,long** task_set)
- * This reads the task file and gets the total count of numbers
- * </doc>
- */
-
-unsigned int get_task_count(const char* filename,unsigned int** task_set)
-{
-    FILE *fp = NULL, *cmd_line = NULL;
-    uint32_t count = 0, i, j = 0;
-    char element[1000], cmd[256];
-    char *ptr;
-    
-    strcpy(cmd, "fgrep -o , ");
-    strcat(cmd, filename);
-    strcat(cmd, " | wc -l");
-    cmd_line = popen (cmd, "r");
-    fscanf(cmd_line, "%i", &count);
-    pclose(cmd_line);
-
-    *task_set = MALLOC_UINT(count);
-    
-    fp = fopen(filename, "r");
-    
-    for(i = 0; i < count/10; i++){
-        fscanf(fp, "%s", element);
-        ptr = strtok(element,",");
-        j = 0;
-        (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
-        while(j < 9)
-        {
-          ptr = strtok(NULL,",");
-          j++;
-          (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
-        }
-    }
-    if(fp)
-      fclose(fp);
-
-  return count;
-}
-
-char * fetch_file(char * src, char *dest){
-     char cmd[180];
-     sprintf(cmd,"./file_tf %s %s >>/tmp/file_tf.logs", src, dest);
-  //   sprintf(cmd,"./file_tf root@%s %s >>/tmp/file_tf.logs", src, dest); //for rtp machines
-     PRINT("fetching file from %s", src);
-     int status = system(cmd);
-     if(status == -1)
-       PRINT("some error is occured in that shell command");
-     else if (WEXITSTATUS(status) == 127)
-       PRINT("That shell command is not found");
-     else{
-       PRINT("system call return succesfull with  %d",WEXITSTATUS(status));
-       return dest;
-     } 
-   free(dest);
-   return NULL;
-}  
-
-void inline create_folder(char * path){
-  int len=strlen(path);
-  char cmd[len+10];
-  sprintf(cmd,"mkdir -p %s",path);
-  system(cmd);
-}
-
-void inline check_and_create_folder(char * path){
-  struct stat st={0};
-  if(stat(path, &st)==-1){
-   create_folder(path);
-  }
 }
 
