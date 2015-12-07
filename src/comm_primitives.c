@@ -7,6 +7,7 @@ const unsigned int max_client_in_group = 255;
 const unsigned int max_task_count = 100000;
 const unsigned int max_data_size = 10000000;
 const unsigned int max_gname_len = 25; //includes nul termination
+const unsigned int max_name_len = 150; //includes nul termination
 const unsigned int echo_req_len = 256; //includes nul termination
 const unsigned int echo_resp_len = 21; //includes nul termination
 
@@ -106,16 +107,11 @@ void populate_leave_rsp(comm_struct_t* m, char** grnames, unsigned int cause, in
     m->idv.leave_rsp.cause = cause;
 
     for(iter = 0; iter < num_groups; iter++){
-#define MALLOC_STRING(x)    \
-m->idv.leave_rsp.group_ids[(x)].str = MALLOC_STR;
-
+#define MALLOC_STRING(x)    m->idv.leave_rsp.group_ids[(x)].str = MALLOC_STR
         MALLOC_STRING(iter);
-
 #undef MALLOC_STRING
 
 #define SUBS_TXT(x) (m->idv.leave_rsp.group_ids[(x)].str)
-
-
         strcpy(SUBS_TXT(iter),grnames[iter]);
 #undef SUBS_TXT
     }
@@ -220,6 +216,8 @@ void write_record(int sockfd, struct sockaddr_in *destAddr, pdu_t *pdu){
     sendto(sockfd, msgbuf, msglen, MSG_DONTWAIT,
                      (struct sockaddr *) destAddr, sizeof(*destAddr));
 
+    /*Free the xdr after sending packet on wire*/
+    xdr_free((xdrproc_t)process_comm_struct, (void *) m);
 }
 
 /* <doc>
@@ -340,14 +338,19 @@ bool xdr_gname_string(XDR* xdrs, string_t* m){
     }
     return (xdr_string(xdrs, &(m->str), max_gname_len));
 }
-
+bool xdr_name_string(XDR* xdrs, string_t* m){
+    if(xdrs->x_op == XDR_DECODE){
+        m->str = NULL;
+    }
+    return (xdr_string(xdrs, &(m->str), max_name_len));
+}
 bool process_join_req(XDR* xdrs, join_req_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->group_ids = NULL;
     }
     
     return (xdr_u_int(xdrs, &(m->num_groups)) &&
-            xdr_array(xdrs, (char **)&(m->group_ids), &(m->num_groups), max_groups,
+           xdr_array(xdrs, (char **)&(m->group_ids), &(m->num_groups), max_groups,
                              (sizeof(string_t)),
                              (xdrproc_t )xdr_gname_string) &&
             xdr_u_int(xdrs, &(m->capability)));
@@ -404,6 +407,18 @@ bool xdr_l_saddr_in(XDR* xdrs, l_saddr_in_t* m){
     return short_res && ushort_res && ulong_res && string_res && uint_cause && uint_res;
 }
 
+bool process_checkpoint_req(XDR* xdrs, checkpoint_req_t* m){
+   if(xdrs->x_op == XDR_DECODE){
+        m->group_ips = NULL;
+    }
+
+  int uint_type = xdr_u_int(xdrs, &(m->chkpoint_type));
+    int uint_capability = xdr_u_int(xdrs, &(m->capability));
+    int arr_res = xdr_array(xdrs, (char**) &(m->group_ips),
+            &(m->num_groups), max_groups, sizeof(l_saddr_in_t),(xdrproc_t )xdr_l_saddr_in);
+    return uint_type && uint_capability && arr_res;
+}
+
 bool process_join_resp(XDR* xdrs, join_rsp_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->group_ips = NULL;
@@ -422,19 +437,21 @@ bool process_perform_task_req(XDR* xdrs, perform_task_req_t* m){
     if(xdrs->x_op == XDR_DECODE){
         m->group_name = NULL;
         m->client_ids = NULL;
-        m->task_set = NULL;
+//        m->task_set = NULL;
+        m->task_filename = NULL;
+        m->task_folder_path = NULL;
     }
-
+    int a = xdr_array(xdrs, (char **)&(m->task_filename), &(m->client_id_count), max_client_in_group,
+                             (sizeof(string_t)),
+                             (xdrproc_t )xdr_name_string) ;
     return (xdr_u_int(xdrs, &(m->client_id_count)) &&
             xdr_u_int(xdrs, &(m->task_id)) &&
             xdr_string(xdrs, &(m->group_name), max_gname_len) &&
+            xdr_string(xdrs, &(m->task_folder_path), max_name_len) &&
             xdr_array(xdrs, (char**)&(m->client_ids), &(m->client_id_count), max_client_in_group,
                              (sizeof(unsigned int)),
                              (xdrproc_t )xdr_u_int) &&
-            xdr_u_int(xdrs, &(m->task_count)) &&
-            xdr_array(xdrs, (char**)&(m->task_set), &(m->task_count), max_task_count,
-                             (sizeof(long)),
-                             (xdrproc_t )xdr_long) &&
+            a &&
             xdr_int(xdrs, &(m->task_type)));
 }
 
@@ -467,9 +484,17 @@ bool process_task_resp(XDR* xdrs, task_rsp_t* m){
     bool client_id_res = xdr_array(xdrs, (char**)&(m->client_ids), &(m->num_clients), max_client_in_group,
                              (sizeof(unsigned int)),(xdrproc_t )xdr_u_int);
     bool arr_res = xdr_array(xdrs, (char**) &(m->result),
-            &(m->num_clients), max_client_in_group, sizeof(result_t),(xdrproc_t )xdr_result_t);
+            &(m->num_clients), max_client_in_group, sizeof(string_t),(xdrproc_t )xdr_name_string);
 
     return string_res && task_id_res && typ_res  && num_client_res && client_id_res && arr_res;
+}
+
+bool process_new_server_notify(XDR* xdrs, new_server_notify_t* m) {
+    if(xdrs->x_op == XDR_DECODE){
+    }
+
+    bool uint_id = xdr_u_int(xdrs, &(m->new_server_id));
+    return uint_id;
 }
 
 bool process_comm_struct(XDR* xdrs, void* msg, ...){
@@ -486,6 +511,8 @@ bool process_comm_struct(XDR* xdrs, void* msg, ...){
         {moderator_update_req,  (xdrproc_t)process_moderator_update_req},
         {perform_task_req,      (xdrproc_t)process_perform_task_req},
         {task_response,         (xdrproc_t)process_task_resp},
+        {checkpoint_req,        (xdrproc_t)process_checkpoint_req},
+        {new_server_notify,     (xdrproc_t)process_new_server_notify},
         { __dontcare__,         NULL }
     };
     int enum_res = xdr_enum(xdrs, (enum_t *)(&(m->id)));
@@ -503,30 +530,27 @@ inline unsigned int get_size(rsp_type_t type){
 }*/ 
   return sizeof(int);
 }
-void update_task_rsp(comm_struct_t* m, rsp_type_t r_type, result_t *resp, unsigned int client_id ){
+void update_task_rsp(comm_struct_t* m, rsp_type_t r_type,char *file_path, unsigned int client_id ){
     int iter;
     unsigned int * num_clients = &(m->idv.task_rsp.num_clients);
-    result_t * temp =&(m->idv.task_rsp.result[*num_clients]);
-    temp->size=resp->size;
-    temp->value=malloc(sizeof(int)*resp->size);
-    for(iter = 0; iter < resp->size; iter++){
-       temp->value[iter]=resp->value[iter];
-    }
+    string_t * temp =&(m->idv.task_rsp.result[*num_clients]);
+    temp->str = malloc(sizeof(char)*(strlen(file_path)+1));
+    strcpy(temp->str, file_path);
     m->idv.task_rsp.client_ids[*num_clients] = client_id; 
     (*num_clients)++;
 }
 
-void populate_task_rsp(comm_struct_t* m, unsigned int task_id,char* group_name, rsp_type_t r_type, result_t *resp, unsigned int client_id ){
+void populate_task_rsp(comm_struct_t* m, unsigned int task_id,char* group_name, rsp_type_t r_type, char *file_path, unsigned int client_id ){
     memset(&(m->idv),0,sizeof(task_rsp_t));
     m->id=task_response;
     m->idv.task_rsp.type = r_type;
     m->idv.task_rsp.task_id = task_id;
-    m->idv.task_rsp.group_name = malloc(sizeof(char)*strlen(group_name));
+    m->idv.task_rsp.group_name = malloc((sizeof(char)*strlen(group_name))+1);
     strcpy(m->idv.task_rsp.group_name, group_name); 
     m->idv.task_rsp.task_id = task_id;
-    m->idv.task_rsp.result = (result_t *)malloc(sizeof(result_t)); 
+    m->idv.task_rsp.result = (string_t *)malloc(sizeof(string_t)); 
     m->idv.task_rsp.client_ids = (unsigned int *)malloc(sizeof(unsigned int *)); 
-    update_task_rsp(m,r_type,resp, client_id);
+    update_task_rsp(m, r_type, file_path, client_id);
 }
 
 void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsigned int client_id ){
@@ -537,11 +561,11 @@ void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsig
     task_rsp_t * task_rsp = &(m->idv.task_rsp);
     task_rsp->type = resp->type;
     task_rsp->task_id = resp->task_id;
-    task_rsp->group_name = malloc(sizeof(char)*strlen(resp->group_name));
+    task_rsp->group_name = malloc((sizeof(char)*strlen(resp->group_name))+1);
     strcpy(task_rsp->group_name, resp->group_name); 
-    task_rsp->result = (result_t *)(l_saddr_in_t *) calloc (num_clients, sizeof(result_t));
+    task_rsp->result = (string_t *) calloc (num_clients, sizeof(string_t));
     task_rsp->client_ids = (unsigned int *)calloc(num_clients, sizeof(unsigned int *));
-    update_task_rsp(m, task_rsp->type, resp->result, client_id);
+    update_task_rsp(m, task_rsp->type, resp->result->str, client_id);
     return rsp_pdu;
 }
 

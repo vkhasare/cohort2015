@@ -74,6 +74,7 @@ typedef struct {
   unsigned int *working_clients;            /*List of client ids working on task*/
   unsigned int *capability;                 /* capabilities of the clients working on task */
   char **task_filename;                     /* filenames of the data set's for the clients */
+  char * task_folder_path;                  /* foldername of the data set's for the clients */
 } mcast_task_set_t;
 
 /*Group Node - This node maintains information related to multicast group.*/
@@ -98,10 +99,12 @@ typedef struct {
 typedef struct server_information_t server_information_t;
 
 struct server_information_t{
+  struct sockaddr_in secondary_server;
   unsigned int server_fd;               /*Server FD*/
   unsigned int task_id;                 /*Next task Id*/
   mcast_group_t *server_list;           /*Server List having group nodes for all the multicast groups.*/
   void *client_RBT_head;                /*Pointer to RBTree head, which maintains global list of all clients.*/
+  bool is_stdby_available;
   bool (* fsm)(server_information_t* server_info, server_event_t event, void* fsm_msg);    /*Server FSM function pointer*/
 };
 
@@ -129,6 +132,13 @@ typedef struct
   void *pdu;
 }fsm_data_t;
 
+typedef struct {
+  unsigned int file_count;
+  char ** task_filename;
+  char * source_folder;
+  char * dest_folder;
+} thread_args;
+ 
 /*Declarations*/
 rb_cl_grp_node_t *allocate_rb_cl_node(rb_info_t **rb_info);
 
