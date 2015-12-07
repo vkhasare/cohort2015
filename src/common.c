@@ -342,42 +342,33 @@ void enable_logging(char *prog_name)
  * This reads the task file and gets the total count of numbers
  * </doc>
  */
-
-unsigned int get_task_count(const char* filename,unsigned int** task_set)
+unsigned int get_task_count(const char* filename, unsigned long** task_set)
 {
-    FILE *fp = NULL, *cmd_line = NULL;
-    uint32_t count = 0, i, j = 0;
-    char element[1000], cmd[256];
-    char *ptr;
-    
-    strcpy(cmd, "fgrep -o , ");
-    strcat(cmd, filename);
-    strcat(cmd, " | wc -l");
-    cmd_line = popen (cmd, "r");
-    fscanf(cmd_line, "%i", &count);
-    pclose(cmd_line);
+     FILE *fp = NULL, *cmd_line = NULL;
+     uint32_t count, i = 0;
+     char element[16], cmd[256] = {0};
+     char *ptr;
 
-    *task_set = MALLOC_UINT(count);
-    
-    fp = fopen(filename, "r");
-    
-    for(i = 0; i < count/10; i++){
-        fscanf(fp, "%s", element);
-        ptr = strtok(element,",");
-        j = 0;
-        (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
-        while(j < 9)
-        {
-          ptr = strtok(NULL,",");
-          j++;
-          (* task_set)[j+(10* i)] =strtoul(ptr,NULL,10);
-        }
-    }
-    if(fp)
-      fclose(fp);
+     sprintf(cmd, "%s %s", "wc -l" , filename);
+     cmd_line = popen (cmd, "r");
+     fscanf(cmd_line, "%i", &count);
+     pclose(cmd_line);
 
-  return count;
+     *task_set = MALLOC_ULONG(count);
+
+     fp = fopen(filename, "r");
+
+     for(i = 0; i < count; i++){
+         fscanf(fp, "%s", element);
+         (* task_set)[i] =strtoul(element,NULL,10);
+     }
+     if(fp)
+       fclose(fp);
+
+   return count;
 }
+
+
 
 char * fetch_file(char * src, char *dest){
      char cmd[180];

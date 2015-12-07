@@ -31,7 +31,7 @@ static int handle_new_server_notification(const int, pdu_t *pdu, ...);
 static void send_task_results_to_moderator(client_information_t *, char*, unsigned int,rsp_type_t, char*,unsigned int);
 void moderator_send_task_response_to_server(client_information_t *);
 void* execute_task(void *t_args);
-char* find_prime_numbers(thread_args *, unsigned int count, unsigned int *task_set);
+char* find_prime_numbers(thread_args *, unsigned int count, unsigned long *task_set);
 void fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name, unsigned int);
 void fill_thread_args(client_information_t *, perform_task_req_t *, thread_args *, int);
 
@@ -1361,7 +1361,8 @@ void fetch_task_response_from_client(unsigned int client_id, char * file_path, c
 
 void* execute_task(void *args)
 {
-    unsigned int task_count, *task_set;
+    unsigned int task_count;
+    unsigned long  *task_set;
 
     thread_args *t_args = (thread_args *)args;
     /*Making thread detached.*/
@@ -1393,7 +1394,7 @@ void* execute_task(void *args)
  *
  * </doc>
  */
-char * find_prime_numbers(thread_args *t_args, unsigned int count, unsigned int *task_set)
+char * find_prime_numbers(thread_args *t_args, unsigned int count, unsigned long *task_set)
 {
     unsigned int i,j;
     bool flag;
@@ -1528,6 +1529,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
           PRINT("Could not create thread to perform task");
         }
       }
+      break;
     }
 
    if (count >= perform_task->client_id_count)

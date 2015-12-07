@@ -25,9 +25,9 @@
    (unsigned int*) malloc (sizeof(unsigned int) * count);   \
  })
 
-#define MALLOC_LONG(count)                                  \
+#define MALLOC_ULONG(count)                                  \
  ({                                                         \
-   (long*) malloc (sizeof(long) * count);   \
+   (long*) malloc (sizeof(unsigned long) * count);   \
  })
 
 #define MALLOC_CHAR(count)                                  \
