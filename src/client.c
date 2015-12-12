@@ -199,7 +199,8 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
      {
          id_arr = (unsigned int *) malloc(sizeof(unsigned int) * iter);
          memcpy(id_arr, client_ids, sizeof(unsigned int) * iter);
-         
+     }    
+
          pdu_t pdu;
          pdu.msg.id = echo_req;
          echo_req_t * echo_request = &pdu.msg.idv.echo_req;
@@ -211,7 +212,7 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
          echo_request->client_ids  = iter ? id_arr : NULL;
 
          write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
-     }
+
 
      /* Send task results towards server if all active clients have responded. */
      moderator_send_task_response_to_server(client_info_local);
@@ -372,13 +373,21 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(mod)), ipaddr, INET6_ADDRSTRLEN);
     PRINT("[Moderator_Update_Req: GRP - %s] New Moderator IP is %s", mod_update_req.group_name, ipaddr);
 
-    LOGGING_INFO("New moderator has beem selected for group %s and is %s", mod_update_req.group_name, ipaddr);
+    LOGGING_INFO("New moderator has been selected for group %s and is %s", mod_update_req.group_name, ipaddr);
+
+    /*If the client has already finished with task assigned for group, then send the results to new moderator again.*/
+    if (client_info->client_status == FREE)
+    {
+        LOGGING_INFO("Sending results (task_id - %u) to new moderator %s for group %s", active_grp_node->last_task_id, ipaddr, mod_update_req.group_name);
+        send_task_results_to_moderator(client_info, active_grp_node->group_name,
+               active_grp_node->last_task_id, TYPE_INT, active_grp_node->last_task_result_path, client_info->client_id);
+    }
 
     if (client_info->client_id != mod_update_req.moderator_id)
     {
         return; //nothing more to be done for non mod client(s).
     }
-
+    
     /*IT IS THE MODERATOR BLOCK.. UPDATE MODERATOR DATA STRUCTURES*/
     PRINT("THIS CLIENT IS SELECTED AS NEW MODERATOR FOR GROUP %s", mod_update_req.group_name);
     LOGGING_INFO("This client has been selected as moderator for group %s", mod_update_req.group_name);
@@ -416,7 +425,7 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
         ipAddr.sin_family = AF_INET;
         ipAddr.sin_port = htons(atoi(PORT));
         inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET6_ADDRSTRLEN);
-        sprintf(str, "%s , %s", str, ipAddress);
+        (i == 0) ? sprintf(str, "%s", ipAddress) : sprintf(str, "%s , %s", str, ipAddress);
         memcpy(&mod_node->peer_client_addr, &ipAddr, sizeof(ipAddr));
         mod_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
         i++;
@@ -1279,11 +1288,9 @@ int main(int argc, char * argv[])
 
     pdu_t pdu;
     
-    capability = generate_random_capability();
+    LOGGING_INFO("Client has capability as %u", client_info->client_capability);
 
-    LOGGING_INFO("Client has capability as %u", capability);
-
-    populate_join_req(&(pdu.msg), gr_list, iter, capability);
+    populate_join_req(&(pdu.msg), gr_list, iter, client_info->client_capability);
     write_record(client_info->client_fd, &client_info->server, &pdu);
 
     while (TRUE) {
@@ -1415,7 +1422,7 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
         
         /* Deactivate timer for this group on client node. Not deleting for
          * moderator since it makes no sense to run task collection timer for self*/
-        if(client_info->is_moderator == false) 
+        if(client_info->is_moderator == false && client_info->client_status == BUSY) 
         {
             timer_delete(active_group->timer_id);
             active_group->timer_id = 0;
@@ -1436,7 +1443,7 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
         active_group->last_task_result_path = NULL;
     }
     active_group->last_task_result_path=file_path;
-
+    active_group->last_task_id = task_id;
 }
 
 

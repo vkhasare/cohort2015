@@ -829,7 +829,6 @@ void send_new_moderator_info(server_information_t *server_info,
     /* XXX XXX XXX start task resp related timer. chk if it is missing. */
     timer_delete(group_node->timer_id);
     group_node->timer_id = 0;
-
     /* Changing the fsm state as moderator has been selected */
     group_node->fsm_state = GROUP_TASK_IN_PROGRESS;
     
@@ -1580,6 +1579,9 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
     timer_delete(group_node->timer_id);
     group_node->timer_id = 0;
 
+    /*Restoring the index*/
+    group_node->group_reachability_index = GROUP_REACHABLE; 
+
     /* Marking client node as Moderator */
     unsigned int clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
@@ -1681,6 +1683,7 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
 {
     size_t iter;
     mcast_client_node_t *client_node = NULL;
+    int max_clients = MAX_CLIENTS_TRIED_PER_ATTEMPT;
 
     if(group_node->moderator_client == NULL)
     {
@@ -1695,9 +1698,14 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
       client_node = group_node->moderator_client;
     }
 
+    if (SN_LIST_LENGTH(&group_node->client_info->client_node) < MAX_CLIENTS_TRIED_PER_ATTEMPT)
+    {
+        max_clients = SN_LIST_LENGTH(&group_node->client_info->client_node);
+    }
+
     /* Send the echo req to some n clients of group for moderator selection. The one who
      * who replies first will be selected as moderator.*/
-    for(iter = 0; iter < MAX_CLIENTS_TRIED_PER_ATTEMPT && client_node; iter++)
+    for(iter = 0; iter < max_clients && client_node; iter++)
     {
       /*Send echo to only free clients for moderator selection*/
         if (client_node->av_status == CLFREE) 
