@@ -65,6 +65,14 @@ typedef struct {
   int group_port;                     /* Multicast group port*/
   unsigned int mcast_fd;              /* Multicast FD associated with every group*/
   char * last_task_result_path;       /* File path for last executed task*/
+  enum {
+      MOD_INFO_AWAITED = 10,
+      TASK_AWAITED,
+      TASK_EXECUTION_IN_PROGRESS,
+      IDLE, /* Reflects state when group receives task req but client is not
+               required to work on it. */
+      TASK_RES_SENT
+  } state;
   sn_list_element_t list_element;
 } client_grp_node_t;
 
@@ -89,6 +97,7 @@ struct client_information_t{
   moderator_information_t* moderator_info;          /* If moderator, then it must have list of clients */
   unsigned int client_id;                           /* Client ID */
   unsigned int client_fd;                           /* Client FD */
+  unsigned int client_capability;                   /* Numeric representation of client's capability */
   unsigned int epoll_fd;                            /* EPoll FD */
   unsigned int client_status;                       /* Busy or Free */
   struct sockaddr_in server;                        /* Address of server */
@@ -113,3 +122,4 @@ void moderator_fsm_notify_rsp_pending_state(client_information_t *client_info,
                                             moderator_event_t event,
                                             void *fsm_msg);
 
+client_grp_node_t* ADD_CLIENT_IN_LL(client_information_t **client_info, client_grp_node_t *node);

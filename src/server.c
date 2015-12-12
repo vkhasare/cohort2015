@@ -1,12 +1,16 @@
+#include <sys/stat.h>
 #include "common.h"
 #include "server_DS.h"
 #include "RBT.h"
+#include "logg.h"
 
 grname_ip_mapping_t * mapping = NULL;
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 unsigned int num_groups = 0; // should be removed in future, when we remove mapping array and completely migrate on LL.
 extern debug_mode;
+
+bool mask_modification_in_progress = false;
 
 const int MAX_CLIENTS_TRIED_PER_ATTEMPT = 3;
 const int MAX_ALLOWED_KA_MISSES = 5;
@@ -20,6 +24,75 @@ static int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_checkpoint_req(const int sockfd, pdu_t *pdu, ...);
 static void assign_task(server_information_t *, char *, int, char *);
 static void moderator_selection(server_information_t *, mcast_group_node_t *);
+
+bool update_moderator_info(server_information_t *server_info,
+                           mcast_group_node_t *group_node, 
+                           unsigned int clientID);
+
+void mask_server_signals(bool flag);
+
+void handle_timeout(int signal, siginfo_t *si, void *uc);
+
+void handle_timeout_real(bool init, int signal, siginfo_t *si,
+                         server_information_t **server_info);
+
+#define MASK_SERVER_SIGNALS(flag) \
+    mask_modification_in_progress = true; \
+    mask_server_signals(flag); \
+    mask_modification_in_progress = false;
+
+void mask_server_signals(bool flag)
+{
+    if(flag)
+    {
+        signal(MOD_SEL_TIMEOUT, SIG_IGN);
+        signal(MOD_RSP_TIMEOUT, SIG_IGN);
+    }
+    else
+    {
+        struct sigaction sa;
+
+        sa.sa_flags = SA_SIGINFO;
+        sa.sa_sigaction = handle_timeout;
+        sigemptyset(&sa.sa_mask);
+        
+        if (sigaction(MOD_SEL_TIMEOUT, &sa, NULL) == -1)
+            errExit("sigaction (MOD_SEL_TIMEOUT)");
+        
+        if (sigaction(MOD_RSP_TIMEOUT, &sa, NULL) == -1)
+            errExit("sigaction (MOD_RSP_TIMEOUT)");
+    }
+    
+    /* For now commenting out sigproc related handling and sticking to signal().
+       sigprocmask needs more study and stands as TBD. With all probability,
+       sigprocmask is not what we need. we just want to ignore signals for
+       duration of handler. signal() will serve purpose. This is to be examined later.
+
+       sigset_t mask;
+       sigset_t orig_mask;
+       struct sigaction act;
+   
+       sigemptyset (&mask);
+       sigaddset (&mask, MOD_SEL_TIMEOUT);
+       sigaddset (&mask, MOD_RSP_TIMEOUT);
+   
+       if (flag)
+       {
+           if (sigprocmask(SIG_BLOCK, &mask, &orig_mask) < 0) {
+               perror ("sigprocmask");
+               return;
+           }
+       }
+       else
+       {
+           if (sigprocmask(SIG_UNBLOCK, &mask, &orig_mask) < 0) {
+               perror ("sigprocmask");
+               return;
+           }
+       }
+    
+     */
+}
 
 /* <doc>
  * fptr server_func_handler(unsigned int msgType)
@@ -419,8 +492,8 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
     /* Initializing is must for xdr msg. */
     join_rsp->group_ips = (l_saddr_in_t *) calloc (join_req.num_groups, sizeof(l_saddr_in_t));
     
-    for(cl_iter = 0; cl_iter < join_req.num_groups; cl_iter++){
-
+    for(cl_iter = 0; cl_iter < join_req.num_groups; cl_iter++)
+    {
         cause = REJECTED;
         group_name = join_req.group_ids[cl_iter].str;
 
@@ -429,7 +502,8 @@ int handle_join_req(const int sockfd, pdu_t *pdu, ...){
         /*search group_node in LL by group name*/
         get_group_node_by_name(&server_info, group_name, &group_node);
 
-        if (group_node) {
+        if (group_node) 
+        {
              cause = ACCEPTED;
 
              /*Add into Data Structure*/
@@ -478,7 +552,8 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
     *mapping = (grname_ip_mapping_t *) malloc(sizeof(grname_ip_mapping_t) * count);
 
     fp = fopen(filename, "r");
-    for(i = 0; i < count; i++){
+    for(i = 0; i < count; i++)
+    {
         fscanf(fp, "%s %s %s", (*mapping)[i].grname, ip_str,port);
         /* Storing group IP in sockaddr_in struct */
         (*mapping)[i].grp_ip.sin_family = AF_INET;
@@ -502,6 +577,46 @@ uint32_t initialize_mapping(const char* filename, grname_ip_mapping_t ** mapping
 void display_group_info(server_information_t *server_info)
 {
   display_mcast_group_node(&server_info, SHOW_ALL);
+}
+
+void mark_dead_clients_in_group(int* ref_array, int* ref_count,
+        int* dead_client_arr, int dead_client_count)
+{
+    //Attempt to find all dead clients first and mark them.
+    int i, j, num_clients_marked = 0;
+    for(i = 0; i < *ref_count && 
+               num_clients_marked < dead_client_count; i++)
+        for(j = 0; j < dead_client_count; j++)
+        {
+            if(ref_array[i] == dead_client_arr[j])
+            {
+                ref_array[i] = 0;
+                num_clients_marked++;
+                break;
+            }
+        }
+    //compress array in second step;
+    i = 0; //serves as current index in ref_array
+    j = *ref_count - 1; //runs from end of array to find non zero entry.
+    
+    while(num_clients_marked-- > 0 && (i < (*ref_count - num_clients_marked)))
+    {
+        //move i to find first 0 entry.
+        while((ref_array[i] != 0) && (i < *ref_count)) i++;
+        
+        //move j backwards till we cross i or we get a non zero entry in array.
+        while(ref_array[j] == 0)
+        {
+            if(j == i) break;
+            j--;
+            continue;
+        }
+        ref_array[i] = ref_array[j];
+        ref_array[j] = 0;
+    }
+
+    //modify ref count to reflect number of clients presently working;
+    *ref_count -= dead_client_count;
 }
 
 /* <doc>
@@ -548,6 +663,9 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
           rbNode = RBFindNodeByID(tree, echo_req->client_ids[iter]);
           group_node->grp_capability -= rbNode->capability;
       }
+      mark_dead_clients_in_group(group_node->task_set_details.working_clients, 
+                                 &group_node->task_set_details.number_of_working_clients, 
+                                 echo_req->client_ids, echo_req->num_clients);
   }
   else
   {
@@ -583,28 +701,71 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
     }
     else
     {
+        if(mask_modification_in_progress == true)
+            return; 
+
         //traverse the list to find which group timer expired
         get_group_node_by_timerid(server_info_local, 
                                   si->si_value.sival_ptr, 
                                   &grp_node);
+        if(grp_node == NULL)
+        {
+            /* A group was removed but timer is still running. Log unusual error.
+             * DELETE. Not stop this timer. We want to release such timers. */
+
+            timer_delete(*(timer_t*)(si->si_value.sival_ptr));
+            return;
+        }
         
         if(signal == MOD_SEL_TIMEOUT)
         {
-            //call handler logic here
-            timer_delete(grp_node->timer_id);
+            if(grp_node->fsm_state == MODERATOR_SELECTED)
+                /* XXX This should not happen now since we are attempting to
+                 * ignore all signals when incoming packets come and are being
+                 * processed. This should be a very very rare scenario that
+                 * mask_modification_in_progress flag did not get a chance to
+                 * get set. Asserting to determine frequency of these incidents. */
+                assert(0);
+            // XXX XXX XXX XXX revisit. fired when all clients died on handle_mod_notification.
+
+            //new addition
+            /* timer delete not required here. Nor is stop_timer. Because if it
+             * came here it most certainly came via one-shot timer expiration.
+             * Just rearming of timer required. */
+            ////timer_delete(grp_node->timer_id);
+            
             moderator_selection(*server_info_local, grp_node);
         }
         else if(signal == MOD_RSP_TIMEOUT)
         {
             //decrement counter and check if moderator has missed n successive heartbeat
-            if(grp_node->heartbeat_remaining-- == 0)
+            if(grp_node->heartbeat_remaining-- > 0) 
+                return;
+
+            if (grp_node->fsm_state == MODERATOR_SELECTED)
+            {
+                /* This means we were waiting for response from moderator
+                 * about active clients in the group but moderator node went
+                 * down in between. In this case we should re-trigger
+                 * moderator selection. */
+
+                //new addition
+                timer_delete(grp_node->timer_id);
+                grp_node->timer_id = 0;
+
+                moderator_selection(*server_info_local, grp_node);
+            }
+            else if(grp_node->fsm_state == GROUP_TASK_IN_PROGRESS)
             {
                 char ipaddr[INET6_ADDRSTRLEN];
                 inet_ntop(AF_INET, 
-                          get_in_addr(&(grp_node->moderator_client->client_addr)), 
-                          ipaddr, INET6_ADDRSTRLEN);
+                        get_in_addr(&(grp_node->moderator_client->client_addr)), 
+                        ipaddr, INET6_ADDRSTRLEN);
                 PRINT("[UNREACHABLE_ALERT: GRP - %s] Moderator (%s) is unreachable. ", grp_node->group_name, ipaddr);
+
+                //stop_timer(&grp_node->timer_id);
                 timer_delete(grp_node->timer_id);
+                grp_node->timer_id = 0;
 
                 /*Resetting old moderator/client info*/
                 unsigned int clientID = grp_node->moderator_client->client_id;
@@ -618,9 +779,18 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
                 /*As client went down, re-adjust the group capability*/
                 grp_node->grp_capability -= rbNode->capability;
        
+                //remove it from groups' active working list
+                mark_dead_clients_in_group(grp_node->task_set_details.working_clients, 
+                        &grp_node->task_set_details.number_of_working_clients, &clientID, 1);
+
                 /*Initiate new moderator selection process*/ 
                 grp_node->fsm_state = TASK_IN_PROGRESS_MOD_SEL_PEND;
                 moderator_selection(*server_info_local, grp_node);
+            }
+            else
+            {
+                /* XXX This timer is not expected to hit in any other state. Investigate. */
+                assert(0);
             }
             //PRINT("***came here for decrementing: %d***", grp_node->heartbeat_remaining);
         }
@@ -647,21 +817,34 @@ void handle_timeout(int signal, siginfo_t *si, void *uc)
 void send_new_moderator_info(server_information_t *server_info,
                              void *fsm_msg)
 {
-
     char ipaddr[INET6_ADDRSTRLEN];
     fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
 
     /* fetch the group node pointer from fsm_data */
     mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
+    
+    /* Disarm initial MOD_SEL_TIMEOUT oneshot at this stage since hitting this
+     * path means at least one client has responded in mod reselection phase. */
+    //stop_timer(&group_node->timer_id);
+    /* XXX XXX XXX start task resp related timer. chk if it is missing. */
+    timer_delete(group_node->timer_id);
+    group_node->timer_id = 0;
 
+    /* Changing the fsm state as moderator has been selected */
     group_node->fsm_state = GROUP_TASK_IN_PROGRESS;
-
+    
     pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
     /*Marking client node as Moderator*/
     unsigned int clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
     if (clientID <= 0){
+        return;
+    }
+    
+    if(/*NOT*/ !update_moderator_info(server_info, group_node, clientID))
+    {
+        /* Some problem in lookup. Log error and return*/
         return;
     }
 
@@ -692,10 +875,13 @@ void send_new_moderator_info(server_information_t *server_info,
     memcpy(mod_update_req->client_ids, group_node->task_set_details.working_clients, 
            group_node->task_set_details.number_of_working_clients * sizeof(group_node->task_set_details.working_clients[0]));
 
+    PRINT("[Moderator_Update_Req: GRP - %s] Moderator Update Request sent to group %s.", mod_update_req->group_name , mod_update_req->group_name);
+
     /*Send to multicast group*/
     write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &mod_update_pdu);
-
-    PRINT("[Moderator_Update_Req: GRP - %s] Moderator Update Request sent to group %s.", mod_update_req->group_name , mod_update_req->group_name);
+    
+    /* Start recurring timer for monitoring status of this moderator node.*/
+    start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, MOD_RSP_TIMEOUT);
 }
 
 /* <doc>
@@ -860,7 +1046,7 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
    int num_of_clients_modified, fd, i;
    bool client_list_changed = FALSE;
    char element[16], cmd[256], *memblock;
-   unsigned int capability_total;
+   unsigned int capability_total = 0;
    char folder_path[100];
    mcast_task_set_t *task_set = &group_node->task_set_details;
 
@@ -945,9 +1131,6 @@ void mcast_start_task_distribution(server_information_t *server_info,
     /* fetch the group node pointer from fsm_data */
     mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
 
-    /* Changing the fsm state as task has been started */
-    group_node->fsm_state = GROUP_TASK_IN_PROGRESS;
-
     pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
     /* Get the task set for prime numbers */
@@ -973,12 +1156,11 @@ void mcast_start_task_distribution(server_information_t *server_info,
         req.idv.perform_task_req.client_id_count = pdu->msg.idv.moderator_notify_rsp.client_id_count;
         req.idv.perform_task_req.client_ids = MALLOC_UINT(pdu->msg.idv.moderator_notify_rsp.client_id_count);
     
-
-    for(count = 0; count < pdu->msg.idv.moderator_notify_rsp.client_id_count; count++)
-    {
-        req.idv.perform_task_req.client_ids[count] = pdu->msg.idv.moderator_notify_rsp.client_ids[count];
+        memcpy(req.idv.perform_task_req.client_ids,
+                pdu->msg.idv.moderator_notify_rsp.client_ids,
+                sizeof(req.idv.perform_task_req.client_ids[0]) * pdu->msg.idv.moderator_notify_rsp.client_id_count);
     }
-    }
+    
     /* Fetch the data set for each client based on capability */
     get_data_set_for_client_based_on_capability(server_info, group_node,req.idv.perform_task_req.client_id_count,req.idv.perform_task_req.client_ids, task_count, task_set);
 
@@ -1003,13 +1185,19 @@ void mcast_start_task_distribution(server_information_t *server_info,
 /*    for(count = 0; count < task_count; count++)
     {
         req.idv.perform_task_req.task_set[count] = task_set[count];
-    }*/
+    }
+    // USE THIS INSTEAD OF FOR
+    memcpy(req.idv.perform_task_req.task_set, task_set,
+           sizeof(req.idv.perform_task_req.task_set[0])* task_count); */
 
     req.idv.perform_task_req.task_type = group_node->task_type;
     req_pdu.msg = req;
 
     /* Send multicast msg to group to perform task */
     write_record(server_info->server_fd,&(group_node->grp_mcast_addr), &req_pdu);
+
+    /* Changing the fsm state as task has been started */
+    group_node->fsm_state = GROUP_TASK_IN_PROGRESS;
 
     PRINT("[Task_Request: GRP - %s] Task Request Sent.", group_node->group_name);
 
@@ -1083,7 +1271,7 @@ void collect_task_results(task_rsp_t * task_resp, char *result_folder, unsigned 
 
 
 /* <doc>
- * void get_task_result_folder_path(char * gname, uint8_t task_id, char * buffer)
+ * void get_task_result_folder_path(char * gname, uint8_t task_id)
  * This function returns the folder where task results are stored
  *
  * </doc>
@@ -1118,15 +1306,18 @@ char * get_task_result_folder_path(char * gname, uint8_t task_id){
  * </doc>
  */ 
 /*void
-write_task_response_file(task_rsp_t * task_rsp, char* fname){
+write_task_response_file(task_rsp_t * task_rsp, char* fname)
+{
   uint32_t i, j;
   FILE *fp=NULL;
   fp=fopen(fname,"w");
   fprintf(fp, "Client Id, Result Size, Result\n");
-  for(i=0;i<task_rsp->num_clients;i++){
+  for(i=0;i<task_rsp->num_clients;i++)
+  {
     fprintf(fp, "%u", task_rsp->client_ids[i]);
     fprintf(fp, ", %u", task_rsp->result[i].size);
-    for(j=0;j<task_rsp->result[i].size;j++){
+    for(j=0;j<task_rsp->result[i].size;j++)
+    {
       fprintf(fp, ", %u", task_rsp->result[i].value[j]);
     }
     fprintf(fp, "\n");
@@ -1135,71 +1326,68 @@ write_task_response_file(task_rsp_t * task_rsp, char* fname){
 }*/
 
 /* <doc>
- * void mcast_handle_task_response(server_information_t *server_info,
- *                                    void *fsm_msg)
+ * void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg)
  * Function to handle task response from the multicast group moderator. It takes 
  * input as response collated by the moderator of the group along with the client IDs 
  *  and the task type.
  *
  * </doc>
  */
-void mcast_handle_task_response(server_information_t *server_info,
-                                   void *fsm_msg)
+void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg)
 {
-  char ipaddr[INET6_ADDRSTRLEN], * result_folder;
-  int i = 0;
-  
-  int count = 0;
-  comm_struct_t req;
-  fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
-  pdu_t rsp_pdu;
-  unsigned int* task_set,task_count;
-  FILE *cmd_line;
-  char element[16], cmd[256];
+    char ipaddr[INET6_ADDRSTRLEN], * result_folder;
+    int i = 0;
 
-  /* fetch the group node pointer from fsm_data */
-  mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
+    int count = 0;
+    comm_struct_t req;
+    fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+    pdu_t rsp_pdu;
+    unsigned int* task_set,task_count;
 
-  /* Changing the fsm state as task has been started */
-  group_node->fsm_state = GROUP_TASK_COMPLETED;
+    /* fetch the group node pointer from fsm_data */
+    mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
 
-  pdu_t *pdu = (pdu_t *) fsm_data->pdu;
-  task_rsp_t *task_response= &(pdu->msg.idv.task_rsp);
+    pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+    task_rsp_t *task_response= &(pdu->msg.idv.task_rsp);
 
-  LOGGING_INFO("Task response received from moderator for group %s for task id %d", group_node->group_name, task_response->task_id);
-  
-  /* Get the file name based on current time stamp */ 
-  result_folder = get_task_result_folder_path(group_node->group_name, task_response->task_id); 
-  
-  /* Write the response  to file */  
-  collect_task_results(task_response, result_folder, calc_key(&(pdu->peer_addr))); 
- 
-  /*Disarming the keepalive for this mod since task is complete.*/
-  timer_delete(group_node->timer_id);
-  
-  /*Resetting mod_client pointer to avoid havoc in moderator_selection*/
-  group_node->moderator_client = NULL;
+    LOGGING_INFO("Task response received from moderator for group %s for task id %d", group_node->group_name, task_response->task_id);
 
-  /*Free if group node has maintained array list of working clients*/
-  if (group_node->task_set_details.working_clients) {
-    free(group_node->task_set_details.working_clients);
-  }
+    /* Get the file name based on current time stamp */ 
+    result_folder = get_task_result_folder_path(group_node->group_name, task_response->task_id); 
 
-  /* Free the filename */
-  free(group_node->task_set_filename);
-  
-  /*Free task related details*/
-  free(group_node->task_set_details.capability);
-  
-  for(i = 0; i < group_node->task_set_details.number_of_working_clients; i++)
-  {
-    free(group_node->task_set_details.task_filename[i]);
-  }
-  free(group_node->task_set_details.task_filename);
+    /* Write the response  to file */  
+    collect_task_results(task_response, result_folder, calc_key(&(pdu->peer_addr))); 
 
-  free(group_node->task_set_details.task_folder_path);
+    /*Disarming the keepalive for this mod since task is complete.*/
+    //stop_timer(&group_node->timer_id);
+    timer_delete(group_node->timer_id);
+    group_node->timer_id = 0;
 
-  group_node->task_type = INVALID_TASK_TYPE;
+    /*Resetting mod_client pointer to avoid havoc in moderator_selection*/
+    group_node->moderator_client = NULL;
+
+    mcast_task_set_t * task_set_details = &group_node->task_set_details;
+    /*Free if group node has maintained array list of working clients*/
+    task_set_details->number_of_working_clients = 0;
+    if (task_set_details->working_clients) {
+        free(task_set_details->working_clients);
+    }
+
+    /* Free the filename */
+    free(group_node->task_set_filename);
+
+    /*Free task related details*/
+    free(task_set_details->capability);
+
+    for(i = 0; i < task_set_details->number_of_working_clients; i++)
+    {
+        free(task_set_details->task_filename[i]);
+    }
+    free(task_set_details->task_filename);
+
+    free(task_set_details->task_folder_path);
+
+    group_node->task_type = INVALID_TASK_TYPE;
 
   /*Remove the task set file for the group once task response has been received by Server*/
 /*  strcpy(cmd,"rm -rf task_set/");
@@ -1333,15 +1521,15 @@ int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...)
 }
 
 /* <doc>
- * bool activate_moderator_keepalive(server_information_t *server_info,
- *                                   mcast_group_node_t *group_node,
- *                                   unsigned int clientID)
+ * bool update_moderator_info(server_information_t *server_info,
+ *                            mcast_group_node_t *group_node,
+ *                            unsigned int clientID)
  * This function activates the monitoring of periodic keepalive of moderator 
  * towards Server.
  *
  * </doc>
  */
-bool activate_moderator_keepalive(server_information_t *server_info,
+bool update_moderator_info(server_information_t *server_info,
                                   mcast_group_node_t *group_node, 
                                   unsigned int clientID)
 {
@@ -1364,13 +1552,6 @@ bool activate_moderator_keepalive(server_information_t *server_info,
     {
         group_node->moderator_client = client_node;
         client_node->av_status = CLBUSY;
-
-        /* Disarm initial MOD_SEL_TIMEOUT oneshot timer and start recurring timer
-         * for moderator keepalive on this group */
-        timer_delete(group_node->timer_id);
-
-        /* Start recurring timeer for monitoring status of this moderator node.*/
-        start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, MOD_RSP_TIMEOUT);
         return true;
     }
     return false;
@@ -1388,22 +1569,32 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
 {
     char ipaddr[INET6_ADDRSTRLEN];
     fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+    pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
     /* fetch the group node pointer from fsm_data */
     mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
 
-    pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+    /* Delete initial MOD_SEL_TIMEOUT oneshot at this stage since hitting this
+     * path means at least one client has responded in mod selection phase. */
+    //stop_timer(&group_node->timer_id);
+    timer_delete(group_node->timer_id);
+    group_node->timer_id = 0;
 
-    /*Marking client node as Moderator*/
+    /* Marking client node as Moderator */
     unsigned int clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
 
-    if (clientID <= 0){
+    if (clientID <= 0)
+    {
         //Peer addr 0 in PDU. Log error.
         return;
     }
-    if(/*NOT*/ !activate_moderator_keepalive(server_info, group_node, clientID))
+    
+    if(/*NOT*/ !update_moderator_info(server_info, group_node, clientID))
+    {
+        /* Some problem in lookup. Log error and return*/
         return;
-
+    }
+    
     /* Changing the fsm state as moderator has been selected */
     group_node->fsm_state = MODERATOR_SELECTED;
     group_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
@@ -1428,9 +1619,14 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
     mod_notify_req->num_of_clients_in_grp = group_node->number_of_clients;
 
     PRINT("[Moderator_Notify_Req: GRP - %s] Moderator Notify Request sent to group %s.", mod_notify_req->group_name , mod_notify_req->group_name);
-
+    
     /*Send to multicast group*/
     write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &notify_pdu);
+
+    /* Start recurring timer for monitoring status of this moderator node.*/
+    /* XXX XXX check if this timer needs to be stopped for mod reseletion. */
+    ////////
+    start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, MOD_RSP_TIMEOUT);
 }
 
 
@@ -1504,7 +1700,8 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
     for(iter = 0; iter < MAX_CLIENTS_TRIED_PER_ATTEMPT && client_node; iter++)
     {
       /*Send echo to only free clients for moderator selection*/
-        if (client_node->av_status == CLFREE) {
+        if (client_node->av_status == CLFREE) 
+        {
             send_echo_request(server_info->server_fd, &client_node->client_addr, group_node->group_name);
 
             LOGGING_INFO("Sending initial echo for moderator selection of group %s to client %d", group_node->group_name, client_node->client_id);
@@ -1516,6 +1713,20 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
     }
 
     group_node->moderator_client = client_node;
+    if(client_node == NULL) 
+    {
+        /* Mark end of one iteration. */
+        group_node->group_reachability_index--;
+        
+        if(group_node->group_reachability_index == 0)
+        {
+            /* We have failed to contact group members in designated number of
+             * attempts. Do not rearm timers. Do not retrigger mod_selection.
+             * Return from this point. */
+            PRINT("[UNREACHABLE_ALERT: GRP - %s] Group is unreachable. ", group_node->group_name);
+            return;
+        }
+    }
 
     /*Start a one time timer and wait for first client to respond. If no
      *response within timeout frame, retry. */
@@ -1530,7 +1741,7 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
  *
  * </doc>
  */
-static
+    static
 void assign_task(server_information_t *server_info, char *grp_name, int task_type, char *filename)
 {
     mcast_group_node_t *group_node = NULL;
@@ -1539,58 +1750,67 @@ void assign_task(server_information_t *server_info, char *grp_name, int task_typ
     /*Validate file existence*/
     if (stat(filename, &st))
     {
-      PRINT("%s is Non-existent file.", filename);
-      LOGGING_ERROR("Task file %s doesnot exist.", filename);
-      return;
+        PRINT("%s is Non-existent file.", filename);
+        LOGGING_ERROR("Task file %s doesnot exist.", filename);
+        return;
     }
 
     /*fetch the group information whose clients are supposed to work on task*/
     if (grp_name)
     {
-       get_group_node_by_name(&server_info, grp_name, &group_node); 
+        get_group_node_by_name(&server_info, grp_name, &group_node); 
     }
     else
     {
-       /*If no group is given, then find the group to work on this task, as per best-fit policy*/
-       get_group_node_by_best_fit(&server_info, st.st_size, &group_node);
+        /*If no group is given, then find the group to work on this task, as per best-fit policy*/
+        get_group_node_by_best_fit(&server_info, st.st_size, &group_node);
 
-       if (group_node)
-       {
-           PRINT("-------------[NOTIFICATION] Group %s has been auto-selected for task  ---------------", group_node->group_name);
-       }
+        if (group_node)
+        {
+            PRINT("-------------[NOTIFICATION] Group %s has been auto-selected for task  ---------------", group_node->group_name);
+        }
     }
-   /*If group node has moderator, that means group is currently busy working on a task*/
-   if (!group_node)
-   {
-      PRINT("Error: This is a non-existent group.");
-      LOGGING_ERROR("Task Assignment: Group %s is non-existent", grp_name);
-      return;
-   }
-   if (group_node->moderator_client) 
-   {
-      PRINT("Group %s is currently Busy.", grp_name);
-      LOGGING_ERROR("Task Assignment: Group %s is Busy.", group_node->group_name);
-      return;
-   } 
-   else if (group_node->client_info == NULL)
-   {
-      PRINT("No clients present in the group.");
-      LOGGING_ERROR("Task Assignment: There are no clients in the group %s", group_node->group_name);
-      return;
-   }
-   
-   group_node->task_type = task_type;
+    /*If group node has moderator, that means group is currently busy working on a task*/
+    if (!group_node)
+    {
+        PRINT("Error: This is a non-existent group.");
+        LOGGING_ERROR("Task Assignment: Group %s is non-existent", grp_name);
+        return;
+    }
+    if (group_node->moderator_client) 
+    {
+        PRINT("Group %s is currently Busy.", grp_name);
+        LOGGING_ERROR("Task Assignment: Group %s is Busy.", group_node->group_name);
+        return;
+    } 
+    else if (group_node->client_info == NULL)
+    {
+        PRINT("No clients present in the group.");
+        LOGGING_ERROR("Task Assignment: There are no clients in the group %s", group_node->group_name);
+        return;
+    }
 
-   LOGGING_INFO("Group %s has been assigned task of type %d", group_node->group_name, task_type);
+    group_node->task_type = task_type;
 
-   group_node->task_set_filename = MALLOC_CHAR(strlen(filename)+1); 
-   memcpy(group_node->task_set_filename, filename, strlen(filename));
-   
-   /*Group is in moderator selection pending state*/
-   group_node->fsm_state = MODERATOR_SELECTION_PENDING;
+    LOGGING_INFO("Group %s has been assigned task of type %d", group_node->group_name, task_type);
 
-   /*Select the moderator for the multicast group*/
-   moderator_selection(server_info, group_node);
+    group_node->task_set_filename = MALLOC_CHAR(strlen(filename)+1); 
+    memcpy(group_node->task_set_filename, filename, strlen(filename)+1);
+
+    /*Group is in moderator selection pending state*/
+    group_node->fsm_state = MODERATOR_SELECTION_PENDING;
+
+    /* If group was unreachable earlier, we have to make an attempt to reach the
+     * group again when prompted by user from CLI. Mark group to be rechable and
+     * proceed with moderator selection. */
+    group_node->group_reachability_index = GROUP_REACHABLE;
+    
+    /*Select the moderator for the multicast group*/
+    moderator_selection(server_info, group_node);
+
+    /* This is the first time timer is getting engaged in any way. If earlier
+     * clean-up was proper then we should not be required delete timers or do
+     * any timer related processing here. */
 }
 
 
@@ -1867,21 +2087,9 @@ int main(int argc, char * argv[])
     //Initialize timeout handler
     handle_timeout_real(true, 0, NULL, &server_info);
 
-    struct sigaction sa;
-    
     PRINT("Establishing handler for moderator selection timeout(signal: %d)\n", MOD_SEL_TIMEOUT);
-    sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = handle_timeout;
-    sigemptyset(&sa.sa_mask);
-    if (sigaction(MOD_SEL_TIMEOUT, &sa, NULL) == -1)
-        errExit("sigaction");
-    
     PRINT("Establishing handler for moderator resp timeout(signal: %d)\n", MOD_RSP_TIMEOUT);
-    sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = handle_timeout;
-    sigemptyset(&sa.sa_mask);
-    if (sigaction(MOD_RSP_TIMEOUT, &sa, NULL) == -1)
-        errExit("sigaction");
+    mask_server_signals(false);
     
     events = calloc(MAXEVENTS, sizeof(event));
 
@@ -1894,6 +2102,7 @@ int main(int argc, char * argv[])
             /* Code Block for accepting new connections on Server Socket*/
             if (sfd == events[index].data.fd)
             {
+                MASK_SERVER_SIGNALS(true);
                 fptr func;
 
                 /* Allocating PDU for incoming message */
@@ -1902,7 +2111,7 @@ int main(int argc, char * argv[])
                 {
                     (func)(events[index].data.fd, &pdu, server_info);
                 }
-
+                MASK_SERVER_SIGNALS(false);
             }
             /* Code Block for handling input from STDIN */
             else if (STDIN_FILENO == events[index].data.fd) 

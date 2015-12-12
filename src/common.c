@@ -264,10 +264,11 @@ void start_oneshot_timer(timer_t *timer_id, uint8_t interval, uint32_t sigval)
     sev.sigev_signo = sigval;
     sev.sigev_value.sival_ptr = timer_id;
     
-    if (timer_create(CLOCKID, &sev, timer_id) == -1)
-        errExit("timer_create");
+    if(*timer_id == 0)
+        if(timer_create(CLOCKID, &sev, timer_id) == -1)
+            errExit("timer_create");
 
-    if (timer_settime(*timer_id, 0, &its, NULL) == -1)
+    if(timer_settime(*timer_id, 0, &its, NULL) == -1)
          errExit("timer_settime");
 }
 
@@ -293,10 +294,11 @@ void start_recurring_timer(timer_t *timer_id, uint8_t interval, uint32_t sigval)
     sev.sigev_signo = sigval;
     sev.sigev_value.sival_ptr = timer_id;
     
-    if (timer_create(CLOCKID, &sev, timer_id) == -1)
-        errExit("timer_create");
+    if(*timer_id == 0)
+        if(timer_create(CLOCKID, &sev, timer_id) == -1)
+            errExit("timer_create");
 
-    if (timer_settime(*timer_id, 0, &its, NULL) == -1)
+    if(timer_settime(*timer_id, 0, &its, NULL) == -1)
          errExit("timer_settime");
 }
 
@@ -402,3 +404,42 @@ void inline check_and_create_folder(char * path){
   }
 }
 
+/* When timer is changing queues/type of signal raised. DO NOT use this API. Use
+ * timer_delete instead */
+void stop_timer(timer_t *timer_id)
+{
+    struct itimerspec its;
+
+    its.it_value.tv_sec = 0;
+    its.it_value.tv_nsec = 0;
+    its.it_interval.tv_sec = 0;
+    its.it_interval.tv_nsec = 0;
+
+    if (timer_settime(*timer_id, 0, &its, NULL) == -1)
+        errExit("stop timer_settime");
+}
+
+void mask_signal(uint32_t sigval, bool flag)
+{
+    sigset_t mask;
+    sigset_t orig_mask;
+    struct sigaction act;
+
+    sigemptyset (&mask);
+    sigaddset (&mask, sigval);
+
+    if (flag)
+    {
+        if (sigprocmask(SIG_BLOCK, &mask, &orig_mask) < 0) {
+            perror ("sigprocmask");
+            return;
+        }
+    }
+    else
+    {
+        if (sigprocmask(SIG_UNBLOCK, &mask, &orig_mask) < 0) {
+            perror ("sigprocmask");
+            return;
+        }
+    }
+}

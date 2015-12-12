@@ -297,8 +297,10 @@ client_grp_node_t *allocate_client_grp_node(client_information_t **client_info)
 
    new_client_grp_node = malloc(sizeof(client_grp_node_t));
 
+   new_client_grp_node->last_task_result_path = NULL;
    new_client_grp_node->group_port = -1;
    new_client_grp_node->mcast_fd = INT_MAX;
+   new_client_grp_node->timer_id = 0;
    memset(&(new_client_grp_node->group_name), '\0', sizeof(new_client_grp_node->group_name));
 
    SN_LIST_MEMBER_INSERT_HEAD(&((*client_info)->client_grp_list->client_grp_node),
@@ -419,14 +421,14 @@ void get_client_grp_node_by_group_name(client_information_t **client_info, char 
 
 
 /* <doc>
- * bool ADD_CLIENT_IN_LL(client_information_t **client_info, client_grp_node_t *node)
+ * client_grp_node_t* ADD_CLIENT_IN_LL(client_information_t **client_info, client_grp_node_t *node)
  * Add the client node in client_info list. client node contains information related
  * to multicast group IP/port and other related information.
  * Returns TRUE if added successfully, otherwise FALSE.
  *
  * </doc>
  */
-bool ADD_CLIENT_IN_LL(client_information_t **client_info, client_grp_node_t *node)
+client_grp_node_t* ADD_CLIENT_IN_LL(client_information_t **client_info, client_grp_node_t *node)
 {
   client_grp_node_t *client_grp_node = NULL;
 
@@ -438,11 +440,9 @@ bool ADD_CLIENT_IN_LL(client_information_t **client_info, client_grp_node_t *nod
     memcpy(&client_grp_node->group_addr, &node->group_addr, sizeof(client_grp_node->group_addr));
     client_grp_node->group_port = node->group_port;
     client_grp_node->mcast_fd = node->mcast_fd;
-
-    return TRUE;
   }
 
-  return FALSE;
+  return client_grp_node;
 }
 
 /* <doc>

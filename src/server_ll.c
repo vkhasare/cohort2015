@@ -274,6 +274,10 @@ mcast_group_node_t *allocate_mcast_group_node(server_information_t **server_info
    new_group_node->group_port = INT_MAX;
    new_group_node->fsm_state = STATE_NONE;
    new_group_node->grp_capability = 0;
+   /* No issues observed on server side so far. Doing intialization as a precaution. */
+   new_group_node->timer_id = 0;
+   
+   new_group_node->group_reachability_index = GROUP_REACHABLE;
    SN_LIST_MEMBER_INSERT_HEAD(&((*server_info)->server_list->group_node),
                              new_group_node,
                              list_element);

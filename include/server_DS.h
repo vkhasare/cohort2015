@@ -11,6 +11,8 @@
 #define MOD_RSP_TIMEOUT SIGUSR2
 #define DEFAULT_TIMEOUT 3
 
+#define GROUP_REACHABLE 2
+
 /*Enum for cli 'show groups' and 'show group info G1' */
 typedef enum{
   SHOW_GROUP_ONLY,
@@ -88,6 +90,8 @@ typedef struct {
   mcast_client_node_t *moderator_client;    /*Points to client which is moderator*/
   timer_t timer_id;                         /*Timer for monitoring moderator when task is in progress*/
   uint8_t heartbeat_remaining;              /*Non-zero count represents active moderator */
+  uint8_t group_reachability_index;         /*Zero indicates none of the clients are responding to server requests. 
+                                              After reaching zero, we block attempts to reach this group (stop moderator_selection etc.). */
   server_state_t fsm_state;                 /*Current state of group in FSM, to be used by server*/
   sn_list_element_t list_element;
   int task_type;                            /* A group can perform only one task at a time. Maintaining the task type */
