@@ -344,48 +344,41 @@ void enable_logging(char *prog_name)
  * This reads the task file and gets the total count of numbers
  * </doc>
  */
-unsigned int get_task_count(const char* filename, unsigned long** task_set)
-{
-     FILE *fp = NULL, *cmd_line = NULL;
-     uint32_t count, i = 0;
-     char element[16], cmd[256] = {0};
-     char *ptr;
+unsigned int get_task_count(const char* filename){
+
+     FILE *cmd_line;
+     uint32_t count;
+     char cmd[256];
 
      sprintf(cmd, "%s %s", "wc -l" , filename);
      cmd_line = popen (cmd, "r");
      fscanf(cmd_line, "%i", &count);
      pclose(cmd_line);
 
-     *task_set = MALLOC_ULONG(count);
-
-     fp = fopen(filename, "r");
-
-     for(i = 0; i < count; i++){
-         fscanf(fp, "%s\n", element);
-         (* task_set)[i] =strtoul(element,NULL,10);
-     }
-     if(fp)
-       fclose(fp);
-
-   return count;
+     return count;
 }
 
 
 
 char * fetch_file(char * src, char *dest){
-     char cmd[180];
-     sprintf(cmd,"./file_tf %s %s >>/tmp/file_tf.logs", src, dest);
-  //   sprintf(cmd,"./file_tf root@%s %s >>/tmp/file_tf.logs", src, dest); //for rtp machines
-     PRINT("fetching file from %s", src);
-     int status = system(cmd);
-     if(status == -1)
-       PRINT("some error is occured in that shell command");
-     else if (WEXITSTATUS(status) == 127)
-       PRINT("That shell command is not found");
-     else{
-       PRINT("system call return succesfull with  %d",WEXITSTATUS(status));
-       return dest;
-     } 
+
+   char cmd[180];
+   sprintf(cmd,"./file_tf %s %s >>/tmp/file_tf.logs", src, dest);
+//   sprintf(cmd,"./file_tf root@%s %s >>/tmp/file_tf.logs", src, dest); //for rtp machines
+
+   PRINT("fetching file from %s", src);
+   LOGGING_INFO("fetching file from %s", src);
+
+   int status = system(cmd);
+   if(status == -1)
+     PRINT("some error is occured in that shell command");
+   else if (WEXITSTATUS(status) == 127)
+     PRINT("That shell command is not found");
+   else{
+     LOGGING_INFO("system call return succesfull with  %d",WEXITSTATUS(status));
+     return dest;
+   } 
+   //failed to fetch file hence freeing allocated memory
    free(dest);
    return NULL;
 }  

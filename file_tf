@@ -1,5 +1,5 @@
 #!/usr/bin/expect -f
-
+log_user 0
 #echo "This is first $1"
 #echo "This is second $2"
 
@@ -18,4 +18,4 @@ expect {
     exp_send "starent\r"
   }
 }
-interact
+#interact

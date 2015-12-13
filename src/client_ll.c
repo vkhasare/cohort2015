@@ -131,6 +131,7 @@ void deallocate_mod_done_list(client_information_t **client_info)
    }
 
    /*deallocate the pending and done lists*/
+   free(mod_info->pending_client_list);   
    free(mod_info->done_client_list);   
 }
 

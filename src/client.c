@@ -1,5 +1,6 @@
 #include "common.h"
 #include "client_DS.h"
+#include <math.h>
 
 const int MAX_ALLOWED_KA_MISSES = 5;
 
@@ -35,7 +36,7 @@ static void moderator_send_task_response_to_server(client_information_t *);
 static void fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name, unsigned int);
 static void fill_thread_args(client_information_t *, perform_task_req_t *, thread_args *, int);
 void* execute_task(void *t_args);
-static char* find_prime_numbers(thread_args *, unsigned int count, unsigned long *task_set);
+static char* find_prime_numbers(thread_args *, char *);
 
 void handle_timeout(int signal, siginfo_t *si, void *uc);
 
@@ -1426,8 +1427,10 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
     } 
     else 
     {
+        //THis client is the moderator for the group. no need to send it via network. 
         task_rsp_t *task_response=&(pdu.msg.idv.task_rsp);
         update_moderator_info_with_task_response(client_info, task_response, client_info->client_id);
+        FREE_INCOMING_PDU(pdu.msg);
     } 
     
     // Storing task_result_file_path
@@ -1635,7 +1638,6 @@ void free_thread_args(thread_args *args){
 void* execute_task(void *args)
 {
     unsigned int task_count;
-    unsigned long  *task_set;
 
     thread_args *t_args = (thread_args *)args;
     /*Making thread detached.*/
@@ -1647,9 +1649,7 @@ void* execute_task(void *args)
 
     if(dest !=NULL)
     {
-       task_count = get_task_count(dest, &task_set);
-
-       char * file_path=find_prime_numbers(t_args, task_count, task_set);
+       char * file_path=find_prime_numbers(t_args, dest);
 
        if(file_path !=NULL)
        {
@@ -1658,8 +1658,6 @@ void* execute_task(void *args)
            send_task_results_to_moderator(t_args->client_info, t_args->group_name, 
                    t_args->task_id, TYPE_INT, file_path, t_args->client_info->client_id);
        }
-       if(task_set)
-          free(task_set);
        
        free(dest);
     }
@@ -1679,23 +1677,73 @@ void* execute_task(void *args)
  *
  * </doc>
  */
-char * find_prime_numbers(thread_args *t_args, unsigned int count, unsigned long *task_set)
+char * find_prime_numbers(thread_args *t_args, char * file_path)
 {
     unsigned int i,j;
     bool flag;
-    unsigned int result[count];
+    unsigned long number;
     unsigned int result_count=0;
+    int fdSrc;
+    struct stat sb;
+    char *num, *src;
 
-    PRINT("[INFO] Started working on prime numbers for data set count : %d", count);
-    LOGGING_INFO("Started working on prime numbers for data set count : %d", count);
+    int task_count = get_task_count(file_path);
+
+    fdSrc = open(file_path, O_RDONLY);
+    if (fdSrc == -1)
+        errExit("open");
+
+    /* Use fstat() to obtain size of file: we use this to specify the
+       size of the two mappings */
+
+    if (fstat(fdSrc, &sb) == -1)
+        errExit("fstat");
+
+    /* Handle zero-length file specially, since specifying a size of
+       zero to mmap() will fail with the error EINVAL */
+
+    if (sb.st_size == 0)
+        exit(EXIT_SUCCESS);
+
+    src = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fdSrc, 0);
+    if (src == MAP_FAILED)
+        errExit("mmap");
+
+    PRINT("[INFO] Started working on prime numbers for data set count : %lu", task_count);
+    LOGGING_INFO("Started working on prime numbers for data set count : %lu", task_count);
+
+    char folder_path[120];
+
+    sprintf(folder_path, "/tmp/client/task_result/%s", t_args->group_name);
+
+    check_and_create_folder(folder_path);
+
+    char *dst_file_path=malloc(sizeof(char)*180);
+
+    sprintf(dst_file_path,"%s/%s", folder_path, t_args->task_filename);
+
+    FILE*fptr=(fopen(dst_file_path,"w"));
+
+    if(fptr==NULL)
+    {
+       free(dst_file_path);
+       return NULL;
+    }
 
     /* Loop for prime number's in given data set */
-    for(i = 0; i < count; i++)
+    for(i = 0; i < task_count; i++)
     {
+        num=&(src[i*11]);
+
+        number=atol(num);
+
         flag = FALSE;
-        for (j = 2; j < task_set[i]; j++)
+        unsigned long root = (unsigned long)sqrt(number);
+
+        //checking if number is a prime no
+        for (j = 2; j <= root; j++)
         {
-            if ((task_set[i] % j) == 0)
+            if ((number % j) == 0)
             {
                 flag = TRUE;
                 break;
@@ -1703,8 +1751,9 @@ char * find_prime_numbers(thread_args *t_args, unsigned int count, unsigned long
         }
         if(!flag)
         {
-            result[result_count] = task_set[i];
-            /*PRINT("Prime number %d",t_args->result[t_args->result_count]);*/
+            
+            fprintf(fptr, "%10u\n", number);
+//            PRINT("Prime number %u",number);
 
             /* Total count of prime numbers */
             result_count++;
@@ -1713,32 +1762,9 @@ char * find_prime_numbers(thread_args *t_args, unsigned int count, unsigned long
     if(result_count == 0)
         PRINT("No prime numbers found..");
 
-    char folder_path[120];
-
-    sprintf(folder_path, "/tmp/client/task_result/%s", t_args->group_name);
-
-    check_and_create_folder(folder_path);
-
-    char *file_path=malloc(sizeof(char)*180);
-
-    sprintf(file_path,"%s/%s", folder_path, t_args->task_filename);
-
-    FILE*fptr=(fopen(file_path,"w"));
-
-    if(fptr==NULL)
-    {
-       free(file_path);
-       return NULL;
-    }
-
-    fprintf(fptr, "%u", result_count);
-    for(i=0;i<result_count;i++)
-    {
-      fprintf(fptr, ", %u", result[i]);
-    }
     fclose(fptr);
 
-    return file_path;
+    return dst_file_path;
 }
 
 /* <doc>
@@ -1837,6 +1863,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     /* assumption client_id_count < num of task count */
 
     LOGGING_INFO("Client started working on group %s task - prime numbers", perform_task->group_name);
+
     fill_thread_args(client_info, perform_task, args, count); 
     /* Create a thread to perform the task */
     result = pthread_create(&thread, NULL, execute_task ,args);
