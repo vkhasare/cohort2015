@@ -377,7 +377,7 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
     LOGGING_INFO("New moderator has been selected for group %s and is %s", mod_update_req.group_name, ipaddr);
 
     /*If the client has already finished with task assigned for group, then send the results to new moderator again.*/
-    if (client_info->client_status == FREE)
+    if (client_info->active_group->busy_count == 0)
     {
         LOGGING_INFO("Sending results (task_id - %u) to new moderator %s for group %s", active_grp_node->last_task_id, ipaddr, mod_update_req.group_name);
         send_task_results_to_moderator(client_info, active_grp_node->group_name,
@@ -529,7 +529,7 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
 
     /* After moderator information, inform moderator about the self presence by
      * sending echo request msg. */
-    if (client_info->client_id != mod_notify_req.moderator_id && client_info->client_status == FREE) 
+    if (client_info->client_id != mod_notify_req.moderator_id && client_info->active_group->busy_count == 0)
     {
         send_echo_request(client_info->client_fd, &active_grp_node->moderator, mod_notify_req.group_name);
     } 
@@ -1423,18 +1423,18 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
         
         /* Deactivate timer for this group on client node. Not deleting for
          * moderator since it makes no sense to run task collection timer for self*/
-        if(client_info->is_moderator == false && client_info->client_status == BUSY) 
+        if(client_info->is_moderator == false && active_group->busy_count != 0) 
         {
             timer_delete(active_group->timer_id);
             active_group->timer_id = 0;
-            client_info->client_status = FREE;
+            active_group->busy_count--;
             /*TODO add state change to TASK_INFO_AWAITED on server res ack.*/
             active_group->state = TASK_RES_SENT;
         }
     } 
     else 
     {
-        //THis client is the moderator for the group. no need to send it via network. 
+        //This client is the moderator for the group. no need to send it via network. 
         task_rsp_t *task_response=&(pdu.msg.idv.task_rsp);
         update_moderator_info_with_task_response(client_info, task_response, client_info->client_id);
         FREE_INCOMING_PDU(pdu.msg);
@@ -1442,7 +1442,7 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
     
     // Storing task_result_file_path
     if(active_group->last_task_result_path){
-        free(active_group->last_task_result_path);
+        //free(active_group->last_task_result_path);
         active_group->last_task_result_path = NULL;
     }
     active_group->last_task_result_path=file_path;
@@ -1478,7 +1478,7 @@ void moderator_send_task_response_to_server(client_information_t *client_info)
 
     /* Strictly speaking, this assert is not required. Adding to to catch
      * scenarios when these are out of sync. TODO Remove later. */
-    assert(moderator_info->pending_client_list->client_grp_node.length == 0);
+    //assert(moderator_info->pending_client_list->client_grp_node.length == 0);
     
     int i;
     task_rsp_t *task_resp= &(rsp_pdu->msg.idv.task_rsp);
@@ -1791,10 +1791,13 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     long client_task_set[MAX_TASK_COUNT] = {0};
     client_information_t * client_info = NULL;
     moderator_information_t * mod_info = NULL;
+    client_grp_node_t * client_grp_node = NULL;
     pthread_t thread;
 
     perform_task_req_t * perform_task = &(req->idv.perform_task_req);
     thread_args *args = malloc(sizeof(thread_args));
+
+    int current_working_clients = perform_task->client_id_count;
  
     PRINT("[Task_Request: GRP - %s] Task Request Received for group %s.", perform_task->group_name, perform_task->group_name);
 
@@ -1804,22 +1807,36 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     EXTRACT_ARG(pdu, client_information_t*, client_info);
     mod_info = client_info->moderator_info;
 
-    /*Client is busy in working on task now.*/
-    client_info->client_status = BUSY;
+    get_client_grp_node_by_group_name(&client_info, perform_task->group_name, &client_grp_node);
+
+    /*Reset the cached results when new task request is received for the group*/
+    if (!perform_task->retransmitted)
+    {
+        client_grp_node->last_task_result_path = NULL;
+        client_grp_node->last_task_id = -1;
+    }
 
     /*Update moderator_info with active number of clients working on task*/
     if (mod_info) 
     {
         mod_info->fsm_state = MODERATOR_TASK_RSP_PENDING;
-        /*Number of clients working on this task*/
-        mod_info->active_client_count = perform_task->client_id_count;
 
         /*allocate the moderator client node and store the information about the working active clients*/
         char str[100] = {0};
         struct sockaddr_in ipAddr;
         char ipAddress[INET_ADDRSTRLEN];
 
-        while (i < perform_task->client_id_count) 
+        if (perform_task->retransmitted)
+        {
+            LOGGING_INFO("Retransmitted task request for clients (group %s)", perform_task->group_name);
+        }
+        else
+        {
+            /*Number of clients working on this task*/
+            mod_info->active_client_count = perform_task->client_id_count;
+        }
+
+        while (i < current_working_clients) 
         {
             mod_client_node_t *mod_node = (mod_client_node_t *) allocate_clnt_moderator_node(&mod_info);
 
@@ -1849,7 +1866,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     /* Check whether this particular client is required to work on this piece of
      * task. If not, just return. */
     bool found = false;
-    for(count = 0, i = 0; i < perform_task->client_id_count; i++)
+    for(count = 0, i = 0; i < current_working_clients; i++)
     {
         if(client_info->client_id ==  perform_task->client_ids[i])
         {
@@ -1866,7 +1883,10 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         FREE_INCOMING_PDU(pdu->msg);
         return;
     }
-    
+
+    /*Increment the busy count by 1 as client is working on one of the task set*/
+    client_grp_node->busy_count++;
+ 
     /* assumption client_id_count < num of task count */
 
     LOGGING_INFO("Client started working on group %s task - prime numbers", perform_task->group_name);

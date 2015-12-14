@@ -1,4 +1,3 @@
-#include <sys/stat.h>
 #include "common.h"
 #include "server_DS.h"
 #include "RBT.h"
@@ -35,6 +34,9 @@ void handle_timeout(int signal, siginfo_t *si, void *uc);
 
 void handle_timeout_real(bool init, int signal, siginfo_t *si,
                          server_information_t **server_info);
+
+void retransmit_task_req_for_client(server_information_t *server_info,
+                                    mcast_group_node_t *grp_node);
 
 #define MASK_SERVER_SIGNALS(flag) \
     mask_modification_in_progress = true; \
@@ -620,6 +622,76 @@ void mark_dead_clients_in_group(int* ref_array, int* ref_count,
 }
 
 /* <doc>
+ * void retransmit_task_req_for_client(server_information_t *server_info,
+ *                                     mcast_group_node_t *grp_node)
+ * This functions resends the task request with information of dead
+ * clients and instructs group to work on those task sets.
+ *
+ * </doc>
+ */
+void retransmit_task_req_for_client(server_information_t *server_info,
+                                    mcast_group_node_t *grp_node)
+{
+    comm_struct_t req;
+    pdu_t req_pdu;
+    int j = 0, index;
+
+    req.idv.perform_task_req.group_name= MALLOC_CHAR(strlen(grp_node->group_name)+1);
+    strcpy(req.idv.perform_task_req.group_name, grp_node->group_name);
+    req.idv.perform_task_req.task_id = server_info->task_id;
+
+    PRINT("Re-sending task request for client - %u , group %s, task id - %d", grp_node->dead_clients[0], grp_node->group_name, server_info->task_id);
+    LOGGING_INFO("Re-sending task request for client - %u , group %s, task id - %d", grp_node->dead_clients[0], grp_node->group_name, server_info->task_id);
+
+    req.id = perform_task_req;
+
+    req.idv.perform_task_req.client_id_count = grp_node->dead_client_count;
+    req.idv.perform_task_req.client_ids = MALLOC_UINT(1);
+
+    req.idv.perform_task_req.client_ids[0] = grp_node->task_set_details.working_clients[grp_node->task_set_details.number_of_working_clients - 1];
+
+    for ( j = 0; j < grp_node->task_set_details.number_of_working_clients; j++)
+    {
+       if (grp_node->task_set_details.working_clients[j] == grp_node->dead_clients[0])
+       {
+          break;
+       }
+    }
+
+    PRINT("SENDING %s", grp_node->task_set_details.task_filename[j]);
+
+    req.idv.perform_task_req.task_filename = malloc(sizeof(string_t *)*grp_node->dead_client_count);
+
+    for(index = 0;index < grp_node->dead_client_count; index++){
+       req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(grp_node->task_set_details.task_filename[j])+1);
+       strcpy(req.idv.perform_task_req.task_filename[index].str, grp_node->task_set_details.task_filename[j]);
+    }
+    
+    req.idv.perform_task_req.task_folder_path = MALLOC_CHAR(strlen(grp_node->task_set_details.task_folder_path)+1);
+    strcpy(req.idv.perform_task_req.task_folder_path , grp_node->task_set_details.task_folder_path);
+    
+    req.idv.perform_task_req.task_type = grp_node->task_type;
+    req.idv.perform_task_req.retransmitted = 1;
+
+    req_pdu.msg = req;
+
+    /* Send multicast msg to group to perform task */
+    write_record(server_info->server_fd,&(grp_node->grp_mcast_addr), &req_pdu);
+
+    grp_node->task_set_details.number_of_working_clients += 1;
+
+    //remove it from groups' active working list
+    for (index = 0; index < grp_node->dead_client_count; index++)
+    {
+      mark_dead_clients_in_group(grp_node->task_set_details.working_clients,
+                                 &grp_node->task_set_details.number_of_working_clients, &grp_node->dead_clients[index], 1);
+    }
+
+    free(grp_node->dead_clients);
+}
+
+
+/* <doc>
  * void server_echo_req_task_in_progress_state(server_information_t *server_info,
  *                                             void *fsm_msg)
  * When a multicast group is busy in performing a task and it gets periodic echo
@@ -778,14 +850,16 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
 
                 /*As client went down, re-adjust the group capability*/
                 grp_node->grp_capability -= rbNode->capability;
-       
-                //remove it from groups' active working list
-                mark_dead_clients_in_group(grp_node->task_set_details.working_clients, 
-                        &grp_node->task_set_details.number_of_working_clients, &clientID, 1);
 
                 /*Initiate new moderator selection process*/ 
                 grp_node->fsm_state = TASK_IN_PROGRESS_MOD_SEL_PEND;
                 moderator_selection(*server_info_local, grp_node);
+
+                /*Copying dead clients, so that task assigned to dead clients can be re-assigned once we have new moderator information*/
+                grp_node->dead_client_count = 1;
+                grp_node->dead_clients = malloc(sizeof(unsigned int) * 1);
+//                memcpy(*grp_node->dead_clients, &clientID, sizeof(unsigned int) * grp_node->dead_client_count);
+                grp_node->dead_clients[0] = clientID;
             }
             else
             {
@@ -881,9 +955,12 @@ void send_new_moderator_info(server_information_t *server_info,
 
     /*Send to multicast group*/
     write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &mod_update_pdu);
-    
+ 
     /* Start recurring timer for monitoring status of this moderator node.*/
     start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, MOD_RSP_TIMEOUT);
+
+    /*Once the new moderator is select, distribute moderator's task to some other client*/
+    retransmit_task_req_for_client(server_info, group_node);
 }
 
 /* <doc>
@@ -1180,6 +1257,8 @@ void mcast_start_task_distribution(server_information_t *server_info,
     memcpy(req.idv.perform_task_req.task_set, task_set,
            sizeof(req.idv.perform_task_req.task_set[0])* task_count); */
 
+    req.idv.perform_task_req.retransmitted = 0;
+
     req.idv.perform_task_req.task_type = group_node->task_type;
     req_pdu.msg = req;
 
@@ -1377,6 +1456,9 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
 
     group_node->task_type = INVALID_TASK_TYPE;
 
+    /*Come back to initial state where the cycle started*/
+    group_node->fsm_state = STATE_NONE;
+
   /*Remove the task set file for the group once task response has been received by Server*/
 /*  strcpy(cmd,"rm -rf task_set/");
   strcat(cmd,group_node->group_name);
@@ -1436,8 +1518,21 @@ int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...)
         /*Marking the client free again*/
         rbNode->av_status = RB_FREE;
         rbNode->is_moderator = FALSE;
-        ll_grp_node->moderator_client->av_status = CLFREE;
-        ll_grp_node->moderator_client = NULL;
+
+        if (ll_grp_node->moderator_client)
+        {
+           ll_grp_node->moderator_client->av_status = CLFREE;
+           ll_grp_node->moderator_client = NULL;
+        }
+        else
+        {
+           mcast_client_node_t *client_node;
+           search_client_in_group_node(ll_grp_node, clientID, &client_node);
+           if (client_node)
+           {
+              client_node->av_status = CLFREE;
+           }
+        }
 
         fsm_msg.fsm_state = ll_grp_node->fsm_state;
         fsm_msg.grp_node_ptr = (void *) ll_grp_node;
@@ -1684,7 +1779,7 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
     }
     else
     {
-      client_node = group_node->moderator_client;
+        client_node = group_node->moderator_client;
     }
 
     if (SN_LIST_LENGTH(&group_node->client_info->client_node) < MAX_CLIENTS_TRIED_PER_ATTEMPT)

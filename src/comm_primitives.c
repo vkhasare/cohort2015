@@ -452,7 +452,8 @@ bool process_perform_task_req(XDR* xdrs, perform_task_req_t* m){
                              (sizeof(unsigned int)),
                              (xdrproc_t )xdr_u_int) &&
             a &&
-            xdr_int(xdrs, &(m->task_type)));
+            xdr_int(xdrs, &(m->task_type)) &&
+            xdr_int(xdrs, &(m->retransmitted)));
 }
 
 bool xdr_result_t(XDR* xdrs, result_t* m){

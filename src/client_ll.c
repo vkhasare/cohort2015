@@ -303,7 +303,7 @@ client_grp_node_t *allocate_client_grp_node(client_information_t **client_info)
    new_client_grp_node->mcast_fd = INT_MAX;
    new_client_grp_node->timer_id = 0;
    memset(&(new_client_grp_node->group_name), '\0', sizeof(new_client_grp_node->group_name));
-
+   new_client_grp_node->busy_count = 0;
    SN_LIST_MEMBER_INSERT_HEAD(&((*client_info)->client_grp_list->client_grp_node),
                              new_client_grp_node,
                              list_element);

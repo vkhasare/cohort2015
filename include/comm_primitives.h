@@ -145,6 +145,7 @@ typedef struct perform_task_req {
     string_t * task_filename;
     char * task_folder_path;
     int task_type;
+    int retransmitted;
 }perform_task_req_t;
 
 typedef struct my_struct{

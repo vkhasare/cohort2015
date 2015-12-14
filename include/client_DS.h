@@ -65,7 +65,8 @@ typedef struct {
   int group_port;                     /* Multicast group port*/
   unsigned int mcast_fd;              /* Multicast FD associated with every group*/
   char * last_task_result_path;       /* File path for last executed task*/
-  unsigned int last_task_id;
+  unsigned int last_task_id;          /* Task id for last executed task*/
+  unsigned int busy_count;            /* If busy count is 0, that means client is free for that group */
   enum {
       MOD_INFO_AWAITED = 10,
       TASK_AWAITED,

@@ -91,9 +91,11 @@ typedef struct {
                                               After reaching zero, we block attempts to reach this group (stop moderator_selection etc.). */
   server_state_t fsm_state;                 /*Current state of group in FSM, to be used by server*/
   sn_list_element_t list_element;
-  int task_type;                            /* A group can perform only one task at a time. Maintaining the task type */
-  char *task_set_filename;                  /* A group can perform only one task at a time. Maintaining the task set filename */
-  mcast_task_set_t task_set_details;        /* List of clients and corresponding data set */
+  int task_type;                            /*A group can perform only one task at a time. Maintaining the task type */
+  char *task_set_filename;                  /*A group can perform only one task at a time. Maintaining the task set filename */
+  mcast_task_set_t task_set_details;        /*List of clients and corresponding data set */
+  unsigned int *dead_clients;               /*List of dead clients working on a task*/
+  int dead_client_count;                    /*Count of dead clients*/
 } mcast_group_node_t;
 
 /* Declaration of Server Info - Main Data structure on Server*/
