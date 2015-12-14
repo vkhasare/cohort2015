@@ -174,6 +174,12 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
       * have become unreachable and send forward their report. */
      while (mod_node)
      {
+        if(mod_node->peer_client_id == client_info_local->client_id)
+        {
+            mod_node = SN_LIST_MEMBER_NEXT(mod_node, mod_client_node_t, list_element);
+            continue;
+        }
+
         /*If all heartbeats are expired, then client is definitely dead.*/
         if(mod_node->heartbeat_remaining-- == 0)
         {
@@ -202,17 +208,23 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
          memcpy(id_arr, client_ids, sizeof(unsigned int) * iter);
      }    
 
-         pdu_t pdu;
-         pdu.msg.id = echo_req;
-         echo_req_t * echo_request = &pdu.msg.idv.echo_req;
-         initialize_echo_request(echo_request);
+     pdu_t pdu;
+     pdu.msg.id = echo_req;
+     echo_req_t * echo_request = &pdu.msg.idv.echo_req;
+     initialize_echo_request(echo_request);
 
-         echo_request->group_name  = MALLOC_CHAR(strlen(client_info_local->active_group->group_name)+1);
-         strcpy(echo_request->group_name, client_info_local->active_group->group_name);
-         echo_request->num_clients = iter;
-         echo_request->client_ids  = iter ? id_arr : NULL;
+     echo_request->group_name  = MALLOC_CHAR(strlen(client_info_local->active_group->group_name)+1);
+     strcpy(echo_request->group_name, client_info_local->active_group->group_name);
+     echo_request->num_clients = iter;
+     echo_request->client_ids  = iter ? id_arr : NULL;
+     
+     char ipaddr[INET6_ADDRSTRLEN];
+     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_info_local->server)), 
+             ipaddr, INET6_ADDRSTRLEN);
+     PRINT("[Echo_Request: GRP - %s] Echo Request sent to :%s, "
+             "dead client count: %u", echo_request->group_name, ipaddr, iter);
 
-         write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
+     write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
 
 
      /* Send task results towards server if all active clients have responded. */
@@ -979,8 +991,8 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
  * </doc>
  */
 static
-int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
-
+int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
+{
     comm_struct_t *req = &(pdu->msg);
     pdu_t rsp_pdu;
     comm_struct_t *rsp = &(rsp_pdu.msg);
@@ -993,6 +1005,10 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
+    
+    /* Unmask timers. It is more important to send own echo req towards server. */
+    if(client_info->is_moderator == true)
+        MASK_CLIENT_SIGNALS(false);
 
     rsp->id = echo_response;
     echo_rsp_t *echo_response = &(rsp->idv.echo_resp);
