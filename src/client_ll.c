@@ -220,6 +220,7 @@ mod_client_node_t* allocate_clnt_moderator_node(moderator_information_t **modera
 
    mod_node->peer_client_id = 0;
    mod_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
+   mod_node->ref_count = 1;
 
    SN_LIST_MEMBER_INSERT_HEAD(&((*moderator_info)->pending_client_list->client_grp_node),
                               mod_node,
@@ -298,7 +299,8 @@ client_grp_node_t *allocate_client_grp_node(client_information_t **client_info)
 
    new_client_grp_node = malloc(sizeof(client_grp_node_t));
 
-   new_client_grp_node->last_task_result_path = NULL;
+   //new_client_grp_node->last_task_result_path = NULL;
+   new_client_grp_node->last_task_file_count=0;
    new_client_grp_node->group_port = -1;
    new_client_grp_node->mcast_fd = INT_MAX;
    new_client_grp_node->timer_id = 0;

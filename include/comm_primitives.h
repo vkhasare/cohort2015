@@ -135,6 +135,7 @@ typedef struct moderator_update_req {
     char* group_name;
     int client_id_count;
     unsigned int* client_ids;
+    int expected_task_responses;
 }moderator_update_req_t;
 
 typedef struct perform_task_req {
@@ -145,7 +146,7 @@ typedef struct perform_task_req {
     string_t * task_filename;
     char * task_folder_path;
     int task_type;
-    int retransmitted;
+    int task_reassigned;
 }perform_task_req_t;
 
 typedef struct my_struct{

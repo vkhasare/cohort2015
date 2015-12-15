@@ -74,7 +74,14 @@ typedef struct {
   unsigned int *capability;                 /* capabilities of the clients working on task */
   char **task_filename;                     /* filenames of the data set's for the clients */
   char * task_folder_path;                  /* foldername of the data set's for the clients */
+  int num_of_responses_expected;
 } mcast_task_set_t;
+
+typedef struct {
+  unsigned int *dead_clients;               /*List of dead clients working on a task*/
+  int dead_client_count;                    /*Count of dead clients*/
+  char **dead_clients_file;                 /*Task file related to dead clients*/
+} dead_clients_t;
 
 /*Group Node - This node maintains information related to multicast group.*/
 typedef struct {
@@ -94,8 +101,7 @@ typedef struct {
   int task_type;                            /*A group can perform only one task at a time. Maintaining the task type */
   char *task_set_filename;                  /*A group can perform only one task at a time. Maintaining the task set filename */
   mcast_task_set_t task_set_details;        /*List of clients and corresponding data set */
-  unsigned int *dead_clients;               /*List of dead clients working on a task*/
-  int dead_client_count;                    /*Count of dead clients*/
+  dead_clients_t dead_clients_info;
 } mcast_group_node_t;
 
 /* Declaration of Server Info - Main Data structure on Server*/

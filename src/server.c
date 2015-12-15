@@ -640,38 +640,37 @@ void retransmit_task_req_for_client(server_information_t *server_info,
     strcpy(req.idv.perform_task_req.group_name, grp_node->group_name);
     req.idv.perform_task_req.task_id = server_info->task_id;
 
-    PRINT("Re-sending task request for client - %u , group %s, task id - %d", grp_node->dead_clients[0], grp_node->group_name, server_info->task_id);
-    LOGGING_INFO("Re-sending task request for client - %u , group %s, task id - %d", grp_node->dead_clients[0], grp_node->group_name, server_info->task_id);
+    PRINT("Re-sending task request for client - %u , group %s, task id - %d", grp_node->dead_clients_info.dead_clients[0], grp_node->group_name, server_info->task_id);
+    LOGGING_INFO("Re-sending task request for client - %u , group %s, task id - %d", grp_node->dead_clients_info.dead_clients[0], grp_node->group_name, server_info->task_id);
 
     req.id = perform_task_req;
 
-    req.idv.perform_task_req.client_id_count = grp_node->dead_client_count;
+    req.idv.perform_task_req.client_id_count = grp_node->dead_clients_info.dead_client_count;
     req.idv.perform_task_req.client_ids = MALLOC_UINT(1);
 
-    req.idv.perform_task_req.client_ids[0] = grp_node->task_set_details.working_clients[grp_node->task_set_details.number_of_working_clients - 1];
-
-    for ( j = 0; j < grp_node->task_set_details.number_of_working_clients; j++)
-    {
-       if (grp_node->task_set_details.working_clients[j] == grp_node->dead_clients[0])
-       {
-          break;
-       }
+    /*Select other than moderator*/
+    for (index = 0;index < grp_node->task_set_details.number_of_working_clients; index++) {
+        if (grp_node->moderator_client->client_id != grp_node->task_set_details.working_clients[index])
+        {
+            req.idv.perform_task_req.client_ids[0] = grp_node->task_set_details.working_clients[index];
+            break;
+        }
     }
 
-    PRINT("SENDING %s", grp_node->task_set_details.task_filename[j]);
+    PRINT("SENDING task of %s", grp_node->dead_clients_info.dead_clients_file[0]);
 
-    req.idv.perform_task_req.task_filename = malloc(sizeof(string_t *)*grp_node->dead_client_count);
+    req.idv.perform_task_req.task_filename = malloc(sizeof(string_t *)*grp_node->dead_clients_info.dead_client_count);
 
-    for(index = 0;index < grp_node->dead_client_count; index++){
-       req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(grp_node->task_set_details.task_filename[j])+1);
-       strcpy(req.idv.perform_task_req.task_filename[index].str, grp_node->task_set_details.task_filename[j]);
+    for(index = 0;index < grp_node->dead_clients_info.dead_client_count; index++){
+       req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(grp_node->dead_clients_info.dead_clients_file[index])+1);
+       strcpy(req.idv.perform_task_req.task_filename[index].str, grp_node->dead_clients_info.dead_clients_file[index]);
     }
     
     req.idv.perform_task_req.task_folder_path = MALLOC_CHAR(strlen(grp_node->task_set_details.task_folder_path)+1);
     strcpy(req.idv.perform_task_req.task_folder_path , grp_node->task_set_details.task_folder_path);
     
     req.idv.perform_task_req.task_type = grp_node->task_type;
-    req.idv.perform_task_req.retransmitted = 1;
+    req.idv.perform_task_req.task_reassigned = 1;
 
     req_pdu.msg = req;
 
@@ -680,14 +679,13 @@ void retransmit_task_req_for_client(server_information_t *server_info,
 
     grp_node->task_set_details.number_of_working_clients += 1;
 
-    //remove it from groups' active working list
-    for (index = 0; index < grp_node->dead_client_count; index++)
-    {
-      mark_dead_clients_in_group(grp_node->task_set_details.working_clients,
-                                 &grp_node->task_set_details.number_of_working_clients, &grp_node->dead_clients[index], 1);
-    }
+    grp_node->dead_clients_info.dead_client_count = 0;
 
-    free(grp_node->dead_clients);
+    for(index = 0;index < grp_node->dead_clients_info.dead_client_count; index++){
+       free(grp_node->dead_clients_info.dead_clients_file[index]);
+    }
+    free(grp_node->dead_clients_info.dead_clients_file);
+    free(grp_node->dead_clients_info.dead_clients);
 }
 
 
@@ -851,15 +849,32 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
                 /*As client went down, re-adjust the group capability*/
                 grp_node->grp_capability -= rbNode->capability;
 
+                /*Copying dead clients, so that task assigned to dead clients can be re-assigned once we have new moderator information*/
+                grp_node->dead_clients_info.dead_client_count = 1;
+                grp_node->dead_clients_info.dead_clients = malloc(sizeof(unsigned int) * 1);
+                //memcpy(*grp_node->dead_clients, &clientID, sizeof(unsigned int) * grp_node->dead_client_count);
+                grp_node->dead_clients_info.dead_clients[0] = clientID;
+
+                int j;
+                for ( j = 0; j < grp_node->task_set_details.number_of_working_clients; j++)
+                {
+                   if (grp_node->task_set_details.working_clients[j] == grp_node->dead_clients_info.dead_clients[0])
+                   {
+                      break;
+                   }
+                }
+
+                grp_node->dead_clients_info.dead_clients_file = (char **) malloc(sizeof(char*) * grp_node->dead_clients_info.dead_client_count);
+                grp_node->dead_clients_info.dead_clients_file[0] = MALLOC_CHAR(strlen(grp_node->task_set_details.task_filename[j])+1);
+                strcpy(grp_node->dead_clients_info.dead_clients_file[0],grp_node->task_set_details.task_filename[j]); 
+
+                //remove it from groups' active working list
+                mark_dead_clients_in_group(grp_node->task_set_details.working_clients,
+                        &grp_node->task_set_details.number_of_working_clients, &clientID, grp_node->dead_clients_info.dead_client_count);
+
                 /*Initiate new moderator selection process*/ 
                 grp_node->fsm_state = TASK_IN_PROGRESS_MOD_SEL_PEND;
                 moderator_selection(*server_info_local, grp_node);
-
-                /*Copying dead clients, so that task assigned to dead clients can be re-assigned once we have new moderator information*/
-                grp_node->dead_client_count = 1;
-                grp_node->dead_clients = malloc(sizeof(unsigned int) * 1);
-//                memcpy(*grp_node->dead_clients, &clientID, sizeof(unsigned int) * grp_node->dead_client_count);
-                grp_node->dead_clients[0] = clientID;
             }
             else
             {
@@ -950,6 +965,8 @@ void send_new_moderator_info(server_information_t *server_info,
 
     memcpy(mod_update_req->client_ids, group_node->task_set_details.working_clients, 
            group_node->task_set_details.number_of_working_clients * sizeof(group_node->task_set_details.working_clients[0]));
+
+    mod_update_req->expected_task_responses = group_node->task_set_details.num_of_responses_expected;
 
     PRINT("[Moderator_Update_Req: GRP - %s] Moderator Update Request sent to group %s.", mod_update_req->group_name , mod_update_req->group_name);
 
@@ -1239,6 +1256,8 @@ void mcast_start_task_distribution(server_information_t *server_info,
            pdu->msg.idv.moderator_notify_rsp.client_ids,
            group_node->task_set_details.number_of_working_clients * (sizeof(pdu->msg.idv.moderator_notify_rsp.client_ids[0])));
 
+    group_node->task_set_details.num_of_responses_expected = group_node->task_set_details.number_of_working_clients;
+
     req.idv.perform_task_req.task_filename = malloc(sizeof(string_t *)*group_node->task_set_details.number_of_working_clients);
     for(index=0;index < group_node->task_set_details.number_of_working_clients; index++){
        req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(group_node->task_set_details.task_filename[index])+1);
@@ -1257,7 +1276,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
     memcpy(req.idv.perform_task_req.task_set, task_set,
            sizeof(req.idv.perform_task_req.task_set[0])* task_count); */
 
-    req.idv.perform_task_req.retransmitted = 0;
+    req.idv.perform_task_req.task_reassigned = 0;
 
     req.idv.perform_task_req.task_type = group_node->task_type;
     req_pdu.msg = req;

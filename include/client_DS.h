@@ -38,6 +38,7 @@ typedef struct {
   unsigned int peer_client_id;                    /*Client ID of peer client node*/
   struct sockaddr peer_client_addr;               /*IP addr of peer client node*/
   uint8_t heartbeat_remaining;                      /*Number of heartbeats missed for this client*/
+  uint8_t ref_count;
   sn_list_element_t list_element;
 } mod_client_node_t;
 
@@ -54,6 +55,7 @@ typedef struct {
   uint8_t active_client_count;                    /* Number of active clients in the multicast group*/
   bool (* fsm)(client_information_t *client_info, moderator_event_t event, void *fsm_msg);    /*Moderator FSM function pointer*/
   void * moderator_resp_msg;
+  int expected_responses;
 } moderator_information_t;
   
 /* client group node - This node comprises of multicast group information, of which client is member of.*/
@@ -64,7 +66,8 @@ typedef struct {
   struct sockaddr_in group_addr;      /* Address of multicast group*/
   int group_port;                     /* Multicast group port*/
   unsigned int mcast_fd;              /* Multicast FD associated with every group*/
-  char * last_task_result_path;       /* File path for last executed task*/
+  char * last_task_result_path[5];    /* File path for last executed task*/
+  unsigned int last_task_file_count;  /* Count of last executed task file paths */
   unsigned int last_task_id;          /* Task id for last executed task*/
   unsigned int busy_count;            /* If busy count is 0, that means client is free for that group */
   enum {

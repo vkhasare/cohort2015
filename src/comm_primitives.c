@@ -273,7 +273,8 @@ bool process_moderator_update_req(XDR* xdrs, moderator_update_req_t* m){
     int uarray_res2 = xdr_array(xdrs, (char **)&(m->client_ids), &(m->client_id_count), max_client_in_group,
                                (sizeof(unsigned int)),
                                (xdrproc_t )xdr_u_int);
-    return (uint_res1 && uint_res2 && uint_res3 && str_res && uarray_res2);
+    int int_res = (xdr_int(xdrs, &(m->expected_task_responses)));
+    return (uint_res1 && uint_res2 && uint_res3 && str_res && uarray_res2 && int_res);
 }
 
 bool process_moderator_notify_req(XDR* xdrs, moderator_notify_req_t* m){
@@ -453,7 +454,7 @@ bool process_perform_task_req(XDR* xdrs, perform_task_req_t* m){
                              (xdrproc_t )xdr_u_int) &&
             a &&
             xdr_int(xdrs, &(m->task_type)) &&
-            xdr_int(xdrs, &(m->retransmitted)));
+            xdr_int(xdrs, &(m->task_reassigned)));
 }
 
 bool xdr_result_t(XDR* xdrs, result_t* m){
@@ -569,4 +570,3 @@ void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsig
     update_task_rsp(m, task_rsp->type, resp->result->str, client_id);
     return rsp_pdu;
 }
-
