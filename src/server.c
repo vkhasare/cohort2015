@@ -1019,7 +1019,8 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     echo_rsp_t *echo_response = &(rsp->idv.echo_resp);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
+     //XXX GAUTAM XXX
+    //PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
 
     LOGGING_INFO("Echo Request received from %s for group %s", ipaddr, echo_req.group_name);
 
@@ -1031,7 +1032,8 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     strcpy(echo_response->group_name, echo_req.group_name);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
+     //XXX GAUTAM XXX
+    //PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
 
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
@@ -1107,7 +1109,7 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
      if (dst == MAP_FAILED)
        errExit("mmap");
 
-     memcpy(dst, src+start_index, fsize);
+     memcpy(dst, src+(start_index*11), fsize);
 
      if (msync(dst, fsize, MS_SYNC) == -1)
        errExit("msync");
@@ -1764,7 +1766,8 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
     fsm_data_t fsm_msg;
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp.group_name, ipaddr);
+     //XXX GAUTAM XXX
+    //PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp.group_name, ipaddr);
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, server_information_t*, server_info);

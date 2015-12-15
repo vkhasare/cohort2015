@@ -221,8 +221,9 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
      char ipaddr[INET6_ADDRSTRLEN];
      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_info_local->server)), 
              ipaddr, INET6_ADDRSTRLEN);
-     PRINT("[Echo_Request: GRP - %s] Echo Request sent to :%s, "
-             "dead client count: %u", echo_request->group_name, ipaddr, iter);
+     //XXX GAUTAM XXX
+     //PRINT("[Echo_Request: GRP - %s] Echo Request sent to :%s, "
+     //        "dead client count: %u", echo_request->group_name, ipaddr, iter);
 
      write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
 
@@ -980,7 +981,8 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
     echo_rsp_t *echo_rsp = &(rsp->idv.echo_resp);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
+     //XXX GAUTAM XXX
+//    PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
 
     FREE_INCOMING_PDU(pdu->msg);
 
@@ -1006,15 +1008,16 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
     echo_req_t echo_req = req->idv.echo_req;
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
+     //XXX GAUTAM XXX
+//    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
     
     /* Unmask timers. It is more important to send own echo req towards server. */
-    if(client_info->is_moderator == true)
+    if(client_info->is_moderator == true){
         MASK_CLIENT_SIGNALS(false);
-
+    }else{
     rsp->id = echo_response;
     echo_rsp_t *echo_response = &(rsp->idv.echo_resp);
 
@@ -1024,10 +1027,11 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
     strcpy(echo_response->group_name, echo_req.group_name);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
+     //XXX GAUTAM XXX
+//    PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
 
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
-
+    }
     /*If moderator, then run the moderator fsm*/
     if (client_info->moderator_info) 
     {
@@ -1462,6 +1466,7 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
     {
         //This client is the moderator for the group. no need to send it via network. 
         task_rsp_t *task_response=&(pdu.msg.idv.task_rsp);
+        PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Request received from moderator", task_response->group_name);
         update_moderator_info_with_task_response(client_info, task_response, client_info->client_id);
         FREE_INCOMING_PDU(pdu.msg);
     } 
@@ -1759,7 +1764,7 @@ char * find_prime_numbers(thread_args *t_args, char * file_path)
        free(dst_file_path);
        return NULL;
     }
-
+    int x=task_count/10, u=0;
     /* Loop for prime number's in given data set */
     for(i = 0; i < task_count; i++)
     {
@@ -1790,6 +1795,9 @@ char * find_prime_numbers(thread_args *t_args, char * file_path)
             /* Total count of prime numbers */
             result_count++;
         }
+        if(i%x==0){
+         PRINT("%d0 % Task successfully executed", u);
+         u++;}
     }
     if(result_count == 0)
         PRINT("No prime numbers found..");
@@ -1837,6 +1845,10 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     /*Reset the cached results when new task request is received for the group*/
     if (!perform_task->task_reassigned)
     {
+        for(i=0;i < client_grp_node->last_task_file_count;i ++){
+          free(client_grp_node->last_task_result_path[i]);  
+          client_grp_node->last_task_result_path[i]=NULL;
+        }
         memset(client_grp_node->last_task_result_path, 0, sizeof(char *)*5);
         client_grp_node->last_task_id = -1;
         client_grp_node->last_task_file_count = 0;
