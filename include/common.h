@@ -146,38 +146,20 @@ void inline check_and_create_folder(char * path);
 
 
 #define LOGGING_WARNING(...)                \
-do {                                        \
-char *str = SPRINTF(__VA_ARGS__);           \
-logging_warning(str, __FILE__, __LINE__);   \
-} while(0)
+logging_warning(SPRINTF(__VA_ARGS__), __FILE__, __LINE__);
 
 #define LOGGING_INFO(...)               \
-do {                                    \
-char *str = SPRINTF(__VA_ARGS__);       \
-logging_info(str, __FILE__, __LINE__);  \
-} while(0)
+logging_info(SPRINTF(__VA_ARGS__), __FILE__, __LINE__);
 
 #define LOGGING_ERROR(...)                  \
-do {                                        \
-char *str = SPRINTF(__VA_ARGS__);           \
-logging_info(str, __FILE__, __LINE__);      \
-} while(0)
+logging_info(SPRINTF(__VA_ARGS__), __FILE__, __LINE__);
 
 #define LOGGING_WARNING_IF(cond, ...)             \
-do {                                              \
-char *str = SPRINTF(__VA_ARGS__);                 \
-logging_warning_if(cond, str, __FILE__, __LINE__);\
-} while(0)
+logging_warning_if(cond, SPRINTF(__VA_ARGS__), __FILE__, __LINE__);
 
 #define LOGGING_INFO_IF(cond, ...)                  \
-do {                                                \
-char *str = SPRINTF(__VA_ARGS__);                   \
-logging_info_if(cond, str, __FILE__, __LINE__);     \
-} while(0)
+logging_info_if(cond, SPRINTF(__VA_ARGS__), __FILE__, __LINE__);
 
 #define LOGGING_ERROR_IF(cond, ...)                 \
-do {                                                \
-char *str = SPRINTF(__VA_ARGS__);                   \
-logging_error_if(cond, str, __FILE__, __LINE__);    \
-} while(0)
+logging_error_if(cond, SPRINTF(__VA_ARGS__), __FILE__, __LINE__);
 

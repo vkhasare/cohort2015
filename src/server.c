@@ -711,6 +711,17 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
   
   pdu_t *pdu = (pdu_t *) fsm_data->pdu;
 
+  unsigned int clientID = calc_key((struct sockaddr*) &pdu->peer_addr);
+  /* Ascertain that echo_req for group is coming from designated moderator. If
+   * not, ignore this message. TODO Send some cleanup message towards old
+   * moderator so that it changes its state and disengages is timers. */
+  if(clientID != group_node->moderator_client->client_id)
+  {
+      PRINT("[SPURIOUS_ECHO_ALERT: GRP - %s] Echo request received from %d. ", group_node->group_name, clientID);
+      LOGGING_WARNING("[SPURIOUS_ECHO_ALERT: GRP - %s] Echo request received from %d.", group_node->group_name, clientID);
+      return;
+  }
+
   group_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
   //PRINT("num: %d name:%s", group_node->heartbeat_remaining, group_node->group_name);
   echo_req_t *echo_req = &pdu->msg.idv.echo_req;
@@ -721,6 +732,7 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
       {
           char ipaddr[INET6_ADDRSTRLEN];
           struct sockaddr_in cl_addr;
+          cl_addr.sin_family = AF_INET;
           cl_addr.sin_addr.s_addr = echo_req->client_ids[iter]; 
           inet_ntop(AF_INET, 
                   get_in_addr((struct sockaddr *)&cl_addr), 
@@ -1284,11 +1296,16 @@ void mcast_start_task_distribution(server_information_t *server_info,
     /* Send multicast msg to group to perform task */
     write_record(server_info->server_fd,&(group_node->grp_mcast_addr), &req_pdu);
 
+
+    /* Start recurring timer for monitoring status of this moderator node.*/
+    /* XXX XXX check if this timer needs to be stopped for mod reseletion. */
+    ////////
+    start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, MOD_RSP_TIMEOUT);
+    
     /* Changing the fsm state as task has been started */
     group_node->fsm_state = GROUP_TASK_IN_PROGRESS;
 
     PRINT("[Task_Request: GRP - %s] Task Request Sent.", group_node->group_name);
-
 }
 
 void free_thread_args(thread_args * t_args){
@@ -1727,11 +1744,6 @@ void mcast_send_chk_alive_msg(server_information_t *server_info,
     
     /*Send to multicast group*/
     write_record(server_info->server_fd, &(group_node->grp_mcast_addr), &notify_pdu);
-
-    /* Start recurring timer for monitoring status of this moderator node.*/
-    /* XXX XXX check if this timer needs to be stopped for mod reseletion. */
-    ////////
-    start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, MOD_RSP_TIMEOUT);
 }
 
 
