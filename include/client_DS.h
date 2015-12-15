@@ -69,7 +69,7 @@ typedef struct {
   char * last_task_result_path[5];    /* File path for last executed task*/
   unsigned int last_task_file_count;  /* Count of last executed task file paths */
   unsigned int last_task_id;          /* Task id for last executed task*/
-  unsigned int busy_count;            /* If busy count is 0, that means client is free for that group */
+  unsigned int pending_task_count;            /* If busy count is 0, that means client is free for that group */
   enum {
       MOD_INFO_AWAITED = 10,
       TASK_AWAITED,

@@ -649,6 +649,8 @@ void retransmit_task_req_for_client(server_information_t *server_info,
     req.idv.perform_task_req.client_ids = MALLOC_UINT(1);
 
     /*Select other than moderator*/
+    req.idv.perform_task_req.client_ids[0] = grp_node->task_set_details.working_clients[0];
+
     for (index = 0;index < grp_node->task_set_details.number_of_working_clients; index++) {
         if (grp_node->moderator_client->client_id != grp_node->task_set_details.working_clients[index])
         {

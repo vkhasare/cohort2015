@@ -459,7 +459,7 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
         timer_delete(active_grp_node->timer_id);
         active_grp_node->timer_id = 0;
     }
-
+/*
     //start new timer for maintaining keepalives.
     if (1 == mod_info->active_client_count) 
     {
@@ -467,10 +467,11 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
     } 
     else if (1 < mod_info->active_client_count)
     {
-        /* Start the timer on Moderator to get echo requests from all its peer
-         * working clients */
+        // Start the timer on Moderator to get echo requests from all its peer
+        // working clients
         start_recurring_timer(&(client_info->moderator_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
     }
+ */
     FREE_INCOMING_PDU(pdu->msg);
 }
 
@@ -546,7 +547,7 @@ int handle_mod_notification(const int sockfd, pdu_t *pdu, ...)
 
     /* After moderator information, inform moderator about the self presence by
      * sending echo request msg. */
-    if (client_info->client_id != mod_notify_req.moderator_id && client_info->active_group->busy_count == 0)
+    if (client_info->client_id != mod_notify_req.moderator_id && client_info->active_group->pending_task_count == 0)
     {
         send_echo_request(client_info->client_fd, &active_grp_node->moderator, mod_notify_req.group_name);
     } 
@@ -1448,16 +1449,17 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
     { 
         LOGGING_INFO("Client is done with its task for group %s and is now free. Sending task rsp notify to moderator", group_name);
         PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Req being sent to Moderator. ", group_name);
-        
+
+        active_group->pending_task_count--;        
+
         write_record(client_info->client_fd, &(active_group->moderator) , &pdu);
-        
+    
         /* Deactivate timer for this group on client node. Not deleting for
          * moderator since it makes no sense to run task collection timer for self*/
-        if(client_info->is_moderator == false && active_group->busy_count != 0) 
+        if(client_info->is_moderator == false && active_group->pending_task_count == 0) 
         {
             timer_delete(active_group->timer_id);
             active_group->timer_id = 0;
-            active_group->busy_count--;
             /*TODO add state change to TASK_INFO_AWAITED on server res ack.*/
             active_group->state = TASK_RES_SENT;
         }
@@ -1855,18 +1857,18 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         client_grp_node->state = STATE_NONE;
     }
 
-        /* Check whether this particular client is required to work on this piece of
-         * task. If not, just return. */
-        bool found = false;
-        for(count = 0, i = 0; i < current_working_clients; i++)
+    /* Check whether this particular client is required to work on this piece of
+     * task. If not, just return. */
+    bool found = false;
+    for(count = 0, i = 0; i < current_working_clients; i++)
+    {
+        if(client_info->client_id ==  perform_task->client_ids[i])
         {
-           if(client_info->client_id ==  perform_task->client_ids[i])
-           {
-               count = i;
-               found = true;
-               break;
-           }
+            count = i;
+            found = true;
+            break;
         }
+    }
 
     /*Update moderator_info with active number of clients working on task*/
     if (mod_info) 
@@ -1894,7 +1896,6 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         while (i < current_working_clients) 
         {
             mod_client_node_t *mod_node = NULL;
-
             get_client_from_moderator_pending_list(mod_info, perform_task->client_ids[i], &mod_node);
 
             if (mod_node == NULL) {
@@ -1918,12 +1919,18 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
             i++;
         }
         PRINT("Working clients are - %s", str);
-
-        /* Start timer for maintaining client's keepalive*/
-        if (1 < mod_info->active_client_count)
-            start_recurring_timer(&(mod_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
-        else
-            start_recurring_timer(&(mod_info->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
+        
+        if(mod_info->timer_id == 0)
+        {
+            /* Start timer for maintaining client's keepalive*/
+            if (1 == mod_info->active_client_count && found)
+            {
+                assert(mod_info->timer_id == 0);
+                start_recurring_timer(&(mod_info->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
+            }
+            else
+                start_recurring_timer(&(mod_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
+        }
     }
 
     if(found == false)
@@ -1933,9 +1940,6 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         FREE_INCOMING_PDU(pdu->msg);
         return;
     }
-
-    /*Increment the busy count by 1 as client is working on one of the task set*/
-    client_grp_node->busy_count++;
  
     /* assumption client_id_count < num of task count */
 
@@ -1956,8 +1960,13 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         /* Fire timer for maintaining keepalives on behalf of this group
          * task from main thread itself for non mod threads. */
         if(client_info->is_moderator == false)
-            start_recurring_timer(&(client_info->active_group->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
+        {
+            if(client_info->active_group->pending_task_count == 0)
+                start_recurring_timer(&(client_info->active_group->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
 
+            /*Increment the busy count by 1 as client is working on one of the task set*/    
+            client_info->active_group->pending_task_count++;
+        }
         /* Moderator state and moderator's client view of task are mutually
          * exclusive concepts. Update state of all clients performing task. */
         client_info->active_group->state = TASK_EXECUTION_IN_PROGRESS;
