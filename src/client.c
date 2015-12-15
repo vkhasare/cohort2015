@@ -1509,7 +1509,7 @@ void moderator_send_task_response_to_server(client_information_t *client_info)
 
     /* Strictly speaking, this assert is not required. Adding to to catch
      * scenarios when these are out of sync. TODO Remove later. */
-//    assert(moderator_info->pending_client_list->client_grp_node.length == 0);
+    assert(moderator_info->pending_client_list->client_grp_node.length == 0);
     
     int i;
     task_rsp_t *task_resp= &(rsp_pdu->msg.idv.task_rsp);
