@@ -53,12 +53,15 @@ void mask_client_signals(bool flag)
 {
     if(flag)
     {
+        LOGGING_INFO("Signals have been masked off.");
         signal(MODERATOR_TIMEOUT, SIG_IGN);
         signal(CLIENT_TIMEOUT, SIG_IGN);
     }
     else
     {
         struct sigaction sa;
+
+        LOGGING_INFO("Signals have been enabled.");
 
         sa.sa_flags = SA_SIGINFO;
         sa.sa_sigaction = handle_timeout;
@@ -1442,6 +1445,8 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
     /* Sending task response for 1 group*/
     populate_task_rsp(&(pdu.msg),task_id, group_name, rtype ,file_path, my_id);
     moderator_information_t * moderator_info = client_info->moderator_info;
+
+    active_group->pending_task_count--;
     
     /* If this client is a non-mod client, write result onto socket. Otherwise
      * just update internal data structure. */
@@ -1449,8 +1454,6 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
     { 
         LOGGING_INFO("Client is done with its task for group %s and is now free. Sending task rsp notify to moderator", group_name);
         PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Req being sent to Moderator. ", group_name);
-
-        active_group->pending_task_count--;        
 
         write_record(client_info->client_fd, &(active_group->moderator) , &pdu);
     
@@ -1500,12 +1503,20 @@ void moderator_send_task_response_to_server(client_information_t *client_info)
     moderator_information_t * moderator_info = client_info->moderator_info;
     pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
     
-    if(rsp_pdu == NULL) return;
+    if(rsp_pdu == NULL)
+    {
+       MASK_CLIENT_SIGNALS(false);
+       return;
+    }
     
     int num_clients=rsp_pdu->msg.idv.task_rsp.num_clients;
 
     /* Send response iff all active clients have responded. */
-    if(num_clients != moderator_info->expected_responses) return;
+    if(num_clients != moderator_info->expected_responses)
+    {
+      MASK_CLIENT_SIGNALS(false);
+      return;
+    }
 
     /* Strictly speaking, this assert is not required. Adding to to catch
      * scenarios when these are out of sync. TODO Remove later. */
@@ -1675,6 +1686,9 @@ void free_thread_args(thread_args *args){
 void* execute_task(void *args)
 {
     unsigned int task_count;
+
+    mask_signal(SIGUSR1, true);
+    mask_signal(SIGUSR2, true);
 
     thread_args *t_args = (thread_args *)args;
     /*Making thread detached.*/
