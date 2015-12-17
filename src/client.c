@@ -1549,7 +1549,8 @@ void moderator_send_task_response_to_server(client_information_t *client_info)
     client_info->is_moderator = FALSE;
     client_info->client_status = FREE;
     client_info->active_group->state = TASK_RES_SENT;
-    
+    client_info->active_group->pending_task_count = 0;
+
     MASK_CLIENT_SIGNALS(false);
 }
 /* <doc>
