@@ -232,7 +232,7 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
 
 
      /* Send task results towards server if all active clients have responded. */
-     moderator_send_task_response_to_server(client_info_local, false);
+     //moderator_send_task_response_to_server(client_info_local, false);
 }
 
 /* <doc>
@@ -350,7 +350,6 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
     char ipaddr[INET6_ADDRSTRLEN];
     moderator_information_t *mod_info = NULL;
     int i = 0;
-    char str[100] = {0};
 
     comm_struct_t *rsp = &(pdu->msg);
     moderator_update_req_t mod_update_req = rsp->idv.moderator_update_req;
@@ -446,14 +445,13 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
         ipAddr.sin_family = AF_INET;
         ipAddr.sin_port = htons(atoi(PORT));
         inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET6_ADDRSTRLEN);
-        (i == 0) ? sprintf(str, "%s", ipAddress) : sprintf(str, "%s , %s", str, ipAddress);
         memcpy(&mod_node->peer_client_addr, &ipAddr, sizeof(ipAddr));
         mod_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
         i++;
-          
+        
+	PRINT("Moderator is working with clients - %s", ipAddress);
         LOGGING_INFO("Added client %s in moderator pending list", ipAddress);
     }
-    PRINT("Moderator is working with clients - %s", str);
     PRINT("Group state is - %u", active_grp_node->state);
 
     if(TASK_EXECUTION_IN_PROGRESS == active_grp_node->state)
@@ -1402,7 +1400,6 @@ void update_moderator_info_with_task_response(client_information_t *client_info,
         {
             LOGGING_INFO("Task response notify req for group %s is received from %u", 
                     task_response->group_name, peer_id);
-            
             update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, 
                     task_response->type, task_response->result->str, peer_id);
         } 
@@ -1905,7 +1902,6 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         mod_info->fsm_state = MODERATOR_TASK_RSP_PENDING;
 
         /*allocate the moderator client node and store the information about the working active clients*/
-        char str[100] = {0};
         struct sockaddr_in ipAddr;
         char ipAddress[INET_ADDRSTRLEN];
 
@@ -1941,13 +1937,11 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
             inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET_ADDRSTRLEN);
 
             LOGGING_INFO("Client %s is working on task in group %s", ipAddress, perform_task->group_name);
-
-            (i == 0) ? sprintf(str, "%s", ipAddress) : sprintf(str, "%s , %s", str, ipAddress);
-
-            memcpy(&mod_node->peer_client_addr, &ipAddr, sizeof(ipAddr));
+	    PRINT("Client %s is working on task in group %s", ipAddress, perform_task->group_name);
+	    
+            memcpy(&mod_node->peer_client_addr, (struct sockaddr *) &ipAddr, sizeof(struct sockaddr));
             i++;
         }
-        PRINT("Working clients are - %s", str);
         
         if(mod_info->timer_id == 0)
         {
