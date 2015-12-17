@@ -775,7 +775,7 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
   else
   {
       PRINT("[INFO] All clients are up and executing task.");
-      LOGGING_WARNING("All clients are up and executing task");
+      LOGGING_INFO("All clients are up and executing task");
   }
 }
 
