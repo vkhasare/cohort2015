@@ -1087,7 +1087,7 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
      strcpy(task_set->task_filename[i],file_name);
      
      /* open the file in write mode */
-     dst_fd = open(file_path, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+     dst_fd = open(file_path, O_RDWR | O_CREAT, 0666);
      if (dst_fd == -1)
        errExit("open");
 
@@ -1110,9 +1110,10 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
        errExit("mmap");
 
      memcpy(dst, src+(start_index*11), fsize);
-
+     
      if (msync(dst, fsize, MS_SYNC) == -1)
        errExit("msync");
+
      //update start_index for next client.
      start_index += data_count;
 
@@ -1192,7 +1193,7 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
    fd = open(group_node->task_set_filename, O_RDONLY);
    fstat(fd, &sb);
    
-   memblock = mmap(NULL, sb.st_size, PROT_WRITE, MAP_PRIVATE, fd, 0);
+   memblock = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
    if (memblock == MAP_FAILED) printf("mmap"); 
 
    sprintf(folder_path,"/tmp/server/task_set/%s", group_node->group_name);
