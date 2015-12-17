@@ -1853,7 +1853,6 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     comm_struct_t *req = &(pdu->msg);
     struct sockaddr myIp;
     int count = 0, i = 0, result;
-    long client_task_set[MAX_TASK_COUNT] = {0};
     client_information_t * client_info = NULL;
     moderator_information_t * mod_info = NULL;
     client_grp_node_t * client_grp_node = NULL;

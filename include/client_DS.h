@@ -1,8 +1,6 @@
 #include "header.h"
 #include "sn_ll.h"
   
-#define MAX_TASK_COUNT 100000
-
 #define MODERATOR_TIMEOUT SIGUSR1
 #define CLIENT_TIMEOUT SIGUSR2
 #define DEFAULT_TIMEOUT 3
