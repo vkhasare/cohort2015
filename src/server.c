@@ -679,7 +679,7 @@ void retransmit_task_req_for_client(server_information_t *server_info,
     /* Send multicast msg to group to perform task */
     write_record(server_info->server_fd,&(grp_node->grp_mcast_addr), &req_pdu);
 
-    grp_node->task_set_details.number_of_working_clients += 1;
+    //grp_node->task_set_details.number_of_working_clients += 1;
 
     grp_node->dead_clients_info.dead_client_count = 0;
 
@@ -746,10 +746,31 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
           tree = (RBT_tree*) server_info->client_RBT_head;
           rbNode = RBFindNodeByID(tree, echo_req->client_ids[iter]);
           group_node->grp_capability -= rbNode->capability;
+
+          /*Copying dead clients, so that task assigned to all known dead clients*/
+          group_node->dead_clients_info.dead_client_count = 1;
+          group_node->dead_clients_info.dead_clients = malloc(sizeof(unsigned int) * 1);
+          //memcpy(*grp_node->dead_clients, &clientID, sizeof(unsigned int) * grp_node->dead_client_count);
+          group_node->dead_clients_info.dead_clients[0] = echo_req->client_ids[iter];
+
+          int j;
+          for ( j = 0; j < group_node->task_set_details.number_of_working_clients; j++)
+          {
+               if (group_node->task_set_details.working_clients[j] == group_node->dead_clients_info.dead_clients[0])
+               {
+                   break;
+               }
+          }
+
+          group_node->dead_clients_info.dead_clients_file = (char **) malloc(sizeof(char*) * group_node->dead_clients_info.dead_client_count);
+          group_node->dead_clients_info.dead_clients_file[0] = MALLOC_CHAR(strlen(group_node->task_set_details.task_filename[j])+1);
+          strcpy(group_node->dead_clients_info.dead_clients_file[0],group_node->task_set_details.task_filename[j]);
       }
       mark_dead_clients_in_group(group_node->task_set_details.working_clients, 
                                  &group_node->task_set_details.number_of_working_clients, 
                                  echo_req->client_ids, echo_req->num_clients);
+
+      retransmit_task_req_for_client(server_info, group_node);
   }
   else
   {
