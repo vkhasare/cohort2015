@@ -130,8 +130,7 @@ void deallocate_mod_done_list(client_information_t **client_info)
                                          list_element);
    }
 
-   /*deallocate the pending and done lists*/
-   free(mod_info->pending_client_list);   
+   /*deallocate the done lists*/
    free(mod_info->done_client_list);   
 }
 
@@ -179,6 +178,7 @@ void deallocate_moderator_list(client_information_t **client_info)
    moderator_information_t *mod_info = (*client_info)->moderator_info;
 
    deallocate_mod_done_list(client_info);
+   deallocate_mod_pending_list(client_info);
    /*free the moderator_info*/
    free(mod_info);
    (*client_info)->moderator_info = NULL;

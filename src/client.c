@@ -32,7 +32,7 @@ static void send_join_group_req(client_information_t *, char *);
 static void send_leave_group_req(client_information_t *, char *);
 static void send_moderator_notify_response(client_information_t *client_info);
 static void send_task_results_to_moderator(client_information_t *, char*, unsigned int,rsp_type_t, char*,unsigned int, bool);
-static void moderator_send_task_response_to_server(client_information_t *);
+static void moderator_send_task_response_to_server(client_information_t *, bool force_cleanup);
 static void fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name, unsigned int);
 static void fill_thread_args(client_information_t *, perform_task_req_t *, thread_args *, int);
 void* execute_task(void *t_args);
@@ -232,7 +232,7 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
 
 
      /* Send task results towards server if all active clients have responded. */
-     moderator_send_task_response_to_server(client_info_local);
+     moderator_send_task_response_to_server(client_info_local, false);
 }
 
 /* <doc>
@@ -1069,6 +1069,7 @@ void display_client_clis()
     PRINT("enable debug                                 --  Enables the debug mode");
     PRINT("disable debug                                --  Disables the debug mode");
     PRINT("test echo                                    --  Echo debug CLI");
+    PRINT("force cleanup                                --  Moderator CLI. Forcefully cleans up the moderator and pushes the task result towards Server");
 }
 
 /* <doc>
@@ -1134,6 +1135,14 @@ void client_stdin_data(int fd, client_information_t *client_info)
     {
         debug_mode = FALSE;
         PRINT("<Debug Mode is OFF>");
+    }
+    else if (0 == strcmp(read_buffer,"force cleanup\0"))
+    {
+        if (client_info->moderator_info) {
+           moderator_send_task_response_to_server(client_info, true);
+        } else {
+           PRINT("Error: This CLI is applicable only for moderator.");
+        }
     }
     else if (0 == strcmp(read_buffer,"cls\0"))
     {
@@ -1414,7 +1423,7 @@ void update_moderator_info_with_task_response(client_information_t *client_info,
         }
 
         /*Send to Server if all clients have responded with their task response*/
-        moderator_send_task_response_to_server(client_info);
+        moderator_send_task_response_to_server(client_info, false);
     } 
     else 
     {
@@ -1486,13 +1495,13 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
 
 /* <doc>
  * static
- * void moderator_send_task_response_to_server(client_information_t *client_info)
+ * void moderator_send_task_response_to_server(client_information_t *client_info, bool force_cleanup)
  * This is moderator function, which will send the collated task results to Server.
  *
  * </doc>
  */
 static
-void moderator_send_task_response_to_server(client_information_t *client_info) 
+void moderator_send_task_response_to_server(client_information_t *client_info, bool force_cleanup)
 {
     /* Critical section. We dont want timer to interrupt the moderator when it
      * is attempting to send response to server. mod_info structure and timers
@@ -1502,7 +1511,8 @@ void moderator_send_task_response_to_server(client_information_t *client_info)
     /*client_info->moderator_info will always be valid here*/
     moderator_information_t * moderator_info = client_info->moderator_info;
     pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
-    
+    int i;
+ 
     if(rsp_pdu == NULL)
     {
        MASK_CLIENT_SIGNALS(false);
@@ -1511,8 +1521,11 @@ void moderator_send_task_response_to_server(client_information_t *client_info)
     
     int num_clients=rsp_pdu->msg.idv.task_rsp.num_clients;
 
-    /* Send response iff all active clients have responded. */
-    if(num_clients != moderator_info->expected_responses)
+    /* Send response iff all active clients have responded.
+     * For force cleanup mode, ignore the below condition and push
+     * the results towards server. */
+    if(force_cleanup == false &&
+      (num_clients != moderator_info->expected_responses))
     {
       MASK_CLIENT_SIGNALS(false);
       return;
@@ -1520,9 +1533,11 @@ void moderator_send_task_response_to_server(client_information_t *client_info)
 
     /* Strictly speaking, this assert is not required. Adding to to catch
      * scenarios when these are out of sync. TODO Remove later. */
-    assert(moderator_info->pending_client_list->client_grp_node.length == 0);
-    
-    int i;
+    if(force_cleanup == false)
+      assert(moderator_info->pending_client_list->client_grp_node.length == 0);
+    else
+      LOGGING_INFO("Forcefully pushing the moderator results towards Server for group %s", moderator_info->group_name); 
+
     task_rsp_t *task_resp= &(rsp_pdu->msg.idv.task_rsp);
     for(i = 0; i < num_clients; i++)
     {

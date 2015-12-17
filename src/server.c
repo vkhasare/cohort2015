@@ -2023,7 +2023,7 @@ void server_stdin_data(int fd, server_information_t *server_info)
 
         server_info->is_stdby_available = true;
     }
-    else if(strncmp(read_buffer,"switch",5) == 0)
+    else if(strncmp(read_buffer,"migrate",7) == 0)
     {
         if (server_info->is_stdby_available)
         {
