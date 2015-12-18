@@ -2,12 +2,17 @@
 #include "client_DS.h"
 #include <math.h>
 
+#define SAFE_WRITE(x) {\
+         pthread_mutex_lock(&lock);\
+         x \
+         pthread_mutex_unlock(&lock);}
+
 const int MAX_ALLOWED_KA_MISSES = 5;
+pthread_mutex_t lock;
 
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 extern debug_mode;
-
 static int echo_req_rcvd_in_notify_rsp_pending = 0;   /*Counter for number of clients who
                                                         have responded with echo req when moderator
                                                         is in moderator notify rsp state*/
@@ -1485,9 +1490,11 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
     
     // Storing task_result_file_path
     if(!is_task_reassigned){
+      SAFE_WRITE(
       active_group->last_task_result_path[active_group->last_task_file_count++]=file_path;
       active_group->last_task_id = task_id;
       active_group->last_task_rsp_type = pdu.msg.idv.task_rsp.type;
+      );
     }
 }
 
