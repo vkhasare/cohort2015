@@ -143,7 +143,7 @@ unsigned int get_task_count(const char* );
 char * fetch_file(char *, char *);
 void inline create_folder(char * path);
 void inline check_and_create_folder(char * path);
-
+float timedifference_msec(struct timeval t0, struct timeval t1);
 
 #define LOGGING_WARNING(...)                \
 logging_warning(SPRINTF(__VA_ARGS__), __FILE__, __LINE__);

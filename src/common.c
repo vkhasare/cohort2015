@@ -245,9 +245,11 @@ void display_server_clis()
   PRINT("show group info <group_name|all>                     --  Displays group - client association");
   PRINT("task <task_type> group <group_name> file <filename>  --  Assigns a specific task to the specified Group. filename is optional. Default Value: task_set/prime_set1.txt");
   PRINT("server backup <backup_server_ip>                     --  Configures IP of secondary server");
-  PRINT("switch                                               --  Switches to secondary server");
+  PRINT("migrate                                              --  Migrates to secondary server");
   PRINT("enable debug                                         --  Enables the debug mode");
   PRINT("disable debug                                        --  Disables the debug mode");
+  PRINT("enable metrics <group_name>                          --  Enables the execution metrics");
+  PRINT("disable metrics <group_name>                         --  Disables the execution metrics");
   PRINT("cls                                                  --  Clears the screen");
 }
 
@@ -437,3 +439,17 @@ void mask_signal(uint32_t sigval, bool flag)
         }
     }
 }
+
+/* <doc>
+ * float timedifference_msec(struct timeval t0, struct timeval t1)
+ * Finds the difference between two timevals in milliseconds.
+ *
+ * </doc>
+ */
+float timedifference_msec(struct timeval t0, struct timeval t1)
+{
+    float result = ((t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_usec - t0.tv_usec) / 1000);
+    PRINT("%f", result);
+    return result;
+}
+

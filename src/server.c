@@ -23,6 +23,7 @@ static int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_checkpoint_req(const int sockfd, pdu_t *pdu, ...);
 static void assign_task(server_information_t *, char *, int, char *);
 static void moderator_selection(server_information_t *, mcast_group_node_t *);
+static void print_execution_report(mcast_group_node_t *);
 
 bool update_moderator_info(server_information_t *server_info,
                            mcast_group_node_t *group_node, 
@@ -1319,6 +1320,14 @@ void mcast_start_task_distribution(server_information_t *server_info,
     req.idv.perform_task_req.task_type = group_node->task_type;
     req_pdu.msg = req;
 
+    /*If metrics is needed, then note the start time*/
+    if (group_node->is_metrics_valid)
+    {
+       group_node->server_metrics = (server_metrics_t *) malloc(sizeof(server_metrics_t));
+       /*Note the start time for metrics purpose.*/
+       gettimeofday(&group_node->server_metrics->start_time, NULL);
+    }
+
     /* Send multicast msg to group to perform task */
     write_record(server_info->server_fd,&(group_node->grp_mcast_addr), &req_pdu);
 
@@ -1481,6 +1490,12 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
 
     LOGGING_INFO("Task response received from moderator for group %s for task id %d", group_node->group_name, task_response->task_id);
 
+    /*Print metrics information if needed*/
+    if (group_node->server_metrics && group_node->is_metrics_valid)
+    {
+        print_execution_report(group_node);
+    }
+
     /* Get the file name based on current time stamp */ 
     result_folder = get_task_result_folder_path(group_node->group_name, task_response->task_id); 
 
@@ -1527,6 +1542,23 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
   cmd_line = popen (cmd, "w");
   pclose(cmd_line); */
 
+}
+
+static
+void print_execution_report(mcast_group_node_t *grp_node)
+{
+    float total_time_taken = 0.0;
+
+    total_time_taken = timedifference_msec(grp_node->server_metrics->start_time, grp_node->server_metrics->end_time);
+
+    PRINT("############    EXECUTION REPORT - %s    ##############", grp_node->group_name);
+    PRINT("Working Client Count: %d", grp_node->task_set_details.num_of_responses_expected);
+    PRINT("Total Time Taken: %.2f ms", total_time_taken);
+    PRINT("Average Time Taken: %.2f ms", (total_time_taken / grp_node->task_set_details.num_of_responses_expected));
+    PRINT("########################################################");
+
+    free(grp_node->server_metrics);
+    grp_node->server_metrics = NULL;
 }
 
 /* <doc>
@@ -1580,6 +1612,12 @@ int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...)
         /*Marking the client free again*/
         rbNode->av_status = RB_FREE;
         rbNode->is_moderator = FALSE;
+
+        if (ll_grp_node->server_metrics && ll_grp_node->is_metrics_valid)
+        {
+           /*Note the end time for metrics purpose.*/
+           gettimeofday(&ll_grp_node->server_metrics->end_time, NULL);
+        }
 
         if (ll_grp_node->moderator_client)
         {
@@ -2117,6 +2155,58 @@ void server_stdin_data(int fd, server_information_t *server_info)
         }
         else
           PRINT("Please enter valid task type.\n");
+    }
+    else if (0 == strncmp(read_buffer,"enable metrics",14))
+    {
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        while(i < 2)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        if (!ptr)
+        {
+            PRINT("Error: Unrecognized Command.\n");
+            return;
+        }
+
+        mcast_group_node_t *group_node = NULL;
+        get_group_node_by_name(&server_info, ptr, &group_node);
+
+        if (group_node) {
+            if (group_node->server_metrics) {
+              PRINT("Metrics are already enabled.");
+            } else {
+              group_node->is_metrics_valid = true;
+            }
+        } else {
+           PRINT("Group %s is invalid.", ptr);
+        }
+    }
+    else if (0 == strncmp(read_buffer,"disable metrics",15))
+    {
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        while(i < 2)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        if (!ptr)
+        {
+            PRINT("Error: Unrecognized Command.\n");
+            return;
+        }
+
+        mcast_group_node_t *group_node = NULL;
+        get_group_node_by_name(&server_info, ptr, &group_node);
+
+        if (group_node) {
+           group_node->is_metrics_valid = false;
+        } else {
+           PRINT("Group %s is invalid.", ptr);
+        }
     }
     else if(strncmp(read_buffer,"enable debug\0",12) == 0)
     {

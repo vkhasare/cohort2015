@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <time.h>
 
 #ifndef NULL
 #define NULL 0
