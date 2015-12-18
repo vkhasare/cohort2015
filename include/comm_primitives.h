@@ -160,7 +160,9 @@ typedef struct my_struct{
 typedef enum response_type{
    TYPE_CHAR,
    TYPE_INT,
-   TYPE_LONG
+   TYPE_LONG, 
+   TYPE_FILE,
+   TYPE_7ZIP
 }rsp_type_t;
 
 typedef struct result{
@@ -175,6 +177,7 @@ typedef struct task_response{
    unsigned int num_clients;
    unsigned int * client_ids;
    string_t * result;
+   char * final_resp;
 }task_rsp_t;
 
 typedef struct new_server_notify{
