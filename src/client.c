@@ -1754,6 +1754,7 @@ void* execute_task(void *args)
     else
     {
       PRINT("failed to open the task set");
+      LOGGING_ERROR("failed to open the task set");
     } 
     
     //free thread args
@@ -1780,24 +1781,35 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
     int task_count = get_task_count(file_path);
 
     fdSrc = open(file_path, O_RDONLY);
-    if (fdSrc == -1)
-        errExit("open");
 
+    if (fdSrc == -1)
+    {
+        LOGGING_ERROR("Error in opening file %s", file_path);
+        errExit("open");
+    }
     /* Use fstat() to obtain size of file: we use this to specify the
        size of the two mappings */
 
     if (fstat(fdSrc, &sb) == -1)
+    {
+        LOGGING_ERROR("Error in fstat of file %s", file_path);
         errExit("fstat");
-
+    }
     /* Handle zero-length file specially, since specifying a size of
        zero to mmap() will fail with the error EINVAL */
 
     if (sb.st_size == 0)
+    {
+        LOGGING_ERROR("%s is zero-size file", file_path);
         exit(EXIT_SUCCESS);
+    }
 
     src = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fdSrc, 0);
     if (src == MAP_FAILED)
+    {
+        LOGGING_ERROR("Error in mmap of file %s", file_path);
         errExit("mmap");
+    }
 
     PRINT("[INFO] Started working on prime numbers for data set count : %lu", task_count);
     LOGGING_INFO("Started working on prime numbers for data set count : %lu", task_count);
@@ -1816,9 +1828,11 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
 
     if(fptr==NULL)
     {
+       LOGGING_ERROR("Error in opening destination file %s", dst_file_path); 
        free(dst_file_path);
        return NULL;
     }
+
     int x=task_count/10, u=0;
     /* Loop for prime number's in given data set */
     for(i = 0; i < task_count; i++)
@@ -1850,13 +1864,18 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
             /* Total count of prime numbers */
             result_count++;
         }
-        if(i%x==0){
-         PRINT("%d0 % Task successfully executed", u);
-         u++;}
+        if(i%x==0) {
+           PRINT("%d0 % Task successfully executed", u);
+           LOGGING_INFO("%d0 % Task successfully executed", u);
+           u++;
+        }
     }
 
     if(result_count == 0)
+    {
         PRINT("No prime numbers found..");
+        LOGGING_INFO("No prime numbers found..");
+    }
 
     fclose(fptr);
     munmap(src, sb.st_size);
