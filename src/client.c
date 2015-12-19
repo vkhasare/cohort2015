@@ -1440,6 +1440,24 @@ int main(int argc, char * argv[])
 #endif
 
 /* <doc>
+ * bool chack_if_response_already_received(  task_rsp_t *task_response, char * file_path)
+ * This function check if response for this file has aleady been received by the moderator.
+ *  
+ * </doc>
+ */
+bool check_if_response_already_received(task_rsp_t * task_response, char * file_path){
+  if(task_response->type == TYPE_FILE) {
+    char *file_name=basename(file_path);
+    unsigned int index, count =task_response->num_clients;
+    for(index=0;index < count;index++){
+      if(MATCH_STRING(file_name, basename(task_response->result[index].str)))
+        return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+/* <doc>
  * void update_moderator_info_with_task_response(client_information_t *client_info, 
  *                                               task_rsp_t *task_response, unsigned int peer_id)
  * Update moderator information with task response. Reads the task response PDU, and appends the moderator
@@ -1451,6 +1469,7 @@ void update_moderator_info_with_task_response(client_information_t *client_info,
                                               task_rsp_t *task_response, unsigned int peer_id)
 {
     moderator_information_t *moderator_info = client_info->moderator_info;
+    if(moderator_info == NULL) return;
     mod_client_node_t *mod_node = NULL; 
 
     /*Since response from client is received, fetch client node from pending list.*/
@@ -1465,8 +1484,11 @@ void update_moderator_info_with_task_response(client_information_t *client_info,
         {
             LOGGING_INFO("Task response notify req for group %s is received from %u", 
                     task_response->group_name, peer_id);
-            update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, 
+            if(check_if_response_already_received(&(((pdu_t *)moderator_info->moderator_resp_msg)->msg.idv.task_rsp), task_response->result->str))
+              update_task_rsp(&((pdu_t *)moderator_info->moderator_resp_msg)->msg, 
                     task_response->type, task_response->result->str, peer_id);
+            else
+              PRINT("Response for this file has already been recieved by the moderator %s", basename(task_response->result->str));
         } 
         else 
         {
@@ -1516,6 +1538,7 @@ void send_task_results_to_moderator(client_information_t *client_info, client_gr
     /* Sending task response for 1 group*/
     populate_task_rsp(&(pdu.msg),task_id, group_name, rtype ,file_path, my_id);
     moderator_information_t * moderator_info = client_info->moderator_info;
+
     
     /* If this client is a non-mod client, write result onto socket. Otherwise
      * just update internal data structure. */
@@ -1585,8 +1608,9 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
 
     /* Strictly speaking, this assert is not required. Adding to to catch
      * scenarios when these are out of sync. TODO Remove later. */
-    if(force_cleanup == false)
-      assert(moderator_info->pending_client_list->client_grp_node.length == 0);
+    if(force_cleanup == false || moderator_info->pending_client_list->client_grp_node.length ){
+      //assert(moderator_info->pending_client_list->client_grp_node.length == 0);
+      LOGGING_INFO("Pending client list length while sending response, is %d",moderator_info->pending_client_list->client_grp_node.length);}
     else
       LOGGING_INFO("Forcefully pushing the moderator results towards Server for group %s", moderator_info->group_name); 
 
@@ -1798,7 +1822,7 @@ void* execute_task(void *args)
        PRINT(" Task id %u has been successfully executed on client", t_args->task_id);
        if(result !=NULL)
        {
-           group->pending_task_count--;
+           SAFE_WRITE(group->pending_task_count--;);
            assert((int)group->pending_task_count >= 0);
            
            if((client_info->is_moderator == false ||
@@ -2131,6 +2155,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         {
             /*Number of clients working on this task*/
             mod_info->active_client_count = perform_task->client_id_count;
+            mod_info->expected_responses = perform_task->client_id_count;
         }
 
         i = 0;
