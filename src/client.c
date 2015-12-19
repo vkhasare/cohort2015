@@ -1484,7 +1484,7 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
         //This client is the moderator for the group. no need to send it via network. 
         task_rsp_t *task_response=&(pdu.msg.idv.task_rsp);
         PRINT("[Task_Response_Notify_Req: GRP - %s] Task Response Notify Request received from moderator", task_response->group_name);
-        update_moderator_info_with_task_response(client_info, task_response, client_info->client_id);
+        SAFE_WRITE(update_moderator_info_with_task_response(client_info, task_response, client_info->client_id););
         FREE_INCOMING_PDU(pdu.msg);
     } 
     
@@ -1623,7 +1623,7 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
     {
         unsigned int peer_id = calc_key(&(pdu->peer_addr));
        
-        update_moderator_info_with_task_response(client_info, task_response, peer_id);
+        SAFE_WRITE(update_moderator_info_with_task_response(client_info, task_response, peer_id););
     } 
     else
     {
@@ -1784,7 +1784,7 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
     int fdSrc;
     struct stat sb;
     char *num, *src;
-
+    int len=0;
     int task_count = get_task_count(file_path);
 
     fdSrc = open(file_path, O_RDONLY);
@@ -1839,15 +1839,18 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
        free(dst_file_path);
        return NULL;
     }
-
     int x=task_count/10, u=0;
     /* Loop for prime number's in given data set */
     for(i = 0; i < task_count; i++)
-    {
-        num=&(src[i*11]);
+    { 
+        num=src+len; //starting position of the current number
+        //calculating length of the number
+        char * end = src+len;
+        while(*end != '\n')  {end++;len++;}
+        len++; //incrementing for '\n' character
 
-        number=atol(num);
-
+        number=atol(num);//converting string to long 
+        //PRINT("The number is %l" , number);
         if(number < 2) continue; 
 
         flag = FALSE;
@@ -1906,6 +1909,7 @@ char * find_sum(thread_args *t_args, char * file_path, rsp_type_t *rtype)
     unsigned int result_count=0;
     int fdSrc;
     struct stat sb;
+    int len=0;
     char *num, *src;
 
     int task_count = get_task_count(file_path);
@@ -1940,9 +1944,13 @@ char * find_sum(thread_args *t_args, char * file_path, rsp_type_t *rtype)
     /* Loop for prime number's in given data set */
     for(i = 0; i < task_count; i++)
     {
-        num=&(src[i*11]);
+        num=src+len; //starting position of the current number
+        //calculating length of the number
+        char * end = src+len;
+        while(*end != '\n')  {end++;len++;}
+        len++; //incrementing for '\n' character
 
-        number=atol(num);
+        number=atol(num);//converting string to long
 
         sum += number;
         
