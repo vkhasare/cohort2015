@@ -15,32 +15,28 @@ extern int MAX_ALLOWED_KA_MISSES;
  */
 void get_client_from_moderator_pending_list(moderator_information_t *moderator_info, unsigned int clientID, mod_client_node_t **client_node)
 {
-  mod_client_node_t *mod_node = NULL;
+    mod_client_node_t *mod_node = NULL;
 
-      mod_node =     SN_LIST_MEMBER_HEAD(&(moderator_info->pending_client_list->client_grp_node),
+    mod_node = SN_LIST_MEMBER_HEAD(&(moderator_info->pending_client_list->client_grp_node),
+                                     mod_client_node_t,
+                                     list_element);
+
+    while (mod_node)
+    {
+        if (mod_node->peer_client_id == clientID)
+        {
+            *client_node = mod_node;
+            return;
+        }
+
+        mod_node  =    SN_LIST_MEMBER_NEXT(mod_node,
                                            mod_client_node_t,
                                            list_element);
-
-  /*If no nodes associated with the list*/
-  if (mod_node == NULL)
-  {
+    }
+    
+    /*If no nodes associated with the list*/
     *client_node = NULL;
     return;
-  }
-
-  while (mod_node)
-  {
-
-     if (mod_node->peer_client_id == clientID)
-     {
-        *client_node = mod_node;
-        return;
-     }
-
-     mod_node  =    SN_LIST_MEMBER_NEXT(mod_node,
-                                        mod_client_node_t,
-                                        list_element);
-  }
 }
 
 /* <doc>
@@ -59,16 +55,20 @@ void display_moderator_list(client_information_t **client_info, moderator_show_t
   char clientIP[INET_ADDRSTRLEN];
 
   /*If client is not a moderator*/
-  if ((*client_info)->moderator_info == NULL) {
+  if ((*client_info)->moderator_info == NULL) 
+  {
     SIMPLE_PRINT("\t Client is not a moderator.\n");
     return;
   }
 
-  if (show_type == SHOW_MOD_PENDING_CLIENTS) {
+  if (show_type == SHOW_MOD_PENDING_CLIENTS) 
+  {
       mod_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->moderator_info->pending_client_list->client_grp_node),
                                          mod_client_node_t,
                                          list_element);
-  } else {
+  } 
+  else 
+  {
       mod_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->moderator_info->done_client_list->client_grp_node),
                                          mod_client_node_t,
                                          list_element);
@@ -422,6 +422,36 @@ void get_client_grp_node_by_group_name(client_information_t **client_info, char 
 
 }
 
+/* <doc>
+ * void get_client_grp_node_by_timerid(client_information_t **client_info, timer_t *timer_ptr, client_grp_node_t **clnt_node)
+ * This is the internal function, called by IS_GROUP_IN_CLIENT_LL. This function searches for the
+ * node and return it.
+ *
+ * </doc>
+ */
+void get_client_grp_node_by_timerid(client_information_t **client_info, timer_t *timer_ptr, client_grp_node_t **clnt_node)
+{
+
+  client_grp_node_t *client_grp_node = NULL;
+
+  client_grp_node =     SN_LIST_MEMBER_HEAD(&((*client_info)->client_grp_list->client_grp_node),
+                                            client_grp_node_t,
+                                            list_element);
+  while (client_grp_node)
+  {
+
+     if (*timer_ptr == client_grp_node->timer_id)
+     {
+        *clnt_node = client_grp_node;
+        return;
+     }
+
+     client_grp_node =     SN_LIST_MEMBER_NEXT(client_grp_node,
+                                               client_grp_node_t,
+                                               list_element);
+  }
+
+}
 
 /* <doc>
  * client_grp_node_t* ADD_CLIENT_IN_LL(client_information_t **client_info, client_grp_node_t *node)

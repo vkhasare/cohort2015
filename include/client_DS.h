@@ -88,7 +88,7 @@ typedef struct
 
 typedef struct {
   client_information_t *client_info;
-  char * group_name;
+  client_grp_node_t * group;
   char * task_filename;
   char * task_folder_path;
   unsigned int task_id;

@@ -775,8 +775,10 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
   }
   else
   {
-      PRINT("[INFO] All clients are up and executing task.");
-      LOGGING_INFO("All clients are up and executing task");
+      PRINT("[INFO] All clients are up in group %s and working on: %s",
+              group_node->group_name, group_node->task_set_filename);
+      LOGGING_INFO("All clients are up in group %s and working on: %s.",
+              group_node->group_name, group_node->task_set_filename);
   }
 }
 
@@ -1220,7 +1222,7 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
    memblock = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
    if (memblock == MAP_FAILED) printf("mmap"); 
 
-   sprintf(folder_path,"/tmp/server/task_set/%s", group_node->group_name);
+   sprintf(folder_path,"/tmp/server_vsk/task_set/%s", group_node->group_name);
    task_set->task_folder_path = MALLOC_CHAR(strlen(folder_path) + 1);
    strcpy(task_set->task_folder_path,folder_path);
    check_and_create_folder(folder_path);
@@ -1381,7 +1383,7 @@ void collect_task_results(task_rsp_t * task_resp, char *result_folder, unsigned 
    char *src_folder=malloc(sizeof(char)*100);
    struct in_addr ip_addr;
    ip_addr.s_addr = client_id;
-   sprintf(src_folder, "%s:/tmp/client/moderator/%s", inet_ntoa(ip_addr), task_resp->group_name);
+   sprintf(src_folder, "%s:/tmp/client_vsk/moderator/%s", inet_ntoa(ip_addr), task_resp->group_name);
    int i, pthread_status;
    char * filename;
    int num_clients=task_resp->num_clients;
@@ -1424,7 +1426,7 @@ char * get_task_result_folder_path(char * gname, uint8_t task_id){
      timeinfo = localtime ( &rawtime );
      strftime(buffer2,80,"%d%m%y_%H%M%S",timeinfo);
 
-     sprintf(buffer,"/tmp/server/task_result/%s/", gname);
+     sprintf(buffer,"/tmp/server_vsk/task_result/%s/", gname);
      strcat(buffer,buffer2);
 
      create_folder(buffer);
@@ -1528,12 +1530,10 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
     }
     free(task_set_details->task_filename);
 
+    /*Come back to initial state where the cycle started*/
     task_set_details->number_of_working_clients = 0;
     free(task_set_details->task_folder_path);
-
     group_node->task_type = INVALID_TASK_TYPE;
-
-    /*Come back to initial state where the cycle started*/
     group_node->fsm_state = STATE_NONE;
 
   /*Remove the task set file for the group once task response has been received by Server*/

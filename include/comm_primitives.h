@@ -3,6 +3,7 @@
 
 #include <rpc/rpc.h>
 #include <stdbool.h>
+#include <string.h>
 #include <unistd.h>
 
 #define MALLOC_STR_IE(count)                                \
@@ -34,6 +35,10 @@
  ({                                                         \
    (char*) malloc (sizeof(char) * count);                   \
  })
+
+#define ALLOC_AND_COPY_STRING(src, dest) \
+    dest = MALLOC_CHAR(strlen(src)+1); \
+    strcpy(dest, src);
 
 #define FREE_INCOMING_PDU(msg)                              \
   xdr_free((xdrproc_t)process_comm_struct, (void *) &(msg));

@@ -420,7 +420,7 @@ void  get_group_node_by_timerid(server_information_t **server_info, timer_t *tim
 
    while (group_node)
    {
-     if (timer_ptr == &(group_node->timer_id))
+     if (*timer_ptr == group_node->timer_id)
      {
         /* Return on finding the node */
         *grp_node = group_node;

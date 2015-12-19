@@ -366,7 +366,7 @@ unsigned int get_task_count(const char* filename){
 char * fetch_file(char * src, char *dest){
 
    char cmd[180];
-   sprintf(cmd,"./file_tf %s %s >>/tmp/file_tf.logs", src, dest);
+   sprintf(cmd,"./file_tf %s %s >>/tmp/file_tf_vsk.logs", src, dest);
 //   sprintf(cmd,"./file_tf root@%s %s >>/tmp/file_tf.logs", src, dest); //for rtp machines
 
    PRINT("fetching file from %s", src);
