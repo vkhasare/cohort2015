@@ -1425,7 +1425,7 @@ void collect_task_results(task_rsp_t * task_resp, char *result_folder, unsigned 
    char *src_folder=malloc(sizeof(char)*100);
    struct in_addr ip_addr;
    ip_addr.s_addr = client_id;
-   sprintf(src_folder, "%s:/tmp/client_vsk/moderator/%s", inet_ntoa(ip_addr), task_resp->group_name);
+   sprintf(src_folder, "%s:/tmp/client/moderator/%s", inet_ntoa(ip_addr), task_resp->group_name);
    int i, pthread_status;
    char * filename;
    int num_clients=task_resp->num_clients;
@@ -1468,7 +1468,7 @@ char * get_task_result_folder_path(char * gname, uint8_t task_id){
      timeinfo = localtime ( &rawtime );
      strftime(buffer2,80,"%d%m%y_%H%M%S",timeinfo);
 
-     sprintf(buffer,"/tmp/server_vsk/task_result/%s/", gname);
+     sprintf(buffer,"/tmp/server/task_result/%s/", gname);
      strcat(buffer,buffer2);
 
      create_folder(buffer);
