@@ -582,7 +582,7 @@ void display_group_info(server_information_t *server_info)
   display_mcast_group_node(&server_info, SHOW_ALL);
 }
 
-void mark_dead_clients_in_group(int* ref_array, int* ref_count,
+void mark_dead_clients_in_group(task_distribution_t* ref_array, int* ref_count,
         int* dead_client_arr, int dead_client_count)
 {
     //Attempt to find all dead clients first and mark them.
@@ -591,9 +591,9 @@ void mark_dead_clients_in_group(int* ref_array, int* ref_count,
                num_clients_marked < dead_client_count; i++)
         for(j = 0; j < dead_client_count; j++)
         {
-            if(ref_array[i] == dead_client_arr[j])
+            if(ref_array[i].working_clients == dead_client_arr[j])
             {
-                ref_array[i] = 0;
+                ref_array[i].working_clients = 0;
                 num_clients_marked++;
                 break;
             }
@@ -605,17 +605,22 @@ void mark_dead_clients_in_group(int* ref_array, int* ref_count,
     while(num_clients_marked-- > 0 && (i < (*ref_count - num_clients_marked)))
     {
         //move i to find first 0 entry.
-        while((ref_array[i] != 0) && (i < *ref_count)) i++;
+        while((ref_array[i].working_clients != 0) && (i < *ref_count)) i++;
         
         //move j backwards till we cross i or we get a non zero entry in array.
-        while(ref_array[j] == 0)
+        while(ref_array[j].working_clients == 0)
         {
             if(j == i) break;
             j--;
             continue;
         }
-        ref_array[i] = ref_array[j];
-        ref_array[j] = 0;
+        ref_array[i].working_clients = ref_array[j].working_clients;
+        int k = 0;
+        while(k < ref_array[j].file_count) {
+          strcpy(ref_array[i].task_filename[k], ref_array[j].task_filename[k]);
+          k++;
+        }
+        ref_array[j].working_clients = 0;
     }
 
     //modify ref count to reflect number of clients presently working;
@@ -635,8 +640,12 @@ void retransmit_task_req_for_client(server_information_t *server_info,
 {
     comm_struct_t req;
     pdu_t req_pdu;
-    int j = 0, index;
+    int j = 0, index = 0;
+    int file_index = 0;
 
+    task_distribution_t* task_map = grp_node->task_set_details.distribution_map;
+
+    
     req.idv.perform_task_req.group_name= MALLOC_CHAR(strlen(grp_node->group_name)+1);
     strcpy(req.idv.perform_task_req.group_name, grp_node->group_name);
     req.idv.perform_task_req.task_id = server_info->task_id;
@@ -647,28 +656,42 @@ void retransmit_task_req_for_client(server_information_t *server_info,
     req.id = perform_task_req;
 
     req.idv.perform_task_req.client_id_count = grp_node->dead_clients_info.dead_client_count;
-    req.idv.perform_task_req.client_ids = MALLOC_UINT(1);
+    req.idv.perform_task_req.client_ids = MALLOC_UINT(grp_node->dead_clients_info.dead_client_count);
 
     /*Select other than moderator*/
-    req.idv.perform_task_req.client_ids[0] = grp_node->task_set_details.working_clients[0];
-
-    for (index = 0;index < grp_node->task_set_details.number_of_working_clients; index++) {
-        if (grp_node->moderator_client->client_id != grp_node->task_set_details.working_clients[index])
-        {
-            req.idv.perform_task_req.client_ids[0] = grp_node->task_set_details.working_clients[index];
-            break;
-        }
+    for (index = 0; index < grp_node->dead_clients_info.dead_client_count; index++)
+    {
+      req.idv.perform_task_req.client_ids[index] = task_map[0].working_clients;
     }
 
-    PRINT("SENDING task of %s", grp_node->dead_clients_info.dead_clients_file[0]);
+    index = 0;
+    for (j = 0; j < grp_node->dead_clients_info.dead_client_count; j++)
+    {
+      int start = index;
+      do {
+            if (grp_node->moderator_client->client_id != task_map[index].working_clients)
+            {
+              req.idv.perform_task_req.client_ids[j] = task_map[index].working_clients;
+              break;
+            }
+            index = (index+1)%grp_node->task_set_details.number_of_working_clients;
+       } while(index != start);
+    }
 
     req.idv.perform_task_req.task_filename = malloc(sizeof(string_t *)*grp_node->dead_clients_info.dead_client_count);
 
     for(index = 0;index < grp_node->dead_clients_info.dead_client_count; index++){
+       PRINT("SENDING task of %s", grp_node->dead_clients_info.dead_clients_file[index]);
+
+       file_index = task_map[index].file_count;
        req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(grp_node->dead_clients_info.dead_clients_file[index])+1);
        strcpy(req.idv.perform_task_req.task_filename[index].str, grp_node->dead_clients_info.dead_clients_file[index]);
+
+       task_map[index].task_filename[file_index] = MALLOC_CHAR(strlen(grp_node->dead_clients_info.dead_clients_file[index]) + 1);
+       strcpy(task_map[index].task_filename[file_index], grp_node->dead_clients_info.dead_clients_file[index]);
+       task_map[index].file_count++;
     }
-    
+  
     req.idv.perform_task_req.task_folder_path = MALLOC_CHAR(strlen(grp_node->task_set_details.task_folder_path)+1);
     strcpy(req.idv.perform_task_req.task_folder_path , grp_node->task_set_details.task_folder_path);
     
@@ -687,6 +710,8 @@ void retransmit_task_req_for_client(server_information_t *server_info,
     for(index = 0;index < grp_node->dead_clients_info.dead_client_count; index++){
        free(grp_node->dead_clients_info.dead_clients_file[index]);
     }
+
+    grp_node->dead_clients_info.dead_client_count = 0;
     free(grp_node->dead_clients_info.dead_clients_file);
     free(grp_node->dead_clients_info.dead_clients);
 }
@@ -726,6 +751,7 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
   }
 
   group_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
+  task_distribution_t* task_map = group_node->task_set_details.distribution_map;
   //PRINT("num: %d name:%s", group_node->heartbeat_remaining, group_node->group_name);
   echo_req_t *echo_req = &pdu->msg.idv.echo_req;
   if(echo_req->num_clients)
@@ -748,27 +774,32 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
           rbNode = RBFindNodeByID(tree, echo_req->client_ids[iter]);
           group_node->grp_capability -= rbNode->capability;
 
-          /*Copying dead clients, so that task assigned to all known dead clients*/
-          group_node->dead_clients_info.dead_client_count = 1;
-          group_node->dead_clients_info.dead_clients = malloc(sizeof(unsigned int) * 1);
-          //memcpy(*grp_node->dead_clients, &clientID, sizeof(unsigned int) * grp_node->dead_client_count);
-          group_node->dead_clients_info.dead_clients[0] = echo_req->client_ids[iter];
 
           int j;
           for ( j = 0; j < group_node->task_set_details.number_of_working_clients; j++)
           {
-               if (group_node->task_set_details.working_clients[j] == group_node->dead_clients_info.dead_clients[0])
+               if (task_map[j].working_clients == echo_req->client_ids[iter])
                {
                    break;
                }
           }
 
+          /*Copying dead clients, so that task assigned to all known dead clients*/
+          group_node->dead_clients_info.dead_client_count = task_map[j].file_count;
+          group_node->dead_clients_info.dead_clients = malloc(sizeof(unsigned int) * task_map[j].file_count);
+          //memcpy(*grp_node->dead_clients, &clientID, sizeof(unsigned int) * grp_node->dead_client_count);
           group_node->dead_clients_info.dead_clients_file = (char **) malloc(sizeof(char*) * group_node->dead_clients_info.dead_client_count);
-          group_node->dead_clients_info.dead_clients_file[0] = MALLOC_CHAR(strlen(group_node->task_set_details.task_filename[j])+1);
-          strcpy(group_node->dead_clients_info.dead_clients_file[0],group_node->task_set_details.task_filename[j]);
+
+          int index;
+          for (index = 0; index < task_map[j].file_count; index++)
+          {
+            group_node->dead_clients_info.dead_clients[index] = echo_req->client_ids[iter];
+            group_node->dead_clients_info.dead_clients_file[index] = MALLOC_CHAR(strlen(task_map[j].task_filename[index])+1);
+            strcpy(group_node->dead_clients_info.dead_clients_file[index],task_map[j].task_filename[index]);
+          }
       }
-      mark_dead_clients_in_group(group_node->task_set_details.working_clients, 
-                                 &group_node->task_set_details.number_of_working_clients, 
+      mark_dead_clients_in_group(task_map, 
+                                 &group_node->task_set_details.number_of_working_clients,
                                  echo_req->client_ids, echo_req->num_clients);
 
       retransmit_task_req_for_client(server_info, group_node);
@@ -887,27 +918,33 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
                 /*As client went down, re-adjust the group capability*/
                 grp_node->grp_capability -= rbNode->capability;
 
-                /*Copying dead clients, so that task assigned to dead clients can be re-assigned once we have new moderator information*/
-                grp_node->dead_clients_info.dead_client_count = 1;
-                grp_node->dead_clients_info.dead_clients = malloc(sizeof(unsigned int) * 1);
-                //memcpy(*grp_node->dead_clients, &clientID, sizeof(unsigned int) * grp_node->dead_client_count);
-                grp_node->dead_clients_info.dead_clients[0] = clientID;
+                task_distribution_t* task_map = grp_node->task_set_details.distribution_map;
+                int j, index;
 
-                int j;
                 for ( j = 0; j < grp_node->task_set_details.number_of_working_clients; j++)
                 {
-                   if (grp_node->task_set_details.working_clients[j] == grp_node->dead_clients_info.dead_clients[0])
+                   if (task_map[j].working_clients == clientID)
                    {
                       break;
                    }
                 }
 
-                grp_node->dead_clients_info.dead_clients_file = (char **) malloc(sizeof(char*) * grp_node->dead_clients_info.dead_client_count);
-                grp_node->dead_clients_info.dead_clients_file[0] = MALLOC_CHAR(strlen(grp_node->task_set_details.task_filename[j])+1);
-                strcpy(grp_node->dead_clients_info.dead_clients_file[0],grp_node->task_set_details.task_filename[j]); 
+                /*Copying dead clients, so that task assigned to dead clients can be re-assigned once we have new moderator information*/
+                grp_node->dead_clients_info.dead_client_count = task_map[j].file_count;
+                grp_node->dead_clients_info.dead_clients = malloc(sizeof(unsigned int) * task_map[j].file_count);
+
+                grp_node->dead_clients_info.dead_file_count = task_map[j].file_count;
+                grp_node->dead_clients_info.dead_clients_file = (char **) malloc(sizeof(char*) * task_map[j].file_count);
+
+                for (index = 0; index < task_map[j].file_count; index++)
+                {
+                  grp_node->dead_clients_info.dead_clients[index] = clientID;
+                  grp_node->dead_clients_info.dead_clients_file[index] = MALLOC_CHAR(strlen(task_map[j].task_filename[index])+1);
+                  strcpy(grp_node->dead_clients_info.dead_clients_file[index], task_map[j].task_filename[index]); 
+                }
 
                 //remove it from groups' active working list
-                mark_dead_clients_in_group(grp_node->task_set_details.working_clients,
+                mark_dead_clients_in_group(task_map,
                         &grp_node->task_set_details.number_of_working_clients, &clientID, grp_node->dead_clients_info.dead_client_count);
 
                 /*Initiate new moderator selection process*/ 
@@ -946,6 +983,7 @@ void send_new_moderator_info(server_information_t *server_info,
 {
     char ipaddr[INET6_ADDRSTRLEN];
     fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+    int index = 0;
 
     /* fetch the group node pointer from fsm_data */
     mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
@@ -991,6 +1029,7 @@ void send_new_moderator_info(server_information_t *server_info,
     moderator_update_req_t *mod_update_req = &(req->idv.moderator_update_req);
 
     struct sockaddr_in *addr_in = (struct sockaddr_in *) &pdu->peer_addr;
+    task_distribution_t* task_map = group_node->task_set_details.distribution_map;
 
     req->id = moderator_update_req;
     mod_update_req->moderator_id = clientID;
@@ -1001,8 +1040,10 @@ void send_new_moderator_info(server_information_t *server_info,
     mod_update_req->client_id_count = group_node->task_set_details.number_of_working_clients;
     mod_update_req->client_ids = MALLOC_UINT(mod_update_req->client_id_count);
 
-    memcpy(mod_update_req->client_ids, group_node->task_set_details.working_clients, 
-           group_node->task_set_details.number_of_working_clients * sizeof(group_node->task_set_details.working_clients[0]));
+    for (index = 0; index < group_node->task_set_details.number_of_working_clients; index++)
+    {
+      mod_update_req->client_ids[index] = task_map[index].working_clients;
+    }
 
     mod_update_req->expected_task_responses = group_node->task_set_details.num_of_responses_expected;
 
@@ -1094,6 +1135,7 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
    FILE *fptr, *fp;
    ssize_t read;
    char temp[30];
+   task_distribution_t* task_map = group_node->task_set_details.distribution_map;
    char *dst, *src;
    int dst_fd, fd;
    struct stat sb;
@@ -1121,9 +1163,11 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
      strftime(buffer2,80,"%d%m%y_%H%M%S.txt",timeinfo);
      sprintf(file_name,"%u_%s",client_ids[i], buffer2);
      sprintf(file_path, "%s/%s", folder_path, file_name);
+
+     task_map[i].task_filename = (char **) malloc(sizeof(char*) * 1);
    
-     task_set->task_filename[i] = MALLOC_CHAR(strlen(file_name) + 1);
-     strcpy(task_set->task_filename[i],file_name);
+     task_map[i].task_filename[0] = MALLOC_CHAR(strlen(file_name) + 1);
+     strcpy(task_map[i].task_filename[0],file_name);
      
      /* open the file in write mode */
      dst_fd = open(file_path, O_RDWR | O_CREAT, 0666);
@@ -1208,15 +1252,15 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
      
      /*Initialise the group node with client list */
      task_set->capability = MALLOC_UINT(num_of_clients_modified);
-     task_set->task_filename = (char **) malloc(sizeof(char*) * num_of_clients_modified);
+     task_set->distribution_map = malloc(sizeof(task_distribution_t) * num_of_clients_modified);
    }
    else
    {
      /*Initialise the group node with client list */
      task_set->capability = MALLOC_UINT(num_of_clients);
-     task_set->task_filename = (char **) malloc(sizeof(char*) * num_of_clients);
+     task_set->distribution_map = malloc(sizeof(task_distribution_t) * num_of_clients);
    }
-   
+
    /* If client list is shorter */
    if(client_list_changed)
      num_of_clients = num_of_clients_modified;
@@ -1264,7 +1308,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
 
     /* Get the task set for prime numbers */
     task_count = get_task_count(group_node->task_set_filename);
-    PRINT("THe task file is %s",group_node->task_set_filename); 
+    PRINT("The task file is %s",group_node->task_set_filename); 
 
     if(!task_count)
       return;
@@ -1296,17 +1340,20 @@ void mcast_start_task_distribution(server_information_t *server_info,
     /*Copy list of working clients in group node*/
     group_node->task_set_details.number_of_working_clients = pdu->msg.idv.moderator_notify_rsp.client_id_count;
 
-    group_node->task_set_details.working_clients = MALLOC_UINT(group_node->task_set_details.number_of_working_clients);
-    memcpy(group_node->task_set_details.working_clients,
-           pdu->msg.idv.moderator_notify_rsp.client_ids,
-           group_node->task_set_details.number_of_working_clients * (sizeof(pdu->msg.idv.moderator_notify_rsp.client_ids[0])));
+    task_distribution_t* task_map = group_node->task_set_details.distribution_map;
+
+    for (index = 0; index < group_node->task_set_details.number_of_working_clients; index++)
+    {
+        task_map[index].working_clients = pdu->msg.idv.moderator_notify_rsp.client_ids[index];
+        task_map[index].file_count = 1;
+    }
 
     group_node->task_set_details.num_of_responses_expected = group_node->task_set_details.number_of_working_clients;
 
     req.idv.perform_task_req.task_filename = malloc(sizeof(string_t *)*group_node->task_set_details.number_of_working_clients);
     for(index=0;index < group_node->task_set_details.number_of_working_clients; index++){
-       req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(group_node->task_set_details.task_filename[index])+1);
-       strcpy(req.idv.perform_task_req.task_filename[index].str, group_node->task_set_details.task_filename[index]);
+       req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(task_map[index].task_filename[0])+1);
+       strcpy(req.idv.perform_task_req.task_filename[index].str, task_map[index].task_filename[0]);
     }
     req.idv.perform_task_req.task_folder_path = MALLOC_CHAR(strlen(group_node->task_set_details.task_folder_path)+1);
     strcpy(req.idv.perform_task_req.task_folder_path , group_node->task_set_details.task_folder_path);
@@ -1344,7 +1391,7 @@ void free_thread_args(thread_args * t_args){
 
    free(t_args->source_folder);
    for(i=0;i<t_args->file_count; i++)
-     free(t_args->task_filename[i]);
+   free(t_args->task_filename[i]);
    free(t_args->task_filename);
    free(t_args->dest_folder);
    free(t_args);
@@ -1513,10 +1560,6 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
     group_node->moderator_client = NULL;
 
     mcast_task_set_t * task_set_details = &group_node->task_set_details;
-    /*Free if group node has maintained array list of working clients*/
-    if (task_set_details->working_clients) {
-        free(task_set_details->working_clients);
-    }
 
     /* Free the filename */
     free(group_node->task_set_filename);
@@ -1526,9 +1569,14 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
 
     for(i = 0; i < task_set_details->number_of_working_clients; i++)
     {
-        free(task_set_details->task_filename[i]);
+        free(task_set_details->distribution_map[i].task_filename[0]);
     }
-    free(task_set_details->task_filename);
+    free(task_set_details->distribution_map->task_filename);
+
+    /*Free if group node has maintained array list of working clients*/
+    if (task_set_details->distribution_map) {
+        free(task_set_details->distribution_map);
+    }
 
     /*Come back to initial state where the cycle started*/
     task_set_details->number_of_working_clients = 0;
@@ -1544,6 +1592,14 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
 
 }
 
+/* <doc>
+ * static
+ * void print_execution_report(mcast_group_node_t *grp_node)
+ * This function gives the execution metrics details for 
+ * a task performed by a multicast group.
+ *
+ * </doc>
+ */
 static
 void print_execution_report(mcast_group_node_t *grp_node)
 {
