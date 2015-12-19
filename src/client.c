@@ -234,7 +234,8 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
      //XXX GAUTAM XXX
      //PRINT("[Echo_Request: GRP - %s] Echo Request sent to :%s, "
      //        "dead client count: %u", echo_request->group_name, ipaddr, iter);
-
+     LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request sent to :%s,         \
+               dead client count: %u", echo_request->group_name, ipaddr, iter);
      write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
 
 
@@ -325,10 +326,15 @@ void handle_timeout_real(bool init, int signal, siginfo_t *si,
                  * case of single moderator client in group, asserting to make
                  * sure there are no violations to timer related assumptions in
                  * other parts of code. */
-                assert(client_info_local->moderator_info != NULL);
+                moderator_information_t * moderator_info = client_info_local->moderator_info;
+                pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
+                assert(moderator_info != NULL);
                 
                 send_echo_request(client_info_local->client_fd, (struct sockaddr *)&client_info_local->server, 
                                   client_info_local->active_group->group_name);
+
+                if(rsp_pdu && moderator_info->expected_responses == rsp_pdu->msg.idv.task_rsp.num_clients)
+                    moderator_send_task_response_to_server(client_info_local, false);
             }
             else
             {
@@ -1039,7 +1045,7 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
      //XXX GAUTAM XXX
 //    PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
-
+    LOGGING_INFO("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
     FREE_INCOMING_PDU(pdu->msg);
 
     return 0;
@@ -1066,7 +1072,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
      //XXX GAUTAM XXX
 //    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
-
+    LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
     
@@ -1090,7 +1096,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
     //XXX GAUTAM XXX
     //    PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
-
+    LOGGING_INFO("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
     /* If moderator, then run the moderator fsm. Validate source of echo req here. */
@@ -1516,20 +1522,13 @@ void send_task_results_to_moderator(client_information_t *client_info, client_gr
     if((client_info->is_moderator == false) || (!MATCH_STRING(moderator_info->group_name, group_name)))
     { 
         write_record(client_info->client_fd, &group->moderator, &pdu);
-        if(group->pending_task_count == 0)
-        {
-            timer_delete(group->timer_id);
-            group->timer_id = 0;
-            /*TODO add state change to TASK_INFO_AWAITED on server res ack.*/
-            group->state = TASK_RES_SENT;
-        }
     } 
     else 
     {
         //This client is the moderator for the group. no need to send it via network. 
         task_rsp_t *task_response=&(pdu.msg.idv.task_rsp);
         PRINT("[Task_Response_Notify_Req: GRP - %s] Moderator finished executing own task.", group_name);
-        update_moderator_info_with_task_response(client_info, task_response, client_info->client_id);
+        SAFE_WRITE(update_moderator_info_with_task_response(client_info, task_response, client_info->client_id););
         FREE_INCOMING_PDU(pdu.msg);
     } 
     
@@ -1666,7 +1665,8 @@ int handle_task_response(const int sockfd, pdu_t *pdu, ...)
     if(moderator_info != NULL && MATCH_STRING(moderator_info->group_name, task_response->group_name))
     {
         unsigned int peer_id = calc_key(&(pdu->peer_addr));
-        update_moderator_info_with_task_response(client_info, task_response, peer_id);
+       
+        SAFE_WRITE(update_moderator_info_with_task_response(client_info, task_response, peer_id););
     } 
     else
     {
@@ -1773,12 +1773,13 @@ void* execute_task(void *args)
     mask_signal(MODERATOR_TIMEOUT, true);
 
     thread_args *t_args = (thread_args *)args;
+    client_information_t *client_info = t_args->client_info;
     client_grp_node_t * group = t_args->group;
     /*Making thread detached.*/
     pthread_t self = pthread_self();
     pthread_detach(self);
 
-    char * dest=fetch_file_from_server(t_args->client_info, t_args->task_folder_path, 
+    char * dest=fetch_file_from_server(client_info, t_args->task_folder_path, 
             t_args->task_filename, group->group_name);
 
     char * result=NULL;
@@ -1799,6 +1800,17 @@ void* execute_task(void *args)
        {
            group->pending_task_count--;
            assert((int)group->pending_task_count >= 0);
+           
+           if((client_info->is_moderator == false ||
+                       (client_info->is_moderator == true && 
+                        !MATCH_STRING(client_info->active_group->group_name,group->group_name))) 
+                   && group->pending_task_count == 0)
+           {
+               timer_delete(group->timer_id);
+               group->timer_id = 0;
+               /*TODO add state change to TASK_INFO_AWAITED on server res ack.*/
+               group->state = TASK_RES_SENT;
+           }
            
            /* Lot of clean up will happen on this path. Timers will be
             * deactivated post successful send towards server. */
@@ -1858,7 +1870,7 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
     int fdSrc;
     struct stat sb;
     char *num, *src;
-
+    int len=0;
     int task_count = get_task_count(file_path);
 
     fdSrc = open(file_path, O_RDONLY);
@@ -1913,15 +1925,18 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
        free(dst_file_path);
        return NULL;
     }
-
     int x=task_count/10, u=0;
     /* Loop for prime number's in given data set */
     for(i = 0; i < task_count; i++)
-    {
-        num=&(src[i*11]);
+    { 
+        num=src+len; //starting position of the current number
+        //calculating length of the number
+        char * end = src+len;
+        while(*end != '\n')  {end++;len++;}
+        len++; //incrementing for '\n' character
 
-        number=atol(num);
-
+        number=atol(num);//converting string to long 
+        //PRINT("The number is %l" , number);
         if(number < 2) continue; 
 
         flag = FALSE;
@@ -1980,6 +1995,7 @@ char * find_sum(thread_args *t_args, char * file_path, rsp_type_t *rtype)
     unsigned int result_count=0;
     int fdSrc;
     struct stat sb;
+    int len=0;
     char *num, *src;
 
     int task_count = get_task_count(file_path);
@@ -2014,9 +2030,13 @@ char * find_sum(thread_args *t_args, char * file_path, rsp_type_t *rtype)
     /* Loop for prime number's in given data set */
     for(i = 0; i < task_count; i++)
     {
-        num=&(src[i*11]);
+        num=src+len; //starting position of the current number
+        //calculating length of the number
+        char * end = src+len;
+        while(*end != '\n')  {end++;len++;}
+        len++; //incrementing for '\n' character
 
-        number=atol(num);
+        number=atol(num);//converting string to long
 
         sum += number;
         
