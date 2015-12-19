@@ -1122,6 +1122,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 /* <doc>
  * void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,char *memblock)
  * This function creates files per client
+ * </doc>
  */
 void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,
                                  unsigned int num_of_clients, unsigned int task_count, unsigned int capability_total)
