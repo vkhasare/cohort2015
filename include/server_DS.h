@@ -106,6 +106,7 @@ typedef struct {
   sn_list_element_t list_element;
   int task_type;                            /*A group can perform only one task at a time. Maintaining the task type */
   char *task_set_filename;                  /*A group can perform only one task at a time. Maintaining the task set filename */
+  uint8_t task_set_format;                  /*Maintaining info regarding format of current task set */
   mcast_task_set_t task_set_details;        /*List of clients and corresponding data set */
   dead_clients_t dead_clients_info;         /*List of dead clients while working on a task for a particular group*/
   bool is_metrics_valid;                    /*Should metrics be calculated?*/
