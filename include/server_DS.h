@@ -128,7 +128,8 @@ struct server_information_t{
   unsigned int task_id;                 /*Next task Id*/
   mcast_group_t *server_list;           /*Server List having group nodes for all the multicast groups.*/
   void *client_RBT_head;                /*Pointer to RBTree head, which maintains global list of all clients.*/
-  bool is_stdby_available;
+  bool is_stdby_available;              /*Is stdby server available?*/
+  bool is_show_metrics;                 /*Decides whether to find metrics or not*/
   bool (* fsm)(server_information_t* server_info, server_event_t event, void* fsm_msg);    /*Server FSM function pointer*/
 };
 

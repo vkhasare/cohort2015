@@ -206,7 +206,9 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
              inet_ntop(AF_INET, get_in_addr(&mod_node->peer_client_addr), ipaddr, INET6_ADDRSTRLEN);
              
              PRINT("[WARNING] Client %s is down.", ipaddr);
+             /*Commented intentionally
              LOGGING_WARNING("Client %s went down.", ipaddr);
+             */
          }
          mod_node = SN_LIST_MEMBER_NEXT(mod_node, mod_client_node_t, list_element);
      }
@@ -231,16 +233,13 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
      char ipaddr[INET6_ADDRSTRLEN];
      inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(client_info_local->server)), 
              ipaddr, INET6_ADDRSTRLEN);
-     //XXX GAUTAM XXX
-     //PRINT("[Echo_Request: GRP - %s] Echo Request sent to :%s, "
-     //        "dead client count: %u", echo_request->group_name, ipaddr, iter);
+     /*Commented intentionally
+     PRINT("[Echo_Request: GRP - %s] Echo Request sent to :%s, \
+             dead client count: %u", echo_request->group_name, ipaddr, iter);
      LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request sent to :%s,         \
                dead client count: %u", echo_request->group_name, ipaddr, iter);
+     */
      write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
-
-
-     /* Send task results towards server if all active clients have responded. */
-     //moderator_send_task_response_to_server(client_info_local, false);
 }
 
 /* <doc>

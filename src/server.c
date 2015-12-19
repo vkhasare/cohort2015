@@ -1122,6 +1122,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
 /* <doc>
  * void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,char *memblock)
  * This function creates files per client
+ * </doc>
  */
 void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,
                                  unsigned int num_of_clients, unsigned int task_count, unsigned int capability_total)
@@ -1365,7 +1366,7 @@ void mcast_start_task_distribution(server_information_t *server_info,
     req_pdu.msg = req;
 
     /*If metrics is needed, then note the start time*/
-    if (group_node->is_metrics_valid)
+    if (server_info->is_show_metrics)
     {
        group_node->server_metrics = (server_metrics_t *) malloc(sizeof(server_metrics_t));
        /*Note the start time for metrics purpose.*/
@@ -1535,7 +1536,7 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
     LOGGING_INFO("Task response received from moderator for group %s for task id %d", group_node->group_name, task_response->task_id);
 
     /*Print metrics information if needed*/
-    if (group_node->server_metrics && group_node->is_metrics_valid)
+    if (group_node->server_metrics && server_info->is_show_metrics)
     {
         print_execution_report(group_node);
     }
@@ -1611,7 +1612,6 @@ void print_execution_report(mcast_group_node_t *grp_node)
     PRINT("############    EXECUTION REPORT - %s    ##############", grp_node->group_name);
     PRINT("Working Client Count: %d", grp_node->task_set_details.num_of_responses_expected);
     PRINT("Total Time Taken: %.2f ms", total_time_taken);
-    PRINT("Average Time Taken: %.2f ms", (total_time_taken / grp_node->task_set_details.num_of_responses_expected));
     PRINT("########################################################");
 
     free(grp_node->server_metrics);
@@ -1670,7 +1670,7 @@ int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...)
         rbNode->av_status = RB_FREE;
         rbNode->is_moderator = FALSE;
 
-        if (ll_grp_node->server_metrics && ll_grp_node->is_metrics_valid)
+        if (ll_grp_node->server_metrics && (server_info->is_show_metrics == true))
         {
            /*Note the end time for metrics purpose.*/
            gettimeofday(&ll_grp_node->server_metrics->end_time, NULL);
@@ -2229,55 +2229,11 @@ void server_stdin_data(int fd, server_information_t *server_info)
     }
     else if (0 == strncmp(read_buffer,"enable metrics",14))
     {
-        strcpy(read_buffer_copy,read_buffer);
-        ptr = strtok(read_buffer_copy," ");
-        while(i < 2)
-        {
-            ptr = strtok(NULL," ");
-            i++;
-        }
-        if (!ptr)
-        {
-            PRINT("Error: Unrecognized Command.\n");
-            return;
-        }
-
-        mcast_group_node_t *group_node = NULL;
-        get_group_node_by_name(&server_info, ptr, &group_node);
-
-        if (group_node) {
-            if (group_node->server_metrics) {
-              PRINT("Metrics are already enabled.");
-            } else {
-              group_node->is_metrics_valid = true;
-            }
-        } else {
-           PRINT("Group %s is invalid.", ptr);
-        }
+      server_info->is_show_metrics = true;
     }
     else if (0 == strncmp(read_buffer,"disable metrics",15))
     {
-        strcpy(read_buffer_copy,read_buffer);
-        ptr = strtok(read_buffer_copy," ");
-        while(i < 2)
-        {
-            ptr = strtok(NULL," ");
-            i++;
-        }
-        if (!ptr)
-        {
-            PRINT("Error: Unrecognized Command.\n");
-            return;
-        }
-
-        mcast_group_node_t *group_node = NULL;
-        get_group_node_by_name(&server_info, ptr, &group_node);
-
-        if (group_node) {
-           group_node->is_metrics_valid = false;
-        } else {
-           PRINT("Group %s is invalid.", ptr);
-        }
+      server_info->is_show_metrics = false;
     }
     else if(strncmp(read_buffer,"enable debug\0",12) == 0)
     {
@@ -2394,6 +2350,7 @@ int main(int argc, char * argv[])
     }
 
     server_info->server_fd = sfd;
+    server_info->is_show_metrics = false;
 
     //Initialize timeout handler
     handle_timeout_real(true, 0, NULL, &server_info);

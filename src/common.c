@@ -250,8 +250,8 @@ void display_server_clis()
   PRINT("migrate                                              --  Migrates to secondary server");
   PRINT("enable debug                                         --  Enables the debug mode");
   PRINT("disable debug                                        --  Disables the debug mode");
-  PRINT("enable metrics <group_name>                          --  Enables the execution metrics");
-  PRINT("disable metrics <group_name>                         --  Disables the execution metrics");
+  PRINT("enable metrics                                       --  Enables the execution metrics");
+  PRINT("disable metrics                                      --  Disables the execution metrics");
   PRINT("cls                                                  --  Clears the screen");
 }
 
@@ -451,7 +451,6 @@ void mask_signal(uint32_t sigval, bool flag)
 float timedifference_msec(struct timeval t0, struct timeval t1)
 {
     float result = ((t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_usec - t0.tv_usec) / 1000);
-    PRINT("%f", result);
     return result;
 }
 

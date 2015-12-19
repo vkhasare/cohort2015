@@ -57,7 +57,7 @@ def startClient(clientIP):
     grpList = randomGroups()
     #Uncomment this for hardcoded group list
     #grpList = "G1,G2"
-    cmd = "nohup ./client " + serverIP + " " + serverPORT + " " + grpList + " " + str(clientIP) + " &"
+    cmd = "nohup ./client " + serverIP + " " + serverPORT + " " + grpList + " " + str(clientIP) + " > nohup/" + str(clientIP)  + ".nohup &"
     print(cmd)
     fire(cmd)
 
