@@ -1695,7 +1695,7 @@ char * fetch_file_from_server(client_information_t * client_info, char * file_fo
              ipaddr, INET6_ADDRSTRLEN);
    sprintf(src, "%s:%s/%s", ipaddr, file_folder, file_name);
 
-   sprintf(dest, "/tmp/client_vsk/%s/", group_name);
+   sprintf(dest, "/tmp/client/%s/", group_name);
    check_and_create_folder(dest);
    strcat(dest, file_name);
 
@@ -1724,7 +1724,7 @@ void fetch_task_response_from_client(unsigned int client_id,
    char src[100];
    char dest[100];
 
-   sprintf(dest, "/tmp/client_vsk/moderator/%s/", group_name);
+   sprintf(dest, "/tmp/client/moderator/%s/", group_name);
 
    check_and_create_folder(dest);
 
@@ -1908,7 +1908,7 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
 
     assert(t_args->group != NULL);
 
-    sprintf(folder_path, "/tmp/client_vsk/task_result/%s", t_args->group->group_name);
+    sprintf(folder_path, "/tmp/client/task_result/%s", t_args->group->group_name);
 
     check_and_create_folder(folder_path);
 
