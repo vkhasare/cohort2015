@@ -1137,6 +1137,7 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
    int dst_fd, fd;
    struct stat sb;
    bool is_file_unstructured=(bool)!(group_node->task_set_format);
+   unsigned int remaining_count= task_count;
 
    PRINT("Creating the task sets . .. ");
    /* Open the data set file to read */
@@ -1174,8 +1175,9 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
      
      /* Find the data count to be written to the file for a client based on the task_count and total capability */
      data_count = (task_set->capability[i] * task_count)/ capability_total;
+     remaining_count -=data_count;
      if( i == num_of_clients - 1 )
-       data_count = task_count - (start_index/11);
+       data_count +=remaining_count;
  
      PRINT("The data count for client %u is %u", i+1, data_count);
      /*write data count into the file. Once written, break from loop.*/
