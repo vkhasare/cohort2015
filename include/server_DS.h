@@ -68,14 +68,19 @@ typedef struct {
   sn_list_t group_node;
 } mcast_group_t;
 
+typedef struct {
+  unsigned int working_clients;             /*List of client ids working on task*/
+  char **task_filename;                     /*filenames of the data set's for the clients */
+  int file_count;                           /*Number of files client is working upon*/
+} task_distribution_t;
+
 /*Task Set DS - contains information related to task, a group is working on.*/
 typedef struct {
+  task_distribution_t* distribution_map;    /*mapping of clients and its corresponding task files*/
+  unsigned int *capability;                 /*Capabilities of the clients working on task */
+  char * task_folder_path;                  /*Foldername of the data set's for the clients */
   int number_of_working_clients;            /*Number of working clients on a task*/
-  unsigned int *working_clients;            /*List of client ids working on task*/
-  unsigned int *capability;                 /* capabilities of the clients working on task */
-  char **task_filename;                     /* filenames of the data set's for the clients */
-  char * task_folder_path;                  /* foldername of the data set's for the clients */
-  int num_of_responses_expected;
+  int num_of_responses_expected;            /*Number of responses expected by server for the task in execution*/
 } mcast_task_set_t;
 
 typedef struct {
@@ -87,6 +92,7 @@ typedef struct {
   unsigned int *dead_clients;               /*List of dead clients working on a task*/
   int dead_client_count;                    /*Count of dead clients*/
   char **dead_clients_file;                 /*Task file related to dead clients*/
+  int dead_file_count;
 } dead_clients_t;
 
 /*Group Node - This node maintains information related to multicast group.*/

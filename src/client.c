@@ -457,7 +457,10 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
     if(TASK_EXECUTION_IN_PROGRESS == active_grp_node->state)
     {
         //delete older self timer.
-        timer_delete(active_grp_node->timer_id);
+        if (active_grp_node->timer_id)
+        {
+           timer_delete(active_grp_node->timer_id);
+        }
         active_grp_node->timer_id = 0;
     }
 /*
@@ -1868,14 +1871,13 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
 {
     comm_struct_t *req = &(pdu->msg);
     struct sockaddr myIp;
-    int count = 0, i = 0, result;
+    int count[5] = {0} , i = 0, result;
     client_information_t * client_info = NULL;
     moderator_information_t * mod_info = NULL;
     client_grp_node_t * client_grp_node = NULL;
     pthread_t thread;
 
     perform_task_req_t * perform_task = &(req->idv.perform_task_req);
-    thread_args *args = malloc(sizeof(thread_args));
 
     int current_working_clients = perform_task->client_id_count;
  
@@ -1905,13 +1907,13 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     /* Check whether this particular client is required to work on this piece of
      * task. If not, just return. */
     bool found = false;
-    for(count = 0, i = 0; i < current_working_clients; i++)
+    int number_of_occurence = 0;
+    for(i = 0; i < current_working_clients; i++)
     {
         if(client_info->client_id ==  perform_task->client_ids[i])
         {
-            count = i;
+            count[number_of_occurence++] = i;
             found = true;
-            break;
         }
     }
 
@@ -1956,7 +1958,7 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
             inet_ntop(AF_INET, &(ipAddr.sin_addr), ipAddress, INET_ADDRSTRLEN);
 
             LOGGING_INFO("Client %s is working on task in group %s", ipAddress, perform_task->group_name);
-	    PRINT("Client %s is working on task in group %s", ipAddress, perform_task->group_name);
+      	    PRINT("Client %s is working on task in group %s", ipAddress, perform_task->group_name);
 	    
             memcpy(&mod_node->peer_client_addr, (struct sockaddr *) &ipAddr, sizeof(struct sockaddr));
             i++;
@@ -1986,34 +1988,37 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     /* assumption client_id_count < num of task count */
 
     LOGGING_INFO("Client started working on group %s task - prime numbers", perform_task->group_name);
-
-    fill_thread_args(client_info, perform_task, args, count); 
-    /* Create a thread to perform the task */
-    result = pthread_create(&thread, NULL, execute_task ,args);
-
-    if(result)
+    i = 0;
+    while (i < number_of_occurence)
     {
+      thread_args *args = malloc(sizeof(thread_args));
+      fill_thread_args(client_info, perform_task, args, count[i]);
+      /* Create a thread to perform the task */
+      result = pthread_create(&thread, NULL, execute_task ,args);
+      i++;
+
+      if(result)
+      {
         PRINT("Could not create thread to perform task");
         LOGGING_ERROR("Failure in creating thread to perform task");
+      }
+      else 
+      {
+          /* Fire timer for maintaining keepalives on behalf of this group
+           * task from main thread itself for non mod threads. */
+          if(client_info->is_moderator == false)
+          {
+              if(client_info->active_group->pending_task_count == 0)
+                  start_recurring_timer(&(client_info->active_group->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
 
+             /*Increment the busy count by 1 as client is working on one of the task set*/    
+              client_info->active_group->pending_task_count++;
+          }
+          /* Moderator state and moderator's client view of task are mutually
+           * exclusive concepts. Update state of all clients performing task. */
+          client_info->active_group->state = TASK_EXECUTION_IN_PROGRESS;
+      }
     }
-    else 
-    {
-        /* Fire timer for maintaining keepalives on behalf of this group
-         * task from main thread itself for non mod threads. */
-        if(client_info->is_moderator == false)
-        {
-            if(client_info->active_group->pending_task_count == 0)
-                start_recurring_timer(&(client_info->active_group->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
-
-            /*Increment the busy count by 1 as client is working on one of the task set*/    
-            client_info->active_group->pending_task_count++;
-        }
-        /* Moderator state and moderator's client view of task are mutually
-         * exclusive concepts. Update state of all clients performing task. */
-        client_info->active_group->state = TASK_EXECUTION_IN_PROGRESS;
-    }
-
     FREE_INCOMING_PDU(pdu->msg);
 }
 
