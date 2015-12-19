@@ -477,9 +477,11 @@ bool process_task_resp(XDR* xdrs, task_rsp_t* m){
         m->group_name = NULL;
         m->client_ids = NULL;
         m->result = NULL;
+        m->final_resp = NULL;
     }
 
     bool string_res = xdr_string(xdrs, &(m->group_name), max_gname_len);
+    bool final_res = xdr_string(xdrs, &(m->final_resp), max_gname_len);
     bool task_id_res = xdr_u_int(xdrs, &(m->task_id));
     bool typ_res = xdr_enum(xdrs, (enum_t *)(&(m->type)));
     bool num_client_res = xdr_u_int(xdrs, &(m->num_clients));
@@ -488,7 +490,7 @@ bool process_task_resp(XDR* xdrs, task_rsp_t* m){
     bool arr_res = xdr_array(xdrs, (char**) &(m->result),
             &(m->num_clients), max_client_in_group, sizeof(string_t),(xdrproc_t )xdr_name_string);
 
-    return string_res && task_id_res && typ_res  && num_client_res && client_id_res && arr_res;
+    return string_res && task_id_res && typ_res  && num_client_res && client_id_res && arr_res && final_res;
 }
 
 bool process_new_server_notify(XDR* xdrs, new_server_notify_t* m) {
@@ -546,6 +548,8 @@ void populate_task_rsp(comm_struct_t* m, unsigned int task_id,char* group_name, 
     memset(&(m->idv),0,sizeof(task_rsp_t));
     m->id=task_response;
     m->idv.task_rsp.type = r_type;
+    m->idv.task_rsp.final_resp = malloc(sizeof(char)*2);
+    strcpy(m->idv.task_rsp.final_resp,"");
     m->idv.task_rsp.task_id = task_id;
     m->idv.task_rsp.group_name = malloc((sizeof(char)*strlen(group_name))+1);
     strcpy(m->idv.task_rsp.group_name, group_name); 
@@ -561,6 +565,8 @@ void * populate_moderator_task_rsp( uint8_t num_clients, task_rsp_t *resp, unsig
     memset(&(m->idv),0,sizeof(task_rsp_t));
     m->id=task_response;
     task_rsp_t * task_rsp = &(m->idv.task_rsp);
+    task_rsp->final_resp = malloc(sizeof(char)*2);
+    strcpy(task_rsp->final_resp,"");
     task_rsp->type = resp->type;
     task_rsp->task_id = resp->task_id;
     task_rsp->group_name = malloc((sizeof(char)*strlen(resp->group_name))+1);

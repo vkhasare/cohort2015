@@ -21,7 +21,7 @@ static int handle_leave_req(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_notify_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_moderator_task_response(const int sockfd, pdu_t *pdu, ...);
 static int handle_checkpoint_req(const int sockfd, pdu_t *pdu, ...);
-static void assign_task(server_information_t *, char *, int, char *);
+static void assign_task(server_information_t *, char *, int, char *, task_file_type_t);
 static void moderator_selection(server_information_t *, mcast_group_node_t *);
 static void print_execution_report(mcast_group_node_t *);
 
@@ -1122,22 +1122,35 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
  * void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,char *memblock)
  * This function creates files per client
  */
-void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,char *src,
-                                 unsigned int num_of_clients, unsigned int task_count, unsigned int capability_total, char * folder_path)
+void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *client_ids,mcast_task_set_t *task_set,
+                                 unsigned int num_of_clients, unsigned int task_count, unsigned int capability_total)
 {
    time_t rawtime;
    struct tm * timeinfo;
    unsigned int i;
-   char file_name[100], file_path[200], buffer2[40];
+   char file_name[100], file_path[200], buffer2[40], folder_path[100];
    unsigned int start_index=0, counter = 0, data_count = 0;
    FILE *fptr, *fp;
-   char * line[10];
-   size_t len = 0;
    ssize_t read;
    char temp[30];
-   char *dst;
-   int dst_fd;
    task_distribution_t* task_map = group_node->task_set_details.distribution_map;
+   char *dst, *src;
+   int dst_fd, fd;
+   struct stat sb;
+   bool is_file_unstructured=(bool)!(group_node->task_set_format);
+
+   PRINT("Creating the task sets . .. ");
+   /* Open the data set file to read */
+   fd = open(group_node->task_set_filename, O_RDONLY);
+   fstat(fd, &sb);
+   
+   src = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+   if (src == MAP_FAILED) printf("mmap"); 
+
+   sprintf(folder_path,"/tmp/server/task_set/%s", group_node->group_name);
+   task_set->task_folder_path = MALLOC_CHAR(strlen(folder_path) + 1);
+   strcpy(task_set->task_folder_path,folder_path);
+   check_and_create_folder(folder_path);
 
    for(i = 0; i < num_of_clients; i++)
    {
@@ -1163,11 +1176,22 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
      /* Find the data count to be written to the file for a client based on the task_count and total capability */
      data_count = (task_set->capability[i] * task_count)/ capability_total;
      if( i == num_of_clients - 1 )
-       data_count = task_count - start_index;
+       data_count = task_count - (start_index/11);
  
      PRINT("The data count for client %u is %u", i+1, data_count);
      /*write data count into the file. Once written, break from loop.*/
-     off_t fsize =data_count*11;
+     off_t fsize;
+     if(is_file_unstructured){
+        char* ptr = (src + start_index);
+        int x =0;
+        while( ptr < src+sb.st_size && x < data_count){
+          if(*ptr == '\n') x++;
+          ptr++;
+        }
+        fsize = ptr - start_index - src;
+     } else{
+        fsize = data_count*11;
+     }
 
      if (ftruncate(dst_fd, fsize) == -1)
        errExit("ftruncate"); 
@@ -1177,16 +1201,18 @@ void create_task_sets_per_client(mcast_group_node_t *group_node,unsigned int *cl
      if (dst == MAP_FAILED)
        errExit("mmap");
 
-     memcpy(dst, src+(start_index*11), fsize);
+     memcpy(dst, src+(start_index), fsize);
      
      if (msync(dst, fsize, MS_SYNC) == -1)
        errExit("msync");
 
      //update start_index for next client.
-     start_index += data_count;
+     start_index += fsize;
 
      munmap(dst, fsize);
    }
+
+   munmap(src, sb.st_size);
 }
 
 /* <doc>
@@ -1206,16 +1232,9 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
 {
    RBT_tree *tree = NULL;
    RBT_node *rbNode = NULL;
-   struct stat sb; 
-   FILE * fp, *cmd_line=NULL;
-   char * line = NULL;
-   size_t len = 0;
-   ssize_t read;
-   int num_of_clients_modified, fd, i;
+   int num_of_clients_modified, i;
    bool client_list_changed = FALSE;
-   char element[16], cmd[256], *memblock;
    unsigned int capability_total = 0;
-   char folder_path[100];
    mcast_task_set_t *task_set = &group_node->task_set_details;
 
    tree = (RBT_tree*) server_info->client_RBT_head;
@@ -1256,24 +1275,10 @@ void get_data_set_for_client_based_on_capability(server_information_t *server_in
      }
    }
 
-   PRINT("Creating the task sets . .. ");
-   /* Open the data set file to read */
-   fd = open(group_node->task_set_filename, O_RDONLY);
-   fstat(fd, &sb);
-   
-   memblock = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-   if (memblock == MAP_FAILED) printf("mmap"); 
-
-   sprintf(folder_path,"/tmp/server/task_set/%s", group_node->group_name);
-   task_set->task_folder_path = MALLOC_CHAR(strlen(folder_path) + 1);
-   strcpy(task_set->task_folder_path,folder_path);
-   check_and_create_folder(folder_path);
-  
  
    /*Create tas set file for each client on which it is required to work.*/
-   create_task_sets_per_client( group_node, client_ids, task_set, memblock, num_of_clients, task_count, capability_total, folder_path);
+   create_task_sets_per_client( group_node, client_ids, task_set, num_of_clients, task_count, capability_total);
 
-   munmap(memblock, sb.st_size);
 }
 
 /* <doc>
@@ -1351,16 +1356,6 @@ void mcast_start_task_distribution(server_information_t *server_info,
     }
     req.idv.perform_task_req.task_folder_path = MALLOC_CHAR(strlen(group_node->task_set_details.task_folder_path)+1);
     strcpy(req.idv.perform_task_req.task_folder_path , group_node->task_set_details.task_folder_path);
-//    req.idv.perform_task_req.task_count = task_count;
-//    req.idv.perform_task_req.task_set = MALLOC_UINT(task_count);
-
-/*    for(count = 0; count < task_count; count++)
-    {
-        req.idv.perform_task_req.task_set[count] = task_set[count];
-    }
-    // USE THIS INSTEAD OF FOR
-    memcpy(req.idv.perform_task_req.task_set, task_set,
-           sizeof(req.idv.perform_task_req.task_set[0])* task_count); */
 
     req.idv.perform_task_req.task_reassigned = 0;
 
@@ -1543,11 +1538,17 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
         print_execution_report(group_node);
     }
 
-    /* Get the file name based on current time stamp */ 
-    result_folder = get_task_result_folder_path(group_node->group_name, task_response->task_id); 
-
     /* Write the response  to file */  
-    collect_task_results(task_response, result_folder, calc_key(&(pdu->peer_addr))); 
+    switch(task_response->type){
+      case TYPE_FILE:
+       /* Get the file name based on current time stamp */ 
+       result_folder = get_task_result_folder_path(group_node->group_name, task_response->task_id); 
+       collect_task_results(task_response, result_folder, calc_key(&(pdu->peer_addr))); 
+       break;
+      case TYPE_LONG:
+       PRINT("Result for task %u is %s ", task_response->task_id, task_response->final_resp);
+       break;
+    }
 
     /*Disarming the keepalive for this mod since task is complete.*/
     //stop_timer(&group_node->timer_id);
@@ -1986,7 +1987,7 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
  * </doc>
  */
     static
-void assign_task(server_information_t *server_info, char *grp_name, int task_type, char *filename)
+void assign_task(server_information_t *server_info, char *grp_name, int task_type, char *filename, task_file_type_t file_data_type)
 {
     mcast_group_node_t *group_node = NULL;
     struct stat st;
@@ -2035,6 +2036,7 @@ void assign_task(server_information_t *server_info, char *grp_name, int task_typ
     }
 
     group_node->task_type = task_type;
+    group_node->task_set_format = file_data_type; 
 
     LOGGING_INFO("Group %s has been assigned task of type %d", group_node->group_name, task_type);
 
@@ -2164,6 +2166,8 @@ void server_stdin_data(int fd, server_information_t *server_info)
     {
         int task_type = 0;
         char filename[100];
+        task_file_type_t file_data_type=UNSTRUCTURED_FILE_TYPE;
+  
         strcpy(read_buffer_copy,read_buffer);
         ptr = strtok(read_buffer_copy," ");
         while(i < 1)
@@ -2176,6 +2180,8 @@ void server_stdin_data(int fd, server_information_t *server_info)
         {
           if(strcmp(ptr,"prime") == 0)
             task_type = FIND_PRIME_NUMBERS;
+          else if(strcmp(ptr,"sum") == 0)
+            task_type = FIND_SUM;
           else
             task_type = INVALID_TASK_TYPE;
         }
@@ -2197,6 +2203,14 @@ void server_stdin_data(int fd, server_information_t *server_info)
         {
           strcpy(filename,"task_set/prime_set1.txt");        
         }
+        /*Fetch the file type */
+        while(i<7){
+          ptr = strtok(NULL, " ");
+          i++;
+        }
+        if(ptr && MATCH_STRING("structured", ptr)){
+           file_data_type=STRUCTURED_FILE_TYPE;
+        }
         /* Fetch the group name */
         strcpy(read_buffer_copy,read_buffer);
         ptr = strtok(read_buffer_copy," ");
@@ -2207,7 +2221,7 @@ void server_stdin_data(int fd, server_information_t *server_info)
             i++;
         }
         if(task_type) {
-           assign_task(server_info, ptr, task_type, filename);
+           assign_task(server_info, ptr, task_type, filename, file_data_type);
         }
         else
           PRINT("Please enter valid task type.\n");

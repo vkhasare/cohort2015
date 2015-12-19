@@ -2,12 +2,17 @@
 #include "client_DS.h"
 #include <math.h>
 
+#define SAFE_WRITE(x) {\
+         pthread_mutex_lock(&lock);\
+         x \
+         pthread_mutex_unlock(&lock);}
+
 const int MAX_ALLOWED_KA_MISSES = 5;
+pthread_mutex_t lock;
 
 extern unsigned int echo_req_len;
 extern unsigned int echo_resp_len; //includes nul termination
 extern debug_mode;
-
 static int echo_req_rcvd_in_notify_rsp_pending = 0;   /*Counter for number of clients who
                                                         have responded with echo req when moderator
                                                         is in moderator notify rsp state*/
@@ -36,7 +41,8 @@ static void moderator_send_task_response_to_server(client_information_t *, bool 
 static void fetch_task_response_from_client(unsigned int client_id, char * file_path, char * group_name, unsigned int);
 static void fill_thread_args(client_information_t *, perform_task_req_t *, thread_args *, int);
 void* execute_task(void *t_args);
-static char* find_prime_numbers(thread_args *, char *);
+static char* find_prime_numbers(thread_args *, char *, rsp_type_t * );
+static char* find_sum(thread_args *, char *, rsp_type_t * );
 
 void handle_timeout(int signal, siginfo_t *si, void *uc);
 
@@ -397,7 +403,7 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
         LOGGING_INFO("Sending results (task_id - %u) to new moderator %s for group %s", active_grp_node->last_task_id, ipaddr, mod_update_req.group_name);
         for( i = 0; i<active_grp_node->last_task_file_count ; i++){
           send_task_results_to_moderator(client_info, active_grp_node->group_name,
-               active_grp_node->last_task_id, TYPE_INT, active_grp_node->last_task_result_path[i], client_info->client_id, TRUE);
+               active_grp_node->last_task_id, active_grp_node->last_task_rsp_type , active_grp_node->last_task_result_path[i], client_info->client_id, TRUE);
         }
     }
 
@@ -1487,8 +1493,11 @@ void send_task_results_to_moderator(client_information_t *client_info, char* gro
     
     // Storing task_result_file_path
     if(!is_task_reassigned){
+      SAFE_WRITE(
       active_group->last_task_result_path[active_group->last_task_file_count++]=file_path;
       active_group->last_task_id = task_id;
+      active_group->last_task_rsp_type = pdu.msg.idv.task_rsp.type;
+      );
     }
 }
 
@@ -1512,6 +1521,7 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
     moderator_information_t * moderator_info = client_info->moderator_info;
     pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
     int i;
+    unsigned long num, result=0;
  
     if(rsp_pdu == NULL)
     {
@@ -1539,12 +1549,25 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
       LOGGING_INFO("Forcefully pushing the moderator results towards Server for group %s", moderator_info->group_name); 
 
     task_rsp_t *task_resp= &(rsp_pdu->msg.idv.task_rsp);
-    for(i = 0; i < num_clients; i++)
-    {
-        /* TODO Investigate if thread should be spawned for this operation. */
-        fetch_task_response_from_client(task_resp->client_ids[i], task_resp->result[i].str, task_resp->group_name, client_info->client_id);
+    switch(task_resp->type){
+    case TYPE_FILE:
+      for(i = 0; i < num_clients; i++)
+      {
+          /* TODO Investigate if thread should be spawned for this operation. */
+          fetch_task_response_from_client(task_resp->client_ids[i], task_resp->result[i].str, task_resp->group_name, client_info->client_id);
+      }
+      break;
+    case TYPE_LONG:
+      for(i=0; i < num_clients;i++){
+        PRINT("Response from client %u is %s",task_resp->client_ids[i], task_resp->result[i].str);
+        num=atol(task_resp->result[i].str);    
+        result += num;
+      }
+      free(task_resp->final_resp);
+      task_resp->final_resp=malloc(23);
+      sprintf(task_resp->final_resp, "%lu", result);
+      break;
     }
-
     write_record(client_info->client_fd, &(client_info->server), rsp_pdu);
     free(rsp_pdu);
 
@@ -1714,16 +1737,26 @@ void* execute_task(void *args)
     char * dest=fetch_file_from_server(t_args->client_info, t_args->task_folder_path, 
             t_args->task_filename, t_args->group_name);
 
+    char * result=NULL;
+    rsp_type_t result_type;
     if(dest !=NULL)
     {
-       char * file_path=find_prime_numbers(t_args, dest);
+       switch(t_args->task_type) {
+         case FIND_PRIME_NUMBERS:
+           result = find_prime_numbers(t_args, dest, &result_type);
+         break;
+         case FIND_SUM:
+           result = find_sum(t_args, dest, &result_type);
+         break;
+       } 
 
-       if(file_path !=NULL)
+       PRINT(" Task id %u has been successfully executed on client", t_args->task_id);
+       if(result !=NULL)
        {
            /* Lot of clean up will happen on this path. Timers will be
             * deactivated post successful send towards server. */
            send_task_results_to_moderator(t_args->client_info, t_args->group_name, 
-                   t_args->task_id, TYPE_INT, file_path, t_args->client_info->client_id, FALSE);
+                   t_args->task_id, result_type, result, t_args->client_info->client_id, FALSE);
        }
        
        free(dest);
@@ -1745,7 +1778,7 @@ void* execute_task(void *args)
  *
  * </doc>
  */
-char * find_prime_numbers(thread_args *t_args, char * file_path)
+char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rtype)
 {
     unsigned int i,j;
     bool flag;
@@ -1847,6 +1880,7 @@ char * find_prime_numbers(thread_args *t_args, char * file_path)
            u++;
         }
     }
+
     if(result_count == 0)
     {
         PRINT("No prime numbers found..");
@@ -1855,7 +1889,75 @@ char * find_prime_numbers(thread_args *t_args, char * file_path)
 
     fclose(fptr);
     munmap(src, sb.st_size);
+    *rtype = TYPE_FILE; 
     return dst_file_path;
+}
+
+
+
+/* <doc>
+ * void* find_sum(thread_args *args)
+ * Reads the subset of data and calculates the sum of all numbers
+ *
+ * </doc>
+ */
+char * find_sum(thread_args *t_args, char * file_path, rsp_type_t *rtype)
+{
+    unsigned int i,j;
+    bool flag;
+    unsigned long number, sum=0;
+    unsigned int result_count=0;
+    int fdSrc;
+    struct stat sb;
+    char *num, *src;
+
+    int task_count = get_task_count(file_path);
+
+    fdSrc = open(file_path, O_RDONLY);
+    if (fdSrc == -1)
+        errExit("open");
+
+    /* Use fstat() to obtain size of file: we use this to specify the
+       size of the two mappings */
+
+    if (fstat(fdSrc, &sb) == -1)
+        errExit("fstat");
+
+    /* Handle zero-length file specially, since specifying a size of
+       zero to mmap() will fail with the error EINVAL */
+
+    if (sb.st_size == 0)
+        exit(EXIT_SUCCESS);
+
+    src = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fdSrc, 0);
+    if (src == MAP_FAILED)
+        errExit("mmap");
+
+    PRINT("[INFO] Started working on prime numbers for data set count : %lu", task_count);
+    LOGGING_INFO("Started working on prime numbers for data set count : %lu", task_count);
+
+    char *result_str=malloc(sizeof(char)*23);
+
+    int x=task_count/10, u=0;
+
+    /* Loop for prime number's in given data set */
+    for(i = 0; i < task_count; i++)
+    {
+        num=&(src[i*11]);
+
+        number=atol(num);
+
+        sum += number;
+        
+        if(i%x==0){
+         PRINT("%d0 % Task successfully executed", u);
+         u++;}
+    }
+    sprintf(result_str, "%lu", sum);
+    PRINT("The final sum is %s", result_str); 
+    munmap(src, sb.st_size);
+    *rtype = TYPE_LONG; 
+    return result_str;
 }
 
 /* <doc>
@@ -2035,4 +2137,6 @@ void fill_thread_args(client_information_t * client_info, perform_task_req_t * p
 
         args->task_folder_path=MALLOC_CHAR(strlen(perform_task->task_folder_path)+1);
         strcpy(args->task_folder_path, perform_task->task_folder_path);
+ 
+        args->task_type = perform_task->task_type;
 }
