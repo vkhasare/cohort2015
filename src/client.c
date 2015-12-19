@@ -233,7 +233,8 @@ void moderator_task_rsp_pending_timeout(client_information_t *client_info_local)
      //XXX GAUTAM XXX
      //PRINT("[Echo_Request: GRP - %s] Echo Request sent to :%s, "
      //        "dead client count: %u", echo_request->group_name, ipaddr, iter);
-
+     LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request sent to :%s,         \
+               dead client count: %u", echo_request->group_name, ipaddr, iter);
      write_record(client_info_local->client_fd, (struct sockaddr *)&(client_info_local->server), &pdu);
 
 
@@ -994,7 +995,7 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
      //XXX GAUTAM XXX
 //    PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
-
+    LOGGING_INFO("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
     FREE_INCOMING_PDU(pdu->msg);
 
     return 0;
@@ -1021,7 +1022,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
      //XXX GAUTAM XXX
 //    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
-
+    LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
     
@@ -1040,7 +1041,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
      //XXX GAUTAM XXX
 //    PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
-
+    LOGGING_INFO("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
     }
     /*If moderator, then run the moderator fsm*/

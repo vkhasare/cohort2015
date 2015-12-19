@@ -1086,8 +1086,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
      //XXX GAUTAM XXX
     //PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
-
-    LOGGING_INFO("Echo Request received from %s for group %s", ipaddr, echo_req.group_name);
+    LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
 
     get_group_node_by_name(&server_info, echo_req.group_name, &group_node);
     
@@ -1099,7 +1098,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
      //XXX GAUTAM XXX
     //PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
-
+    LOGGING_INFO("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
     /*Check the fsm of group node and act accordingly.*/
@@ -1887,6 +1886,7 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
      //XXX GAUTAM XXX
     //PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp.group_name, ipaddr);
+    LOGGING_INFO("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp.group_name, ipaddr);
 
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, server_information_t*, server_info);

@@ -217,6 +217,7 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
     inet_ntop(AF_INET, get_in_addr(addr), ipaddr, INET6_ADDRSTRLEN);
      //XXX GAUTAM XXX
     //PRINT("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
+    LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
 
     write_record(sockfd, addr, &pdu);
 
