@@ -585,6 +585,7 @@ void display_group_info(server_information_t *server_info)
 void mark_dead_clients_in_group(task_distribution_t* ref_array, int* ref_count,
         int* dead_client_arr, int dead_client_count)
 {
+    task_distribution_t ** task_map = (task_distribution_t** )ref_array;
     //Attempt to find all dead clients first and mark them.
     int i, j, num_clients_marked = 0;
     for(i = 0; i < *ref_count && 
@@ -612,15 +613,19 @@ void mark_dead_clients_in_group(task_distribution_t* ref_array, int* ref_count,
         {
             if(j == i) break;
             j--;
-            continue;
+//            continue;
         }
-        ref_array[i].working_clients = ref_array[j].working_clients;
-        int k = 0;
-        while(k < ref_array[j].file_count) {
+//        ref_array[i].working_clients = ref_array[j].working_clients;
+        task_distribution_t * temp= task_map[i];
+        task_map[i]=task_map[j];
+        task_map[j]=temp;
+//        int k = 0;
+        
+/*        while(k < ref_array[j].file_count) {
           strcpy(ref_array[i].task_filename[k], ref_array[j].task_filename[k]);
           k++;
         }
-        ref_array[j].working_clients = 0;
+        ref_array[j].working_clients = 0;*/
     }
 
     //modify ref count to reflect number of clients presently working;
@@ -687,7 +692,7 @@ void retransmit_task_req_for_client(server_information_t *server_info,
        req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(grp_node->dead_clients_info.dead_clients_file[index])+1);
        strcpy(req.idv.perform_task_req.task_filename[index].str, grp_node->dead_clients_info.dead_clients_file[index]);
 
-        task_map[index].task_filename = realloc(task_map[index].task_filename, sizeof(char *) * (file_index+1));
+       task_map[index].task_filename = realloc(task_map[index].task_filename, sizeof(char *) * (file_index+1));
 
        task_map[index].task_filename[file_index] = MALLOC_CHAR(strlen(grp_node->dead_clients_info.dead_clients_file[index]) + 1);
        strcpy(task_map[index].task_filename[file_index], grp_node->dead_clients_info.dead_clients_file[index]);
@@ -2238,6 +2243,8 @@ void server_stdin_data(int fd, server_information_t *server_info)
             task_type = FIND_PRIME_NUMBERS;
           else if(strcmp(ptr,"sum") == 0)
             task_type = FIND_SUM;
+          else if(MATCH_STRING(ptr, "prime-sum"))
+            task_type = FIND_PRIME_SUM;
           else
             task_type = INVALID_TASK_TYPE;
         }

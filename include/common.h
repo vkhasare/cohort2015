@@ -120,7 +120,8 @@ typedef struct grname_ip_mapping{
 typedef enum {
   INVALID_TASK_TYPE = 0,
   FIND_PRIME_NUMBERS = 1,
-  FIND_SUM
+  FIND_SUM,
+  FIND_PRIME_SUM
 } task_type_t;
 
 typedef enum {

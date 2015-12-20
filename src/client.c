@@ -42,6 +42,8 @@ static void fetch_task_response_from_client(unsigned int client_id, char * file_
 static void fill_thread_args(client_information_t *, perform_task_req_t *, thread_args *, int);
 void* execute_task(void *t_args);
 static char* find_prime_numbers(thread_args *, char *, rsp_type_t * );
+char * get_task_result_folder_path(char * group_name);
+static char* find_prime_sum(thread_args *, char *, rsp_type_t * );
 static char* find_sum(thread_args *, char *, rsp_type_t * );
 
 void handle_timeout(int signal, siginfo_t *si, void *uc);
@@ -1591,7 +1593,8 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
     pdu_t * rsp_pdu = (pdu_t *)moderator_info->moderator_resp_msg;
     int i;
     unsigned long num, result=0;
- 
+    char *dest;
+
     if(rsp_pdu == NULL)
     {
        MASK_CLIENT_SIGNALS(false);
@@ -1621,11 +1624,16 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
     task_rsp_t *task_resp= &(rsp_pdu->msg.idv.task_rsp);
     switch(task_resp->type){
     case TYPE_FILE:
+      dest = get_task_result_folder_path(task_resp->group_name); 
       for(i = 0; i < num_clients; i++)
       {
           /* TODO Investigate if thread should be spawned for this operation. */
-          fetch_task_response_from_client(task_resp->client_ids[i], task_resp->result[i].str, task_resp->group_name, client_info->client_id);
+          fetch_task_response_from_client(task_resp->client_ids[i], task_resp->result[i].str, dest, client_info->client_id);
       }
+      //7zip(dest);
+      free(task_resp->final_resp);
+
+
       break;
     case TYPE_LONG:
       for(i=0; i < num_clients;i++){
@@ -1738,6 +1746,22 @@ void copy_file(char *src, char *dest){
 }
 
 
+char * get_task_result_folder_path(char * group_name){
+   char *dest= malloc(100);
+   char buffer2[40];
+   time_t rawtime;
+   struct tm * timeinfo;
+
+   time ( &rawtime );
+   timeinfo = localtime ( &rawtime );
+   strftime(buffer2,80,"%d%m%y_%H%M%S",timeinfo);
+
+   sprintf(dest, "/tmp/client/moderator/%s/%s",  group_name, buffer2);
+
+   check_and_create_folder(dest);
+   return dest;
+}
+
 /* <doc>
  * void fetch_task_response_from_client(client_information_t * client_info, char * file_path)
  * fetch file from client to the group moderator
@@ -1745,19 +1769,15 @@ void copy_file(char *src, char *dest){
  * </doc>
  */
 void fetch_task_response_from_client(unsigned int client_id, 
-        char * file_path, char * group_name, unsigned int mod_id)
+        char * file_path, char * dest, unsigned int mod_id)
 {
 
    struct in_addr ip_addr;
    ip_addr.s_addr = client_id;
    char src[100];
-   char dest[100];
 
-   sprintf(dest, "/tmp/client/moderator/%s/", group_name);
 
-   check_and_create_folder(dest);
-
-   strcat(dest, (char *)basename(file_path));
+//   strcat(dest, (char *)basename(file_path));
 
    if(mod_id != client_id)
    {
@@ -1821,6 +1841,10 @@ void* execute_task(void *args)
          case FIND_SUM:
            result = find_sum(t_args, dest, &result_type);
          break;
+         case FIND_PRIME_SUM:
+           result = find_prime_sum(t_args, dest, &result_type);
+         break;
+
        } 
 
        PRINT(" Task id %u has been successfully executed on client", t_args->task_id);
@@ -1882,6 +1906,33 @@ void* execute_task(void *args)
     free_thread_args(t_args);
     return NULL;
 }
+
+/* <doc>
+ * bool is_prime(unsigned long number)
+ * Checks whether number is prime or not
+ *
+ * </doc>
+ */
+
+
+bool is_prime(unsigned long number){
+
+        if(number < 2) return FALSE; 
+        unsigned long j;
+        unsigned long root = (unsigned long)sqrt(number);
+
+        //checking if number is a prime no
+        for (j = 2; j <= root; j++)
+        {
+            if ((number % j) == 0)
+            {
+                return FALSE;
+                break;
+            }
+        }
+        return TRUE;
+}
+
 
 /* <doc>
  * void* find_prime_numbers(thread_args *args)
@@ -1965,21 +2016,7 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
 
         number=atol(num);//converting string to long 
         //PRINT("The number is %l" , number);
-        if(number < 2) continue; 
-
-        flag = FALSE;
-        unsigned long root = (unsigned long)sqrt(number);
-
-        //checking if number is a prime no
-        for (j = 2; j <= root; j++)
-        {
-            if ((number % j) == 0)
-            {
-                flag = TRUE;
-                break;
-            }
-        }
-        if(!flag)
+        if(is_prime(number))
         {
             
             fprintf(fptr, "%10u\n", number);
@@ -2006,8 +2043,6 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
     *rtype = TYPE_FILE; 
     return dst_file_path;
 }
-
-
 
 /* <doc>
  * void* find_sum(thread_args *args)
@@ -2067,6 +2102,76 @@ char * find_sum(thread_args *t_args, char * file_path, rsp_type_t *rtype)
         number=atol(num);//converting string to long
 
         sum += number;
+        
+        if(i%x==0){
+         PRINT("%d0 % Task successfully executed", u);
+         u++;}
+    }
+    sprintf(result_str, "%lu", sum);
+    PRINT("The final sum is %s", result_str); 
+    munmap(src, sb.st_size);
+    *rtype = TYPE_LONG; 
+    return result_str;
+}
+
+/* <doc>
+ * void* find_prime_sum(thread_args *args)
+ * Reads the subset of data and calculates the sum of all prime numbers
+ *
+ * </doc>
+ */
+char * find_prime_sum(thread_args *t_args, char * file_path, rsp_type_t *rtype)
+{
+    unsigned int i,j;
+    bool flag;
+    unsigned long number, sum=0;
+    unsigned int result_count=0;
+    int fdSrc;
+    struct stat sb;
+    int len=0;
+    char *num, *src;
+
+    int task_count = get_task_count(file_path);
+
+    fdSrc = open(file_path, O_RDONLY);
+    if (fdSrc == -1)
+        errExit("open");
+
+    /* Use fstat() to obtain size of file: we use this to specify the
+       size of the two mappings */
+
+    if (fstat(fdSrc, &sb) == -1)
+        errExit("fstat");
+
+    /* Handle zero-length file specially, since specifying a size of
+       zero to mmap() will fail with the error EINVAL */
+
+    if (sb.st_size == 0)
+        exit(EXIT_SUCCESS);
+
+    src = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fdSrc, 0);
+    if (src == MAP_FAILED)
+        errExit("mmap");
+
+    PRINT("[INFO] Started working on prime numbers for data set count : %lu", task_count);
+    LOGGING_INFO("Started working on prime numbers for data set count : %lu", task_count);
+
+    char *result_str=malloc(sizeof(char)*23);
+
+    int x=task_count/10, u=0;
+
+    /* Loop for prime number's in given data set */
+    for(i = 0; i < task_count; i++)
+    {
+        num=src+len; //starting position of the current number
+        //calculating length of the number
+        char * end = src+len;
+        while(*end != '\n')  {end++;len++;}
+        len++; //incrementing for '\n' character
+
+        number=atol(num);//converting string to long
+        if(is_prime(number)){
+        sum += number;}
         
         if(i%x==0){
          PRINT("%d0 % Task successfully executed", u);
