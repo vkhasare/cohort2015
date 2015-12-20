@@ -1509,52 +1509,18 @@ write_task_response_file(task_rsp_t * task_rsp, char* fname)
 }*/
 
 /* <doc>
- * void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg)
- * Function to handle task response from the multicast group moderator. It takes 
- * input as response collated by the moderator of the group along with the client IDs 
- *  and the task type.
- *
+ * static
+ * void set_group_available(mcast_group_node_t *group_node)
+ * This function sets the group node to its original state
+ * once task of the group is done.
  * </doc>
  */
-void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg)
+static
+void set_group_available(mcast_group_node_t *group_node)
 {
-    char ipaddr[INET6_ADDRSTRLEN], * result_folder;
-    int i = 0 , j = 0;
-
-    int count = 0;
-    comm_struct_t req;
-    fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
-    pdu_t rsp_pdu;
-    unsigned int* task_set,task_count;
-
-    /* fetch the group node pointer from fsm_data */
-    mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
-
-    pdu_t *pdu = (pdu_t *) fsm_data->pdu;
-    task_rsp_t *task_response= &(pdu->msg.idv.task_rsp);
-
-    LOGGING_INFO("Task response received from moderator for group %s for task id %d", group_node->group_name, task_response->task_id);
-
-    /*Print metrics information if needed*/
-    if (group_node->server_metrics && server_info->is_show_metrics)
-    {
-        print_execution_report(group_node);
-    }
-
-    /* Write the response  to file */  
-    switch(task_response->type){
-      case TYPE_FILE:
-       /* Get the file name based on current time stamp */ 
-       result_folder = get_task_result_folder_path(group_node->group_name, task_response->task_id); 
-       collect_task_results(task_response, result_folder, calc_key(&(pdu->peer_addr))); 
-       break;
-      case TYPE_LONG:
-       PRINT("Result for task %u is %s ", task_response->task_id, task_response->final_resp);
-       break;
-    }
+    int i = 0, j = 0;
 
     /*Disarming the keepalive for this mod since task is complete.*/
-    //stop_timer(&group_node->timer_id);
     timer_delete(group_node->timer_id);
     group_node->timer_id = 0;
 
@@ -1591,6 +1557,52 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
     free(task_set_details->task_folder_path);
     group_node->task_type = INVALID_TASK_TYPE;
     group_node->fsm_state = STATE_NONE;
+}
+
+/* <doc>
+ * void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg)
+ * Function to handle task response from the multicast group moderator. It takes 
+ * input as response collated by the moderator of the group along with the client IDs 
+ *  and the task type.
+ *
+ * </doc>
+ */
+void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg)
+{
+    char ipaddr[INET6_ADDRSTRLEN], * result_folder;
+
+    comm_struct_t req;
+    fsm_data_t *fsm_data = (fsm_data_t *)fsm_msg;
+    pdu_t rsp_pdu;
+    unsigned int* task_set,task_count;
+
+    /* fetch the group node pointer from fsm_data */
+    mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
+
+    pdu_t *pdu = (pdu_t *) fsm_data->pdu;
+    task_rsp_t *task_response= &(pdu->msg.idv.task_rsp);
+
+    LOGGING_INFO("Task response received from moderator for group %s for task id %d", group_node->group_name, task_response->task_id);
+
+    /*Print metrics information if needed*/
+    if (group_node->server_metrics && server_info->is_show_metrics)
+    {
+        print_execution_report(group_node);
+    }
+
+    /* Write the response  to file */  
+    switch(task_response->type){
+      case TYPE_FILE:
+       /* Get the file name based on current time stamp */ 
+       result_folder = get_task_result_folder_path(group_node->group_name, task_response->task_id); 
+       collect_task_results(task_response, result_folder, calc_key(&(pdu->peer_addr))); 
+       break;
+      case TYPE_LONG:
+       PRINT("Result for task %u is %s ", task_response->task_id, task_response->final_resp);
+       break;
+    }
+
+    set_group_available(group_node);
 
   /*Remove the task set file for the group once task response has been received by Server*/
 /*  strcpy(cmd,"rm -rf task_set/");
@@ -1972,6 +1984,8 @@ void moderator_selection(server_information_t *server_info, mcast_group_node_t *
         
         if(group_node->group_reachability_index == 0)
         {
+            /*Set group free again*/
+            set_group_available(group_node);
             /* We have failed to contact group members in designated number of
              * attempts. Do not rearm timers. Do not retrigger mod_selection.
              * Return from this point. */
