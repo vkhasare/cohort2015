@@ -585,8 +585,7 @@ void display_group_info(server_information_t *server_info)
 void mark_dead_clients_in_group(task_distribution_t* ref_array, int* ref_count,
         int* dead_client_arr, int dead_client_count)
 {
-    task_distribution_t ** task_map;
-    *task_map = ref_array;
+    task_distribution_t ** task_map = (task_distribution_t** )ref_array;
     //Attempt to find all dead clients first and mark them.
     int i, j, num_clients_marked = 0;
     for(i = 0; i < *ref_count && 
@@ -617,9 +616,7 @@ void mark_dead_clients_in_group(task_distribution_t* ref_array, int* ref_count,
 //            continue;
         }
 //        ref_array[i].working_clients = ref_array[j].working_clients;
-        task_distribution_t * temp;
-        temp= task_map[i];
-
+        task_distribution_t * temp= task_map[i];
         task_map[i]=task_map[j];
         task_map[j]=temp;
 //        int k = 0;
@@ -695,15 +692,8 @@ void retransmit_task_req_for_client(server_information_t *server_info,
        req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(grp_node->dead_clients_info.dead_clients_file[index])+1);
        strcpy(req.idv.perform_task_req.task_filename[index].str, grp_node->dead_clients_info.dead_clients_file[index]);
 
-//       task_map[index].task_filename = realloc(task_map[index].task_filename, sizeof(char *) * (file_index+1));
-       char ** temp;
-       *temp = (task_map[index].task_filename);
-       task_map[index].task_filename = malloc(sizoof(char*)*(file_index+1));
-       int u;
-       for(u=0;u<file_index;u++){
-              task_map[index].task_filename[u]=temp[u];
-       }
-       free(*temp);
+       task_map[index].task_filename = realloc(task_map[index].task_filename, sizeof(char *) * (file_index+1));
+
        task_map[index].task_filename[file_index] = MALLOC_CHAR(strlen(grp_node->dead_clients_info.dead_clients_file[index]) + 1);
        strcpy(task_map[index].task_filename[file_index], grp_node->dead_clients_info.dead_clients_file[index]);
        task_map[index].file_count++;
