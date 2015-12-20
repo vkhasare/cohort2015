@@ -1653,7 +1653,7 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
     moderator_info->timer_id = 0;
 
     PRINT("[Task_Response: GRP - %s] Task Response sent to Server.", moderator_info->group_name);
-    LOGGING_INFO("Task response for group %s is sent to server, client worked - %d", moderator_info->group_name, moderator_info->active_client_count);
+    LOGGING_INFO("Task response for group %s is sent to server, client worked - %u", moderator_info->group_name, moderator_info->active_client_count);
 
     /* Free the moderator, since moderator job is done now.
      * Mark the client free */

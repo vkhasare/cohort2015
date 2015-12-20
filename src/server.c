@@ -582,10 +582,23 @@ void display_group_info(server_information_t *server_info)
   display_mcast_group_node(&server_info, SHOW_ALL);
 }
 
+void copy_struct(task_distribution_t * dst, task_distribution_t * src){
+  dst->working_clients = src->working_clients;
+  dst->file_count = src->file_count;
+  dst->task_filename = src->task_filename;
+}
+
+void swap_struct(task_distribution_t * dst, task_distribution_t * src){
+   task_distribution_t temp= *dst;
+   copy_struct(dst,src);
+   copy_struct(src,&temp);
+}
+
+
+
 void mark_dead_clients_in_group(task_distribution_t* ref_array, int* ref_count,
         int* dead_client_arr, int dead_client_count)
 {
-    task_distribution_t ** task_map = (task_distribution_t** )ref_array;
     //Attempt to find all dead clients first and mark them.
     int i, j, num_clients_marked = 0;
     for(i = 0; i < *ref_count && 
@@ -603,6 +616,7 @@ void mark_dead_clients_in_group(task_distribution_t* ref_array, int* ref_count,
     i = 0; //serves as current index in ref_array
     j = *ref_count - 1; //runs from end of array to find non zero entry.
     
+    task_distribution_t  temp;
     while(num_clients_marked-- > 0 && (i < (*ref_count - num_clients_marked)))
     {
         //move i to find first 0 entry.
@@ -613,19 +627,9 @@ void mark_dead_clients_in_group(task_distribution_t* ref_array, int* ref_count,
         {
             if(j == i) break;
             j--;
-//            continue;
         }
-//        ref_array[i].working_clients = ref_array[j].working_clients;
-        task_distribution_t * temp= task_map[i];
-        task_map[i]=task_map[j];
-        task_map[j]=temp;
-//        int k = 0;
-        
-/*        while(k < ref_array[j].file_count) {
-          strcpy(ref_array[i].task_filename[k], ref_array[j].task_filename[k]);
-          k++;
+          swap_struct(&ref_array[i],&ref_array[j]);      
         }
-        ref_array[j].working_clients = 0;*/
     }
 
     //modify ref count to reflect number of clients presently working;
