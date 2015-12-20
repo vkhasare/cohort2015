@@ -125,11 +125,15 @@ typedef struct server_information_t server_information_t;
 struct server_information_t{
   struct sockaddr_in secondary_server;
   unsigned int server_fd;               /*Server FD*/
+  unsigned int peer_server_fd;          /*fd of backup server connection*/
+  char server_ip[INET6_ADDRSTRLEN];     /*IP Addr of server*/
   unsigned int task_id;                 /*Next task Id*/
   mcast_group_t *server_list;           /*Server List having group nodes for all the multicast groups.*/
   void *client_RBT_head;                /*Pointer to RBTree head, which maintains global list of all clients.*/
   bool is_stdby_available;              /*Is stdby server available?*/
   bool is_show_metrics;                 /*Decides whether to find metrics or not*/
+  unsigned int epoll_fd;                /*EPoll FD*/
+  struct epoll_event *epoll_evt;        /*Pointer to epoll event structure, to register the new FD's*/
   bool (* fsm)(server_information_t* server_info, server_event_t event, void* fsm_msg);    /*Server FSM function pointer*/
 };
 

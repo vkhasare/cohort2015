@@ -209,7 +209,7 @@ void send_checkpoint(unsigned int chkpoint_type, server_information_t *server_in
             LOGGING_INFO("Sent checkpoint of type %d to group %s for client id - %u", chkpoint_msg->chkpoint_type, group_name, clientAddr->sin_addr.s_addr);
 
             /*Send checkpoint msg to backup server*/
-            write_record(server_info->server_fd, &server_info->secondary_server, &chkpoint_pdu);
+            write_record(server_info->peer_server_fd, &server_info->secondary_server, &chkpoint_pdu);
 
 }
 
@@ -2124,7 +2124,38 @@ void server_stdin_data(int fd, server_information_t *server_info)
         server_info->secondary_server.sin_port = htons(atoi(PORT));
         server_info->secondary_server.sin_addr.s_addr = inet_addr(ptr);
 
+        unsigned int peer_sfd = create_and_bind(server_info->server_ip, LINK_PORT, SERVER_MODE);
+        make_socket_non_blocking(peer_sfd);
+        server_info->peer_server_fd = peer_sfd;
+
+        server_info->epoll_evt->data.fd = peer_sfd;
+        server_info->epoll_evt->events = EPOLLIN|EPOLLET;
+        epoll_ctl(server_info->epoll_fd, EPOLL_CTL_ADD, peer_sfd, server_info->epoll_evt);
+
         server_info->is_stdby_available = true;
+    }
+    else if(strncmp(read_buffer,"server primary",13) == 0)
+    {
+        strcpy(read_buffer_copy,read_buffer);
+        ptr = strtok(read_buffer_copy," ");
+        while(i < 2)
+        {
+            ptr = strtok(NULL," ");
+            i++;
+        }
+        if (!ptr)
+        {
+            PRINT("Error: Unrecognized Command.\n");
+            return;
+        }
+
+        unsigned int peer_sfd = create_and_bind(server_info->server_ip, LINK_PORT, SERVER_MODE);
+        make_socket_non_blocking(peer_sfd);
+        server_info->peer_server_fd = peer_sfd;
+
+        server_info->epoll_evt->data.fd = peer_sfd;
+        server_info->epoll_evt->events = EPOLLIN|EPOLLET;
+        epoll_ctl(server_info->epoll_fd, EPOLL_CTL_ADD, peer_sfd, server_info->epoll_evt);
     }
     else if(strncmp(read_buffer,"migrate",7) == 0)
     {
@@ -2309,6 +2340,7 @@ int main(int argc, char * argv[])
         exit(0);
     }
 
+    strncpy(server_info->server_ip, addr, INET6_ADDRSTRLEN-1);
     LOGGING_INFO("Server %s started on port %s", addr, port);
 
     status = make_socket_non_blocking(sfd);
@@ -2332,6 +2364,9 @@ int main(int argc, char * argv[])
         perror("\nError while creating the epoll.");
         exit(0);
     }
+
+    server_info->epoll_fd = efd;
+    server_info->epoll_evt = &event;
 
     event.data.fd = sfd;
     event.events = EPOLLIN;

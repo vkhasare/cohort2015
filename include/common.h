@@ -29,6 +29,7 @@
 #include <sys/mman.h>
 
 #define PORT "3490"
+#define LINK_PORT "4050"
 #define TIMEOUT_SECS 5
 #define BACKLOG 30000
 #define MAXEVENTS 30000
