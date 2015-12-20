@@ -1630,9 +1630,6 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
           /* TODO Investigate if thread should be spawned for this operation. */
           fetch_task_response_from_client(task_resp->client_ids[i], task_resp->result[i].str, dest, client_info->client_id);
       }
-      //7zip(dest);
-      free(task_resp->final_resp);
-
 
       break;
     case TYPE_LONG:
