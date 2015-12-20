@@ -2207,7 +2207,9 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
 
     if(found == false)
     {
-        requested_group->state = IDLE; 
+        if (requested_group->pending_task_count == 0)
+           requested_group->state = IDLE;
+
         PRINT("[INFO] Task Request for group %s is not intended for this client.", perform_task->group_name);
         FREE_INCOMING_PDU(pdu->msg);
         return;
