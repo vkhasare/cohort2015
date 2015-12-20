@@ -253,6 +253,7 @@ void allocate_moderator_info(client_information_t **client_info)
    mod_info->fsm_state = STATE_NONE;
    mod_info->moderator_resp_msg = NULL;
    mod_info->timer_id = 0;
+   mod_info->expected_responses = 0;
    (*client_info)->moderator_info = mod_info;
    allocate_moderator_list(&(*client_info)->moderator_info);
 }

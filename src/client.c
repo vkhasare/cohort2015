@@ -412,12 +412,14 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
          * old moderator timers should be stopped and client timers should be started. 
          * For clients that are not and were not moderators, nothing changes. They need to
          * only update their local mod_info. Timers continue as before. */
-        start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
+        //start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
         
         /* Release active_group reference after this stage. This should not be
          * used hereafter. */
         client_info->is_moderator = FALSE;
         client_info->active_group = NULL;
+        /*DONOT update new mod info in old mod DS*/
+        return;
     }
 
     /*Storing new moderator IP in client info*/
@@ -433,7 +435,8 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
 
     LOGGING_INFO("New moderator has been selected for group %s and is %s", mod_update_req.group_name, ipaddr);
 
-    if (client_info->client_id != mod_update_req.moderator_id)
+    /*if can be removed...sending for both client and mod*/
+    if (1)
     {
         /* If the client had already finished the task assigned for group, then
          * forward the results to new moderator again. */
@@ -448,7 +451,7 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
         }
         
         MASK_CLIENT_SIGNALS(false);
-        return; //nothing more to be done for non mod client(s).
+//        return; //nothing more to be done for non mod client(s).
     }
     
     /*IT IS THE MODERATOR BLOCK.. UPDATE MODERATOR DATA STRUCTURES*/

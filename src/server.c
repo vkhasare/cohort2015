@@ -1519,7 +1519,7 @@ write_task_response_file(task_rsp_t * task_rsp, char* fname)
 void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg)
 {
     char ipaddr[INET6_ADDRSTRLEN], * result_folder;
-    int i = 0;
+    int i = 0 , j = 0;
 
     int count = 0;
     comm_struct_t req;
@@ -1571,14 +1571,20 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
 
     for(i = 0; i < task_set_details->number_of_working_clients; i++)
     {
-        free(task_set_details->distribution_map[i].task_filename[0]);
+       for (j = 0; j < task_set_details->distribution_map[i].file_count; j++)
+       {
+         if (task_set_details->distribution_map[i].task_filename[j])
+            free(task_set_details->distribution_map[i].task_filename[j]);
+            task_set_details->distribution_map[i].task_filename[j] = NULL;
+        }
+        free(task_set_details->distribution_map[i].task_filename);
+        task_set_details->distribution_map[i].task_filename = NULL;
     }
-    free(task_set_details->distribution_map->task_filename);
 
-    /*Free if group node has maintained array list of working clients*/
-    if (task_set_details->distribution_map) {
-        free(task_set_details->distribution_map);
-    }
+     /*Free if group node has maintained array list of working clients*/
+     if (task_set_details->distribution_map) {
+         free(task_set_details->distribution_map);
+     }
 
     /*Come back to initial state where the cycle started*/
     task_set_details->number_of_working_clients = 0;
