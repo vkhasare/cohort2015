@@ -629,7 +629,6 @@ void mark_dead_clients_in_group(task_distribution_t* ref_array, int* ref_count,
             j--;
         }
           swap_struct(&ref_array[i],&ref_array[j]);      
-        }
     }
 
     //modify ref count to reflect number of clients presently working;
