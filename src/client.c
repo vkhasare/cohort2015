@@ -446,12 +446,14 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
             for( i = 0; i<group_node->last_task_file_count ; i++)
             {
                 send_task_results_to_moderator(client_info, group_node,
-                        group_node->last_task_id, TYPE_INT, group_node->last_task_result_path[i], client_info->client_id, TRUE);
+                        group_node->last_task_id, group_node->last_task_rsp_type, group_node->last_task_result_path[i], client_info->client_id, TRUE);
             }
         }
         
         MASK_CLIENT_SIGNALS(false);
-//        return; //nothing more to be done for non mod client(s).
+
+        if (client_info->client_id != mod_update_req.moderator_id)
+            return; //nothing more to be done for non mod client(s).
     }
     
     /*IT IS THE MODERATOR BLOCK.. UPDATE MODERATOR DATA STRUCTURES*/

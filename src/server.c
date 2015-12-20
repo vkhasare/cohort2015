@@ -687,6 +687,8 @@ void retransmit_task_req_for_client(server_information_t *server_info,
        req.idv.perform_task_req.task_filename[index].str = MALLOC_CHAR(strlen(grp_node->dead_clients_info.dead_clients_file[index])+1);
        strcpy(req.idv.perform_task_req.task_filename[index].str, grp_node->dead_clients_info.dead_clients_file[index]);
 
+        task_map[index].task_filename = realloc(task_map[index].task_filename, sizeof(char *) * (file_index+1));
+
        task_map[index].task_filename[file_index] = MALLOC_CHAR(strlen(grp_node->dead_clients_info.dead_clients_file[index]) + 1);
        strcpy(task_map[index].task_filename[file_index], grp_node->dead_clients_info.dead_clients_file[index]);
        task_map[index].file_count++;
@@ -1521,7 +1523,9 @@ void set_group_available(mcast_group_node_t *group_node)
     int i = 0, j = 0;
 
     /*Disarming the keepalive for this mod since task is complete.*/
-    timer_delete(group_node->timer_id);
+    if (group_node->timer_id) 
+      timer_delete(group_node->timer_id);
+
     group_node->timer_id = 0;
 
     /*Resetting mod_client pointer to avoid havoc in moderator_selection*/
@@ -1578,7 +1582,7 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
 
     /* fetch the group node pointer from fsm_data */
     mcast_group_node_t *group_node = fsm_data->grp_node_ptr;
-
+    timer_delete(group_node->timer_id);
     pdu_t *pdu = (pdu_t *) fsm_data->pdu;
     task_rsp_t *task_response= &(pdu->msg.idv.task_rsp);
 
