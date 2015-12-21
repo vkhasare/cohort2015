@@ -244,8 +244,9 @@ void display_server_clis()
 {
   PRINT("show groups                                          --  Displays list of groups");
   PRINT("show group info <group_name|all>                     --  Displays group - client association");
-  PRINT("task <task_type> group <group_name> file <filename> type <structured> --  Assigns a specific task to the specified Group. filename is optional. Default Value: task_set/prime_set1.txt");
-  PRINT("                                                                          Default file type is unstructured");
+  PRINT("task <task_type> group <group_name> file <filename> type <structured> --  Assigns a specific task to the specified Group. \
+                                                                                   filename is optional. Default Value: task_set/prime_set1.txt \
+                                                                                   Default file type is unstructured");
   PRINT("server backup <backup_server_ip>                     --  Configures IP of secondary server");
   PRINT("migrate                                              --  Migrates to secondary server");
   PRINT("enable debug                                         --  Enables the debug mode");
