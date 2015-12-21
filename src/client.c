@@ -81,36 +81,6 @@ void mask_client_signals(bool flag)
         if (sigaction(CLIENT_TIMEOUT, &sa, NULL) == -1)
             errExit("sigaction (CLIENT_TIMEOUT)");
     }
-    
-    /* For now commenting out sigproc related handling and sticking to signal().
-       sigprocmask needs more study and stands as TBD. With all probability,
-       sigprocmask is not what we need. we just want to ignore signals for
-       duration of handler. signal() will serve purpose. This is to be examined later.
-       
-       sigset_t mask;
-       sigset_t orig_mask;
-   
-       sigemptyset (&mask);
-       sigaddset (&mask, MODERATOR_TIMEOUT);
-       sigaddset (&mask, CLIENT_TIMEOUT);
-   
-       if (flag)
-       {
-           if (sigprocmask(SIG_BLOCK, &mask, &orig_mask) < 0) 
-           {
-               perror ("sigprocmask");
-               return;
-           }
-       }
-       else
-       {
-           if (sigprocmask(SIG_UNBLOCK, &mask, &orig_mask) < 0) 
-           {
-               perror ("sigprocmask");
-               return;
-           }
-       }
-        */
 }
 
 /* <doc>
@@ -407,15 +377,6 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
         client_info->moderator_info->timer_id = 0;
         deallocate_moderator_list(&client_info);
         
-        /* Rationale behind doing this is that, if and old moderator is
-         * receiving a moderator update, it means that old mod has been declared
-         * to be dead by server. And in good probability this will not be the
-         * moderator node selected in next cycle of moderator selection. In this case,
-         * old moderator timers should be stopped and client timers should be started. 
-         * For clients that are not and were not moderators, nothing changes. They need to
-         * only update their local mod_info. Timers continue as before. */
-        //start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
-        
         /* Release active_group reference after this stage. This should not be
          * used hereafter. */
         client_info->is_moderator = FALSE;
@@ -516,19 +477,7 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
         timer_delete(group_node->timer_id);
         group_node->timer_id = 0;
     }
-/*
-    //start new timer for maintaining keepalives.
-    if (1 == mod_info->active_client_count) 
-    {
-        start_recurring_timer(&(client_info->moderator_info->timer_id), DEFAULT_TIMEOUT, CLIENT_TIMEOUT);
-    } 
-    else if (1 < mod_info->active_client_count)
-    {
-        // Start the timer on Moderator to get echo requests from all its peer
-        // working clients
-        start_recurring_timer(&(client_info->moderator_info->timer_id), DEFAULT_TIMEOUT, MODERATOR_TIMEOUT);
-    }
- */
+
     FREE_INCOMING_PDU(pdu->msg);
     MASK_CLIENT_SIGNALS(false);
 }
@@ -912,11 +861,6 @@ static void send_moderator_notify_response(client_information_t *client_info)
     /*change fsm state as soon as we enter this function*/
     client_info->moderator_info->fsm_state = MODERATOR_NOTIFY_RSP_SENT;
     
-    /*Delete the timer running for mod notify req timeout*/
-    //ideally this should not be required as that was a one shot timer.
-    //commenting out for now.
-    //stop_timer(&client_info->moderator_info->timer_id);
-
     pdu_t pdu;
     moderator_information_t *mod_info = client_info->moderator_info;
     comm_struct_t *rsp = &(pdu.msg);
@@ -928,14 +872,9 @@ static void send_moderator_notify_response(client_information_t *client_info)
     moderator_notify_rsp_t *moderator_notify_rsp = &(rsp->idv.moderator_notify_rsp);
 
     /*Filling group name and moderator id*/
-    /* TODO try and replace this with ALLOC_AND_COPY_STR. TBD is restrict group
-     * name length at file parsing and cli. */
     moderator_notify_rsp->group_name = MALLOC_STR;
     strcpy(moderator_notify_rsp->group_name, mod_info->group_name);
     moderator_notify_rsp->moderator_id = client_info->client_id;    
-
-    /*remove this line in future if you dont see any issues in this code*/
-    //moderator_notify_rsp->client_id_count = mod_info->active_client_count;
 
     /*allocate memory for client IDs*/
     moderator_notify_rsp->client_ids = (unsigned int *) malloc(sizeof(unsigned int) * mod_info->active_client_count);
@@ -1049,8 +988,8 @@ int handle_echo_response(const int sockfd, pdu_t *pdu, ...)
     echo_rsp_t *echo_rsp = &(rsp->idv.echo_resp);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-     //XXX GAUTAM XXX
-//    PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
+    //ECHO
+    //PRINT("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
     LOGGING_INFO("[Echo_Response: GRP - %s] Echo Response received from %s", echo_rsp->group_name, ipaddr);
     FREE_INCOMING_PDU(pdu->msg);
 
@@ -1076,8 +1015,8 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
     echo_req_t echo_req = req->idv.echo_req;
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-     //XXX GAUTAM XXX
-//    PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
+    //ECHO
+    //PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
     LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
     /* Extracting client_info from variadic args*/
     EXTRACT_ARG(pdu, client_information_t*, client_info);
@@ -1100,8 +1039,8 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...)
     strcpy(echo_response->group_name, echo_req.group_name);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-    //XXX GAUTAM XXX
-    //    PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
+    //ECHO
+    //PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
     LOGGING_INFO("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
 
@@ -1276,7 +1215,6 @@ int main(int argc, char * argv[])
       PRINT("Usage: %s <server_IP> <server_port> <group_name>\n", argv[0]);
       /* server_IP/server_port not provided. Attempting talk with server on same machine
        * with default port. */
-//      argv[1] = ipStr;
       argv[2] = "3490";
       argv[3] = "G1,G2";
       argv[4] = "eth0";
@@ -1616,8 +1554,8 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
     /* Strictly speaking, this assert is not required. Adding to to catch
      * scenarios when these are out of sync. TODO Remove later. */
     if(force_cleanup == false || moderator_info->pending_client_list->client_grp_node.length ){
-      //assert(moderator_info->pending_client_list->client_grp_node.length == 0);
-      LOGGING_INFO("Pending client list length while sending response, is %d",moderator_info->pending_client_list->client_grp_node.length);}
+      LOGGING_WARNING("Pending client list length while sending response, is %d",moderator_info->pending_client_list->client_grp_node.length);
+    }
     else
       LOGGING_INFO("Forcefully pushing the moderator results towards Server for group %s", moderator_info->group_name); 
 
@@ -1627,7 +1565,6 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
       dest = get_task_result_folder_path(task_resp->group_name); 
       for(i = 0; i < num_clients; i++)
       {
-          /* TODO Investigate if thread should be spawned for this operation. */
           fetch_task_response_from_client(task_resp->client_ids[i], task_resp->result[i].str, dest, client_info->client_id);
       }
 
@@ -1656,8 +1593,7 @@ void moderator_send_task_response_to_server(client_information_t *client_info, b
      * Mark the client free */
     deallocate_moderator_list(&client_info);
     client_info->is_moderator = FALSE;
-    client_info->client_status = FREE; /* XXX Questionable. */
-    //client_info->active_group->state = TASK_RES_SENT;
+    client_info->client_status = FREE;
     client_info->active_group = NULL;
     //should get taken care of via worker thread.
     //client_info->active_group->pending_task_count = 0;
@@ -1736,6 +1672,11 @@ char * fetch_file_from_server(client_information_t * client_info, char * file_fo
    return fetch_file(src, dest); 
 }
 
+/* <doc>
+ * void copy_file(char *src, char *dest)
+ * Copies the file from source to destination
+ * </doc>
+ */
 void copy_file(char *src, char *dest){
    char cmd[200];
    sprintf(cmd,"cp %s %s", src, dest);
@@ -1772,9 +1713,6 @@ void fetch_task_response_from_client(unsigned int client_id,
    struct in_addr ip_addr;
    ip_addr.s_addr = client_id;
    char src[100];
-
-
-//   strcat(dest, (char *)basename(file_path));
 
    if(mod_id != client_id)
    {
@@ -1879,17 +1817,6 @@ void* execute_task(void *args)
                PRINT("[Task_Response_Notify_Req: GRP - %s] Number of pending tasks with client: %u", 
                        group->group_name, group->pending_task_count);
            }
-
-           /* Deactivate timer for this group on client node. 
-           if(group->pending_task_count == 0
-                   && (client_info->is_moderator == FALSE ||
-                       !MATCH_STRING(client_info->active_group->group_name,group->group_name)))
-           {
-               /// Check designed on thread init time parameters since client_info level
-                // information is subject to change via other threads of
-                // execution. checking if client is/was mod for this group. /
-           }*/
-
        }
        free(dest);
     }
@@ -1910,8 +1837,6 @@ void* execute_task(void *args)
  *
  * </doc>
  */
-
-
 bool is_prime(unsigned long number){
 
         if(number < 2) return FALSE; 
@@ -2012,13 +1937,10 @@ char * find_prime_numbers(thread_args *t_args, char * file_path, rsp_type_t *rty
         len++; //incrementing for '\n' character
 
         number=atol(num);//converting string to long 
-        //PRINT("The number is %l" , number);
         if(is_prime(number))
         {
             
             fprintf(fptr, "%10u\n", number);
-//            PRINT("Prime number %u",number);
-
             /* Total count of prime numbers */
             result_count++;
         }
@@ -2254,8 +2176,6 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
         if (perform_task->task_reassigned)
         {
             LOGGING_INFO("Retransmitted task request for clients (group %s)", perform_task->group_name);
-            /*Currently hardcoded for moderator down scenario. Here, 1 is number of response expected due to dead clients*/
-//            mod_info->active_client_count += 1;
         }
         else
         {
@@ -2356,6 +2276,13 @@ int handle_perform_task_req(const int sockfd, pdu_t *pdu, ...)
     FREE_INCOMING_PDU(pdu->msg);
 }
 
+/* <doc>
+ * void fill_thread_args(client_information_t * client_info,
+ *                       perform_task_req_t * perform_task,
+ *                       thread_args * args, int index)
+ * Fills the thread arguments so that a thread can be spawned.
+ * </doc>
+ */
 void fill_thread_args(client_information_t * client_info, 
                       perform_task_req_t * perform_task, 
                       thread_args * args, int index)

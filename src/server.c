@@ -65,36 +65,6 @@ void mask_server_signals(bool flag)
         if (sigaction(MOD_RSP_TIMEOUT, &sa, NULL) == -1)
             errExit("sigaction (MOD_RSP_TIMEOUT)");
     }
-    
-    /* For now commenting out sigproc related handling and sticking to signal().
-       sigprocmask needs more study and stands as TBD. With all probability,
-       sigprocmask is not what we need. we just want to ignore signals for
-       duration of handler. signal() will serve purpose. This is to be examined later.
-
-       sigset_t mask;
-       sigset_t orig_mask;
-       struct sigaction act;
-   
-       sigemptyset (&mask);
-       sigaddset (&mask, MOD_SEL_TIMEOUT);
-       sigaddset (&mask, MOD_RSP_TIMEOUT);
-   
-       if (flag)
-       {
-           if (sigprocmask(SIG_BLOCK, &mask, &orig_mask) < 0) {
-               perror ("sigprocmask");
-               return;
-           }
-       }
-       else
-       {
-           if (sigprocmask(SIG_UNBLOCK, &mask, &orig_mask) < 0) {
-               perror ("sigprocmask");
-               return;
-           }
-       }
-    
-     */
 }
 
 /* <doc>
@@ -797,7 +767,6 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
           /*Copying dead clients, so that task assigned to all known dead clients*/
           group_node->dead_clients_info.dead_client_count = task_map[j].file_count;
           group_node->dead_clients_info.dead_clients = malloc(sizeof(unsigned int) * task_map[j].file_count);
-          //memcpy(*grp_node->dead_clients, &clientID, sizeof(unsigned int) * grp_node->dead_client_count);
           group_node->dead_clients_info.dead_clients_file = (char **) malloc(sizeof(char*) * group_node->dead_clients_info.dead_client_count);
 
           int index;
@@ -1096,7 +1065,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     echo_rsp_t *echo_response = &(rsp->idv.echo_resp);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-     //XXX GAUTAM XXX
+    //ECHO
     //PRINT("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
     LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request received from %s", echo_req.group_name, ipaddr);
 
@@ -1108,7 +1077,7 @@ int handle_echo_req(const int sockfd, pdu_t *pdu, ...){
     strcpy(echo_response->group_name, echo_req.group_name);
 
     inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&(pdu->peer_addr)), ipaddr, INET6_ADDRSTRLEN);
-     //XXX GAUTAM XXX
+    //ECHO
     //PRINT("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
     LOGGING_INFO("[Echo_Response: GRP - %s] Echo Response sent to %s", echo_response->group_name, ipaddr);
     write_record(sockfd, &pdu->peer_addr, &rsp_pdu);
@@ -1388,8 +1357,6 @@ void mcast_start_task_distribution(server_information_t *server_info,
 
 
     /* Start recurring timer for monitoring status of this moderator node.*/
-    /* XXX XXX check if this timer needs to be stopped for mod reseletion. */
-    ////////
     start_recurring_timer(&(group_node->timer_id), DEFAULT_TIMEOUT, MOD_RSP_TIMEOUT);
     
     /* Changing the fsm state as task has been started */
@@ -1430,7 +1397,12 @@ void* fetch_task_response_files_from_moderator(void *args)
 }
 
 
-
+/* <doc>
+ * void collect_task_results(task_rsp_t * task_resp, char *result_folder, unsigned int client_id)
+ * Collects the responses from moderator
+ *
+ * </doc>
+ */
 void collect_task_results(task_rsp_t * task_resp, char *result_folder, unsigned int client_id){
 
    char *src_folder=malloc(sizeof(char)*100);
@@ -1462,7 +1434,6 @@ void collect_task_results(task_rsp_t * task_resp, char *result_folder, unsigned 
 }
 
 
-
 /* <doc>
  * void get_task_result_folder_path(char * gname, uint8_t task_id)
  * This function returns the folder where task results are stored
@@ -1489,34 +1460,6 @@ char * get_task_result_folder_path(char * gname, uint8_t task_id){
 
      return buffer;
 }
-
-
-/* <doc>
- * write_task_response_file(task_rsp_t * task_rsp, char* fname)
- * After getting the task response, this function writes the
- * result in the result file.
- *
- * </doc>
- */ 
-/*void
-write_task_response_file(task_rsp_t * task_rsp, char* fname)
-{
-  uint32_t i, j;
-  FILE *fp=NULL;
-  fp=fopen(fname,"w");
-  fprintf(fp, "Client Id, Result Size, Result\n");
-  for(i=0;i<task_rsp->num_clients;i++)
-  {
-    fprintf(fp, "%u", task_rsp->client_ids[i]);
-    fprintf(fp, ", %u", task_rsp->result[i].size);
-    for(j=0;j<task_rsp->result[i].size;j++)
-    {
-      fprintf(fp, ", %u", task_rsp->result[i].value[j]);
-    }
-    fprintf(fp, "\n");
-  }
-  fclose(fp);
-}*/
 
 /* <doc>
  * static
@@ -1616,11 +1559,12 @@ void mcast_handle_task_response(server_information_t *server_info, void *fsm_msg
 
     set_group_available(group_node);
 
-  /*Remove the task set file for the group once task response has been received by Server*/
-/*  strcpy(cmd,"rm -rf task_set/");
-  strcat(cmd,group_node->group_name);
-  cmd_line = popen (cmd, "w");
-  pclose(cmd_line); */
+   /*Remove the task set file for the group once task response has been received by Server
+   strcpy(cmd,"rm -rf task_set/");
+   strcat(cmd,group_node->group_name);
+   cmd_line = popen (cmd, "w");
+   pclose(cmd_line);
+   */
 
 }
 

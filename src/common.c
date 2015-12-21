@@ -197,7 +197,6 @@ void initialize_echo_request(echo_req_t *echo_req)
  *
  * </doc>
  */
-
 int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
 {
     pdu_t pdu;
@@ -215,7 +214,7 @@ int send_echo_request(const int sockfd, struct sockaddr *addr, char *grp_name)
     strcpy(echo_request->group_name, grp_name);
 
     inet_ntop(AF_INET, get_in_addr(addr), ipaddr, INET6_ADDRSTRLEN);
-     //XXX GAUTAM XXX
+    //ECHO
     //PRINT("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
     LOGGING_INFO("[Echo_Request: GRP - %s] Echo Request sent to %s", echo_request->group_name, ipaddr);
 
@@ -287,9 +286,6 @@ void start_recurring_timer(timer_t *timer_id, uint8_t interval, uint32_t sigval)
     //timeouts are at the granularity of seconds and are same. This can be
     //modified to operate at nanosecond granularity though.
     uint8_t r_interval = interval;
-    
-    //its.it_value.tv_sec = interval / 1000000000;
-    //its.it_value.tv_nsec = interval % 1000000000;
     
     its.it_value.tv_sec = interval;
     its.it_value.tv_nsec = 0;
@@ -365,7 +361,11 @@ unsigned int get_task_count(const char* filename){
 }
 
 
-
+/* <doc>
+ * Fetches the file from remote location.
+ *
+ * </doc>
+ */
 char * fetch_file(char * src, char *dest){
 
    char cmd[180];
