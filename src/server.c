@@ -732,7 +732,6 @@ void server_echo_req_task_in_progress_state(server_information_t *server_info,
 
   group_node->heartbeat_remaining = MAX_ALLOWED_KA_MISSES;
   task_distribution_t* task_map = group_node->task_set_details.distribution_map;
-  //PRINT("num: %d name:%s", group_node->heartbeat_remaining, group_node->group_name);
   echo_req_t *echo_req = &pdu->msg.idv.echo_req;
   if(echo_req->num_clients)
   {

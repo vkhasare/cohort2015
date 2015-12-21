@@ -469,8 +469,6 @@ int handle_moderator_update(const int sockfd, pdu_t *pdu, ...)
         LOGGING_INFO("Added client %s in moderator pending list", ipAddress);
     }
     
-    PRINT("Group state is - %u", group_node->state);
-
     if(TASK_EXECUTION_IN_PROGRESS == group_node->state)
     {
         //delete older self timer.
